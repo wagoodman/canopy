@@ -1,0 +1,63 @@
+version: 2
+
+release:
+  prerelease: auto
+  draft: false
+
+env:
+  - CGO_ENABLED=0
+
+builds:
+  - id: linux-build
+    dir: &dir ./cmd/canopy
+    binary: &binary canopy
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    # set the modified timestamp on the output binary to the git timestamp to ensure a reproducible build
+    mod_timestamp: &build-timestamp '{{ .CommitTimestamp }}'
+    ldflags: &build-ldflags |
+      -w
+      -s
+      -extldflags '-static'
+      -X main.version={{.Version}}
+      -X main.gitCommit={{.Commit}}
+      -X main.buildDate={{.Date}}
+      -X main.gitDescription={{.Summary}}
+
+  - id: darwin-build
+    dir: *dir
+    binary: *binary
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    mod_timestamp: *build-timestamp
+    ldflags: *build-ldflags
+
+  - id: windows-build
+    dir: *dir
+    binary: *binary
+    goos:
+      - windows
+    goarch:
+      - amd64
+    mod_timestamp: *build-timestamp
+    ldflags: *build-ldflags
+
+archives:
+  - id: linux-archives
+    builds:
+      - linux-build
+
+  - id: darwin-archives
+    builds:
+      - darwin-build
+
+  - id: windows-archives
+    format: zip
+    builds:
+      - windows-build

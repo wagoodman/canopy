@@ -1,0 +1,33 @@
+package style
+
+import "github.com/charmbracelet/lipgloss"
+
+type GoStd struct {
+	Bold    lipgloss.Style
+	Success lipgloss.Style
+	Failed  lipgloss.Style
+	Skipped lipgloss.Style
+	Aux     lipgloss.Style
+	Info    lipgloss.Style
+}
+
+func NewGoStd(color bool) GoStd {
+	if color {
+		return GoStd{
+			Bold:    lipgloss.NewStyle().Bold(true),
+			Success: lipgloss.NewStyle().Foreground(lipgloss.Color("10")),
+			Failed:  lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
+			Skipped: lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
+			Aux:     lipgloss.NewStyle().Faint(true),
+			Info:    lipgloss.NewStyle().Foreground(lipgloss.Color("13")),
+		}
+	}
+	return GoStd{
+		Bold:    lipgloss.NewStyle(),
+		Success: lipgloss.NewStyle(),
+		Failed:  lipgloss.NewStyle(),
+		Skipped: lipgloss.NewStyle(),
+		Aux:     lipgloss.NewStyle(),
+		Info:    lipgloss.NewStyle(),
+	}
+}

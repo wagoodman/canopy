@@ -1,0 +1,10 @@
+
+profiles:
+  unit:
+    test:
+      cover: true
+      covermin: 55
+      packages:
+        - ./...
+      exclude:
+        - '**/internal/test-fixtures/**'

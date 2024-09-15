@@ -1,0 +1,243 @@
+
+version: "3"
+vars:
+  OWNER: wagoodman
+  PROJECT: canopy
+
+  # static file dirs
+  TOOL_DIR: .tool
+  TMP_DIR: .tmp
+
+  # used for changelog generation
+  CHANGELOG: CHANGELOG.md
+  NEXT_VERSION: VERSION
+
+  # tools
+  CHRONICLE: "{{ .TOOL_DIR }}/chronicle"
+  GLOW: "{{ .TOOL_DIR }}/glow"
+  BOUNCER: "{{ .TOOL_DIR }}/bouncer"
+  GOIMPORTS: "{{ .TOOL_DIR }}/gosimports"
+  GOLANGCILINT: "{{ .TOOL_DIR }}/golangci-lint"
+  BINNY: "{{ .TOOL_DIR }}/binny"
+  GORELEASER: "{{ .TOOL_DIR }}/goreleaser"
+
+  # used for snapshot builds
+  OS:
+    sh: uname -s | tr '[:upper:]' '[:lower:]'
+  ARCH:
+    sh: |
+      [ "$(uname -m)" = "x86_64" ] && echo "amd64_v1" || echo $(uname -m)
+  PROJECT_ROOT:
+    sh: git rev-parse --show-toplevel
+
+  # note: the snapshot dir must be a relative path starting with ./
+  SNAPSHOT_DIR: ./snapshot
+  SNAPSHOT_BIN: "{{ .PROJECT_ROOT }}/{{ .SNAPSHOT_DIR }}/{{ .OS }}-build_{{ .OS }}_{{ .ARCH }}/{{ .PROJECT }}"
+  SNAPSHOT_CMD: "{{ .GORELEASER }} release --config {{ .TMP_DIR }}/goreleaser.yaml --clean --snapshot --skip=publish --skip=sign"
+  BUILD_CMD:    "{{ .GORELEASER }} build   --config {{ .TMP_DIR }}/goreleaser.yaml --clean --snapshot --single-target"
+  RELEASE_CMD:  "{{ .GORELEASER }} release --clean --release-notes {{ .CHANGELOG }}"
+  VERSION:
+    sh: git describe --dirty --always --tags
+
+tasks:
+
+  ## High-level tasks #################################
+
+  default:
+    desc: Run all validation tasks
+    cmds:
+      - task: static-analysis
+      - task: test
+
+  static-analysis:
+    desc: Run all static analysis tasks
+    cmds:
+      - task: lint
+      - task: check-licenses
+
+  test:
+    desc: Run all levels of test
+    cmds:
+      - task: unit
+
+  ## Bootstrap tasks #################################
+
+  binny:
+    internal: true
+    # desc: Get the binny tool
+    generates:
+      - "{{ .BINNY }}"
+    status:
+      - "test -f {{ .BINNY }}"
+    cmd: "curl -sSfL https://raw.githubusercontent.com/anchore/binny/main/install.sh | sh -s -- -b .tool"
+    silent: true
+
+  tools:
+    desc: Install all tools needed for CI and local development
+    deps: [binny]
+    aliases:
+      - bootstrap
+    generates:
+      - ".binny.yaml"
+      - "{{ .TOOL_DIR }}/*"
+    status:
+      - "{{ .BINNY }} check -v"
+    cmd: "{{ .BINNY }} install -v"
+    silent: true
+
+  update-tools:
+    desc: Update pinned versions of all tools to their latest available versions
+    deps: [binny]
+    generates:
+      - ".binny.yaml"
+      - "{{ .TOOL_DIR }}/*"
+    cmd: "{{ .BINNY }} update -v"
+    silent: true
+
+  list-tools:
+    desc: List all tools needed for CI and local development
+    deps: [binny]
+    cmd: "{{ .BINNY }} list"
+    silent: true
+
+  list-tool-updates:
+    desc: List all tools that are not up to date relative to the binny config
+    deps: [binny]
+    cmd: "{{ .BINNY }} list --updates"
+    silent: true
+
+  tmpdir:
+    silent: true
+    internal: true
+    generates:
+      - "{{ .TMP_DIR }}"
+    cmd: "mkdir -p {{ .TMP_DIR }}"
+
+  ## Static analysis tasks #################################
+
+  format:
+    desc: Auto-format all source code
+    deps: [tools]
+    cmds:
+      - gofmt -w -s .
+      - "{{ .GOIMPORTS }} -local github.com/anchore -w ."
+      - go mod tidy
+
+  lint-fix:
+    desc: Auto-format all source code + run golangci lint fixers
+    deps: [tools]
+    cmds:
+      - task: format
+      - "{{ .GOLANGCILINT }} run --tests=false --fix"
+
+  lint:
+    desc: Run code format + lint checks
+    vars:
+      BAD_FMT_FILES:
+        sh: gofmt -l -s .
+      BAD_FILE_NAMES:
+        sh: "find . | grep -e ':' || true"
+    deps: [tools]
+    cmds:
+      # ensure there are no go fmt differences
+      - cmd: 'test -z "{{ .BAD_FMT_FILES }}" || (echo "files with gofmt issues: [{{ .BAD_FMT_FILES }}]"; exit 1)'
+        silent: true
+      # ensure there are no files with ":" in it (a known back case in the go ecosystem)
+      - cmd: 'test -z "{{ .BAD_FILE_NAMES }}" || (echo "files with bad names: [{{ .BAD_FILE_NAMES }}]"; exit 1)'
+        silent: true
+      # run linting
+      - "{{ .GOLANGCILINT }} run --tests=false"
+      - go mod tidy --diff
+
+  check-licenses:
+    # desc: Ensure transitive dependencies are compliant with the current license policy
+    deps: [tools]
+    cmd: "{{ .BOUNCER }} check ./..."
+
+
+  ## Testing tasks #################################
+
+  unit:
+    deps: [tmpdir]
+    desc: Run unit tests
+    # TODO: switch to canopy release invocation
+    cmds:
+      - "go test -coverprofile {{ .TMP_DIR }}/unit-coverage-details.txt ./cmd/..."
+
+
+  ## Build-related targets #################################
+
+  build:
+    desc: Build the project
+    deps: [tools, tmpdir]
+    generates:
+      - "{{ .PROJECT }}"
+    cmds:
+      - silent: true
+        cmd: |
+          echo "dist: {{ .SNAPSHOT_DIR }}" > {{ .TMP_DIR }}/goreleaser.yaml
+          cat .goreleaser.yaml >> {{ .TMP_DIR }}/goreleaser.yaml
+
+      - "{{ .BUILD_CMD }}"
+
+  snapshot:
+    desc: Create a snapshot release
+    aliases:
+      - build
+    deps: [tools, tmpdir]
+    sources:
+      - cmd/**/*.go
+    method: checksum
+    generates:
+      - "{{ .SNAPSHOT_BIN }}"
+    cmds:
+      - silent: true
+        cmd: |
+          echo "dist: {{ .SNAPSHOT_DIR }}" > {{ .TMP_DIR }}/goreleaser.yaml
+          cat .goreleaser.yaml >> {{ .TMP_DIR }}/goreleaser.yaml
+
+      - "{{ .SNAPSHOT_CMD }}"
+
+  changelog:
+    desc: Generate a changelog
+    deps: [tools]
+    generates:
+      - "{{ .CHANGELOG }}"
+      - "{{ .NEXT_VERSION }}"
+    cmds:
+      - "{{ .CHRONICLE }} -vv -n --version-file {{ .NEXT_VERSION }} > {{ .CHANGELOG }}"
+      - "{{ .GLOE }} {{ .CHANGELOG }}"
+
+
+  ## Release targets #################################
+
+  release:
+    desc: Create a release
+    interactive: true
+    deps: [tools]
+    cmds:
+      - cmd: .github/scripts/trigger-release.sh
+        silent: true
+
+
+  ## CI-only targets #################################
+
+  ci-check:
+    silent: true
+    cmds:
+      - |
+        # assert we are running in CI (or die!)
+        if [[ -z "$CI" ]]; then
+            echo "This step should ONLY be run in CI. Exiting..."
+            exit 1
+        fi
+
+  ci-release:
+    # desc: "[CI only] Create a release"
+    deps: [tools]
+    cmds:
+      - task: ci-check
+      - "{{ .CHRONICLE }} -vvv > CHANGELOG.md"
+      - cmd: "cat {{ .CHANGELOG }}"
+        silent: true
+      - "{{ .RELEASE_CMD }}"
