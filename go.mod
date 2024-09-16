@@ -3,10 +3,8 @@ module github.com/wagoodman/canopy
 go 1.23.1
 
 require (
-	// pinned to https://github.com/anchore/bubbly/pull/70
-	github.com/anchore/bubbly v0.0.0-20240914042108-f53c62f8edd9
-	// pinned to https://github.com/anchore/clio/pull/55
-	github.com/anchore/clio v0.0.0-20240914185817-f732478636d6
+	github.com/anchore/bubbly v0.0.0-20240916130011-9a4d42caf6c0
+	github.com/anchore/clio v0.0.0-20240916130159-e51ff72000a8
 	// TODO: pin to https://github.com/anchore/fangs/pull/51
 	github.com/anchore/fangs v0.0.0-20240913151339-75ae13f2644b
 	github.com/anchore/go-logger v0.0.0-20230725134548-c21dafa1ec5a
