@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -70,6 +72,7 @@ type TeaUIConfig struct {
 	handler       *bubbly.HandlerCollection
 	footerHandler *bubbly.HandlerCollection
 	simpleUI      *simpleUI
+	printReaders  []io.Reader
 
 	frame frameWithFooter
 }
@@ -86,6 +89,11 @@ func NewTeaUIConfig(handlers ...bubbly.EventHandler) *TeaUIConfig {
 
 func (c *TeaUIConfig) WithSimpleUI(u *simpleUI) *TeaUIConfig {
 	c.simpleUI = u
+	return c
+}
+
+func (c *TeaUIConfig) WithPrintReader(readers ...io.Reader) *TeaUIConfig {
+	c.printReaders = append(c.printReaders, readers...)
 	return c
 }
 
@@ -111,17 +119,34 @@ func (m *UI) Setup(subscription partybus.Unsubscribable) error {
 	}
 	m.subscription = subscription
 	m.program = tea.NewProgram(m, tea.WithOutput(os.Stderr), tea.WithInput(os.Stdin), tea.WithoutSignalHandler())
-	// m.config.frame.withPrinter(m.program)
+	//m.config.frame.withPrinter(m.program)
 
 	m.running.Add(1)
 
 	go func() {
-		defer m.running.Done()
+		//defer m.running.Done()
 		if _, err := m.program.Run(); err != nil {
 			log.Errorf("unable to start UI: %+v", err)
 			bus.ExitWithInterrupt()
 		}
+
+		m.running.Done()
 	}()
+
+	for i := range m.config.printReaders {
+		m.running.Add(1)
+		go func(reader io.Reader) {
+
+			// scan for every line in the reader and print it just behind the UI
+			scanner := bufio.NewScanner(reader)
+			for scanner.Scan() {
+				m.program.Println(scanner.Text())
+			}
+
+			m.running.Done()
+
+		}(m.config.printReaders[i])
+	}
 
 	return m.config.simpleUI.Setup(subscription)
 }
@@ -147,6 +172,10 @@ func (m *UI) Teardown(force bool) error {
 		return nil
 	}
 	m.teardownCalled = true
+
+	// we need to make certain that any writers are closed before attempting to wait for them to complete
+	err := m.config.simpleUI.Teardown(force)
+
 	if !force {
 		// just wow... tea commands are racy
 		time.Sleep(100 * time.Millisecond)
@@ -182,7 +211,7 @@ func (m *UI) Teardown(force bool) error {
 
 	// TODO: allow for writing out the full log output to the screen (only a partial log is shown currently)
 	// this needs coordination to know what the last frame event is to change the state accordingly (which isn't possible now)
-	return m.config.simpleUI.Teardown(force)
+	return err
 }
 
 // bubbletea.Model functions

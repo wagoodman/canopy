@@ -83,7 +83,10 @@ func (s JestTestResultSummary) Present(stdout, stderr io.Writer) error {
 		tests = append(tests, s.style.skipped.Render(fmt.Sprintf("%d skipped", stats.Skipped)))
 	}
 
-	tests = append(tests, fmt.Sprintf("%d total", stats.Total()))
+	total := stats.Total()
+	if stats.Passed != total || total == 0 {
+		tests = append(tests, fmt.Sprintf("%d total", total))
+	}
 
 	summary := s.style.wideTitle.Render("Tests: ") + strings.Join(tests, ", ") + "\n"
 

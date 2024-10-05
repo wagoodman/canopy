@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 var skipOops = flag.Bool("skip-oops", false, "skip tests that have 'oops' in the name")
@@ -22,6 +23,8 @@ func TestAddNested(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Log("sleep is for the wicked!")
+			time.Sleep(1 * time.Second)
 			// note: there is a nested t.Run here... for no reason at all other than to be evil
 			// also note that there is simply one case, so this is a bit silly (but different than the loop test below)
 			t.Logf("this is an exciting log message for %q", tt.name)

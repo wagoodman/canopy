@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fmt"
+	"io"
 	"os"
 
 	"github.com/hashicorp/go-multierror"
@@ -17,6 +19,8 @@ var _ clio.UI = (*simpleUI)(nil)
 type simpleUI struct {
 	presenters     []presenter.Presenter
 	handlers       []partybus.Handler
+	stdout         io.WriteCloser
+	stderr         io.WriteCloser
 	teardownCalled bool
 }
 
@@ -30,6 +34,16 @@ func (n *simpleUI) withNotifications() *simpleUI {
 
 func (n *simpleUI) withReports() *simpleUI {
 	return n.withHandledPresenters(adapter.NewAllEvents(event.CLIReport, presenter.NewReportEvent))
+}
+
+func (n *simpleUI) withStdout(writer io.WriteCloser) *simpleUI {
+	n.stdout = writer
+	return n
+}
+
+func (n *simpleUI) withStderr(writer io.WriteCloser) *simpleUI {
+	n.stderr = writer
+	return n
 }
 
 func (n *simpleUI) withHandledPresenters(adapters ...adapter.HandledPresenter) *simpleUI {
@@ -50,7 +64,31 @@ func (n *simpleUI) withHandlers(handlers ...partybus.Handler) *simpleUI {
 //	return n
 //}
 
+type nopCloser struct {
+}
+
+func (n *nopCloser) Close() error {
+	return nil
+}
+
+func newNopWriteCloser(writer io.Writer) io.WriteCloser {
+	return &struct {
+		io.Writer
+		io.Closer
+	}{
+		Writer: writer,
+		Closer: &nopCloser{},
+	}
+}
+
 func (n *simpleUI) Setup(_ partybus.Unsubscribable) error {
+	if n.stdout == nil {
+		n.stdout = newNopWriteCloser(os.Stdout)
+	}
+	if n.stderr == nil {
+		n.stderr = newNopWriteCloser(os.Stderr)
+	}
+
 	return nil
 }
 
@@ -76,8 +114,20 @@ func (n *simpleUI) Teardown(_ bool) error {
 	n.teardownCalled = true
 
 	for _, p := range n.presenters {
-		if err := p.Present(os.Stdout, os.Stderr); err != nil {
+		if err := p.Present(n.stdout, n.stderr); err != nil {
 			errs = multierror.Append(errs, err)
+		}
+	}
+
+	if n.stdout != nil {
+		if err := n.stdout.Close(); err != nil {
+			errs = multierror.Append(errs, fmt.Errorf("failed to close stdout: %w", err))
+		}
+	}
+
+	if n.stderr != nil {
+		if err := n.stderr.Close(); err != nil {
+			errs = multierror.Append(errs, fmt.Errorf("failed to close stderr: %w", err))
 		}
 	}
 
