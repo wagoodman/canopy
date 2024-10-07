@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -57,7 +58,17 @@ func (f frameWithFooter) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (f frameWithFooter) View() string {
-	return f.body.View() + f.footer.View()
+	b := f.body.View()
+
+	sb := &strings.Builder{}
+	if b != "" {
+		sb.WriteString(b)
+		if !strings.HasSuffix(b, "\n") {
+			sb.WriteString("\n")
+		}
+	}
+	sb.WriteString(f.footer.View())
+	return sb.String()
 }
 
 type UI struct {

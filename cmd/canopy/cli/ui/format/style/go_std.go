@@ -6,6 +6,7 @@ type GoStd struct {
 	Bold    lipgloss.Style
 	Success lipgloss.Style
 	Failed  lipgloss.Style
+	Running lipgloss.Style
 	Skipped lipgloss.Style
 	Aux     lipgloss.Style
 	Info    lipgloss.Style
@@ -17,6 +18,7 @@ func NewGoStd(color bool) GoStd {
 			Bold:    lipgloss.NewStyle().Bold(true),
 			Success: lipgloss.NewStyle().Foreground(lipgloss.Color("10")),
 			Failed:  lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
+			Running: lipgloss.NewStyle().Foreground(lipgloss.Color("14")),
 			Skipped: lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
 			Aux:     lipgloss.NewStyle().Faint(true),
 			Info:    lipgloss.NewStyle().Foreground(lipgloss.Color("13")),
@@ -25,6 +27,7 @@ func NewGoStd(color bool) GoStd {
 	return GoStd{
 		Bold:    lipgloss.NewStyle(),
 		Success: lipgloss.NewStyle(),
+		Running: lipgloss.NewStyle(),
 		Failed:  lipgloss.NewStyle(),
 		Skipped: lipgloss.NewStyle(),
 		Aux:     lipgloss.NewStyle(),

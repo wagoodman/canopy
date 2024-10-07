@@ -1,9 +1,8 @@
 package ui
 
 import (
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/adapter"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gostd"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/jestsummary"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/gostdsummary"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
@@ -15,7 +14,7 @@ import (
 
 func NewGoStdUI(testPkgs *golist.PackageCollection, json bool, verbose int, color bool) clio.UI {
 	var handler partybus.Handler
-	var writeToStderr bool
+	//var writeToStderr bool
 	var pkgCount int
 	maxPkgName := 30
 	if testPkgs != nil {
@@ -36,7 +35,7 @@ func NewGoStdUI(testPkgs *golist.PackageCollection, json bool, verbose int, colo
 	switch {
 	case json:
 		handler = gostd.NewJSONHandler(reportWriter)
-		writeToStderr = true
+		//writeToStderr = true
 	case verbose > 0:
 		handler = gostd.NewVerboseHandler(
 			reportWriter,
@@ -64,20 +63,23 @@ func NewGoStdUI(testPkgs *golist.PackageCollection, json bool, verbose int, colo
 		withReports().
 		withHandlers(handler).
 		withStdout(reportWriter).
-		withStderr(notificationWriter).
-		withHandledPresenters(
-			adapter.NewTestRun(presenter.GoStdTestResultSummaryConfig{
-				WriteToStderr:    writeToStderr,
-				PackageNameWidth: maxPkgName,
-				PackageCount:     pkgCount,
-				Color:            color,
-			}.New),
-		)
+		withStderr(notificationWriter)
+	//withHandledPresenters(
+	//	adapter.NewTestRun(presenter.GoStdTestResultSummaryConfig{
+	//		WriteToStderr:    writeToStderr,
+	//		PackageNameWidth: maxPkgName,
+	//		PackageCount:     pkgCount,
+	//		Color:            color,
+	//	}.New),
+	//)
 
-	summaryHandler := jestsummary.NewFactory(
-		presenter.JestTestResultSummaryConfig{
-			Color:       color,
-			ShowElapsed: true,
+	summaryHandler := gostdsummary.NewFactory(
+		presenter.GoStdTestResultSummaryConfig{
+			Color:            color,
+			PackageNameWidth: maxPkgName,
+			PackageCount:     pkgCount,
+			HidePackageCount: true,
+			//ShowElapsed: true,
 		},
 	)
 

@@ -1,9 +1,7 @@
-package jestsummary
+package gostdsummary
 
 import (
-	"strings"
-	"time"
-
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/uuid"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
@@ -12,6 +10,7 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
+	"strings"
 
 	"github.com/anchore/bubbly"
 )
@@ -22,11 +21,11 @@ var (
 )
 
 type Factory struct {
-	config presenter.JestTestResultSummaryConfig
+	config presenter.GoStdTestResultSummaryConfig
 	seen   map[uuid.UUID]struct{}
 }
 
-func NewFactory(cfg presenter.JestTestResultSummaryConfig) *Factory {
+func NewFactory(cfg presenter.GoStdTestResultSummaryConfig) *Factory {
 	return &Factory{
 		config: cfg,
 		seen:   make(map[uuid.UUID]struct{}),
@@ -57,13 +56,13 @@ func (j Factory) Handle(e partybus.Event) ([]tea.Model, tea.Cmd) {
 }
 
 type Model struct {
-	config  presenter.JestTestResultSummaryConfig
+	config  presenter.GoStdTestResultSummaryConfig
 	started bool
 	run     gotest.Run
-	timer   Timer
+	spinner spinner.Model
 }
 
-func NewModel(config presenter.JestTestResultSummaryConfig, runID uuid.UUID) *Model {
+func NewModel(config presenter.GoStdTestResultSummaryConfig, runID uuid.UUID) *Model {
 	run := gotest.NewRun(gotest.RunnerConfig{}) // we only need the cumulative state, not the run config
 	run.Result = *gotest.NewResult(gotest.ResultConfig{
 		TrackFailingOutput: true,
@@ -71,25 +70,21 @@ func NewModel(config presenter.JestTestResultSummaryConfig, runID uuid.UUID) *Mo
 	})
 	run.ID = runID
 	return &Model{
-		timer:  newTimer(100 * time.Millisecond),
-		config: config,
-		run:    *run,
+		config:  config,
+		run:     *run,
+		spinner: spinner.New(spinner.WithSpinner(spinner.Dot)),
 	}
 }
 
 func (j Model) Init() tea.Cmd {
-	return j.timer.tick()
+	return j.spinner.Tick
 }
 
 func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
-	case timerTickMessage:
-		if msg.id != j.timer.id {
-			break
-		}
-
-		cmd = j.timer.tick()
+	case spinner.TickMsg:
+		j.spinner, cmd = j.spinner.Update(msg)
 
 	case partybus.Event:
 
@@ -132,6 +127,7 @@ func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (j Model) View() string {
 	sb := strings.Builder{}
+	j.config.RunningState = j.spinner.View()
 	err := j.config.New(j.run).Present(&sb, &sb)
 	if err != nil {
 		// TODO

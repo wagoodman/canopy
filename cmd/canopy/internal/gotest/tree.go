@@ -37,6 +37,12 @@ func NewTreeFromDefinitions(defs []Definition) *Tree {
 	return t
 }
 
+func NewTreeFromReferences(refs []Reference) *Tree {
+	t := NewTree()
+	t.Add(refs...)
+	return t
+}
+
 func newTreeNodeFromEvent(e Event) *TreeNode {
 	return &TreeNode{
 		Children:  newOrderedReferenceSet(),
