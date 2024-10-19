@@ -12,7 +12,7 @@ import (
 	"github.com/anchore/clio"
 )
 
-func NewGoStdUI(testPkgs *golist.PackageCollection, json bool, verbose int, color bool) clio.UI {
+func NewGoStdUI(testPkgs *golist.PackageCollection, json bool, cfg Config) clio.UI {
 	var handler partybus.Handler
 	//var writeToStderr bool
 	var pkgCount int
@@ -36,14 +36,14 @@ func NewGoStdUI(testPkgs *golist.PackageCollection, json bool, verbose int, colo
 	case json:
 		handler = gostd.NewJSONHandler(reportWriter)
 		//writeToStderr = true
-	case verbose > 0:
+	case cfg.Verbose > 0:
 		handler = gostd.NewVerboseHandler(
 			reportWriter,
 			gostd.VerbosePackageConfig{
 				PackageNameWidth:            maxPkgName,
-				Color:                       color,
+				Color:                       cfg.Color,
 				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
-				HidePackagesWithNoTestFiles: true,
+				HidePackagesWithNoTestFiles: !cfg.ShowPackagesMissingTests,
 			},
 		)
 	default:
@@ -51,9 +51,9 @@ func NewGoStdUI(testPkgs *golist.PackageCollection, json bool, verbose int, colo
 			reportWriter,
 			gostd.DefaultPackageConfig{
 				PackageNameWidth:            maxPkgName,
-				Color:                       color,
+				Color:                       cfg.Color,
 				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
-				HidePackagesWithNoTestFiles: true,
+				HidePackagesWithNoTestFiles: !cfg.ShowPackagesMissingTests,
 			},
 		)
 	}
@@ -75,7 +75,7 @@ func NewGoStdUI(testPkgs *golist.PackageCollection, json bool, verbose int, colo
 
 	summaryHandler := gostdsummary.NewFactory(
 		presenter.GoStdTestResultSummaryConfig{
-			Color:            color,
+			Color:            cfg.Color,
 			PackageNameWidth: maxPkgName,
 			PackageCount:     pkgCount,
 			HidePackageCount: true,

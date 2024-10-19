@@ -78,7 +78,7 @@ func (n *verbosePackage) OnGoTestEvent(e gotest.Event) error {
 		return nil
 	}
 
-	if e.HasAnnotation(gotest.NoTestFiles) && n.config.HidePackagesWithNoTestFiles {
+	if e.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) && n.config.HidePackagesWithNoTestFiles {
 		return nil
 	}
 

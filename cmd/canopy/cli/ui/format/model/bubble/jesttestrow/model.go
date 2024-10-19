@@ -12,74 +12,27 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
 
-	"github.com/anchore/bubbly"
 	"github.com/anchore/bubbly/bubbles/frame"
 )
 
 var (
-	_ bubbly.EventHandler      = (*Factory)(nil)
-	_ bubbly.MessageListener   = (*Factory)(nil)
 	_ tea.Model                = (*Model)(nil)
 	_ frame.ImprintableElement = (*Model)(nil)
 	_ frame.TerminalElement    = (*Model)(nil)
 )
 
 type Config struct {
-	Color                  bool
-	ShowPackages           bool
-	KeepAllTestOutput      bool
-	KeepFailedTestOutput   bool
-	NestNonPackages        bool
-	ExpireOnCompletion     bool
-	DieOnCompletion        bool
-	ShowIntermediateOutput bool
-	Style                  *style.Jest
-}
+	Color                       bool
+	ShowPackages                bool
+	KeepAllTestOutput           bool
+	KeepFailedTestOutput        bool
+	NestNonPackages             bool
+	ExpireOnCompletion          bool
+	DieOnCompletion             bool
+	ShowIntermediateOutput      bool
+	HidePackagesWithNoTestFiles bool
 
-type Factory struct {
-	config Config
-	seen   map[gotest.Reference]struct{}
-	ws     tea.WindowSizeMsg
-}
-
-func NewFactory(config Config) *Factory {
-	return &Factory{
-		config: config,
-		seen:   make(map[gotest.Reference]struct{}),
-	}
-}
-
-func (j *Factory) OnMessage(msg tea.Msg) {
-	if msg, ok := msg.(tea.WindowSizeMsg); ok {
-		j.ws = msg
-	}
-}
-
-func (j Factory) RespondsTo() []partybus.EventType {
-	return []partybus.EventType{event.GoTestType}
-}
-
-func (j Factory) Handle(e partybus.Event) ([]tea.Model, tea.Cmd) {
-	if e.Type != event.GoTestType {
-		return nil, nil
-	}
-
-	gt, err := parser.ParseGoTestType(e)
-	if err != nil {
-		log.WithFields("error", err).Error("unable to parse go test event")
-		return nil, nil
-	}
-
-	if !j.config.ShowPackages && gt.Reference.IsPackage() {
-		return nil, nil
-	}
-
-	if _, ok := j.seen[gt.Reference]; ok {
-		return nil, nil
-	}
-
-	j.seen[gt.Reference] = struct{}{}
-	return []tea.Model{NewModel(gt.Reference, j.ws, j.config)}, nil
+	Style *style.Jest
 }
 
 type Model struct {

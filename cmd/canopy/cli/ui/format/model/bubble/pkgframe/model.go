@@ -19,18 +19,18 @@ var (
 	_ frame.ImprintableElement = (*Model)(nil)
 )
 
-type TestRowFactory func(gotest.Reference, tea.WindowSizeMsg) tea.Model
+type ModelFactory func(gotest.Event, tea.WindowSizeMsg) tea.Model
 
 type Factory struct {
-	testRowFactory TestRowFactory
-	seen           map[gotest.Reference]struct{}
-	ws             tea.WindowSizeMsg
+	pkgModelFactory ModelFactory
+	seen            map[gotest.Reference]struct{}
+	ws              tea.WindowSizeMsg
 }
 
-func NewFactory(testRowFactory TestRowFactory) *Factory {
+func NewFactory(pkgModelFactory ModelFactory) *Factory {
 	return &Factory{
-		testRowFactory: testRowFactory,
-		seen:           make(map[gotest.Reference]struct{}),
+		pkgModelFactory: pkgModelFactory,
+		seen:            make(map[gotest.Reference]struct{}),
 	}
 }
 
@@ -61,28 +61,40 @@ func (j Factory) Handle(e partybus.Event) ([]tea.Model, tea.Cmd) {
 
 	if _, ok := j.seen[gt.Reference]; ok {
 		return nil, nil
+	} else {
+		// we only want to register that we have seen the package, not any indication of testing that will start
+		// this is because we will only see no-test indications on the second event at the earliest
+		if gt.Action == gotest.StartAction {
+			return nil, nil
+		}
+		// this isn't a simple start action! this is odd (maybe a panic in testing?) let's handle it.
 	}
 
 	j.seen[gt.Reference] = struct{}{}
-	return []tea.Model{NewModel(gt.Reference, j.ws, j.testRowFactory)}, nil
+
+	pkgMod := j.pkgModelFactory(gt, j.ws)
+	if pkgMod != nil {
+		return []tea.Model{pkgMod}, nil
+	}
+	return nil, nil
 }
 
 type Model struct {
-	pkgRef         gotest.Reference
-	action         gotest.Action
-	frame          frame.Frame
-	testsSeen      map[gotest.Reference]struct{}
-	testRowFactory TestRowFactory
-	ws             tea.WindowSizeMsg
+	pkgRef     gotest.Reference
+	action     gotest.Action
+	frame      frame.Frame
+	testsSeen  map[gotest.Reference]struct{}
+	rowFactory ModelFactory
+	ws         tea.WindowSizeMsg
 }
 
-func NewModel(ref gotest.Reference, ws tea.WindowSizeMsg, testRowFactory TestRowFactory) *Model {
+func NewPackageModel(ref gotest.Reference, ws tea.WindowSizeMsg, rowFactory ModelFactory) *Model {
 	return &Model{
-		pkgRef:         ref,
-		frame:          *frame.New(),
-		testsSeen:      make(map[gotest.Reference]struct{}),
-		testRowFactory: testRowFactory,
-		ws:             ws,
+		pkgRef:     ref.PackageRef(),
+		frame:      *frame.New(),
+		testsSeen:  make(map[gotest.Reference]struct{}),
+		rowFactory: rowFactory,
+		ws:         ws,
 	}
 }
 
@@ -99,6 +111,9 @@ func (j Model) ShouldImprint() bool {
 }
 
 func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	//if !j.update(msg) {
+	//	return j, nil
+	//}
 	j.update(msg)
 
 	newFrame, cmd := j.frame.Update(msg)
@@ -107,44 +122,50 @@ func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return j, cmd
 }
 
-func (j *Model) update(msg tea.Msg) {
+func (j *Model) update(msg tea.Msg) bool {
 	if msg, ok := msg.(tea.WindowSizeMsg); ok {
 		j.ws = msg
 	}
 
 	e, ok := msg.(partybus.Event)
 	if !ok {
-		return
+		return false
 	}
 
 	if e.Type != event.GoTestType {
-		return
+		return false
 	}
 
 	gt, err := parser.ParseGoTestType(e)
 	if err != nil {
 		log.WithFields("error", err).Error("unable to parse go test event")
-		return
+		return false
 	}
 
 	if gt.Reference.Package != j.pkgRef.Package {
-		return
+		return false
 	}
 
+	actionTaken := false
 	if _, ok := j.testsSeen[gt.Reference]; !ok {
 		j.testsSeen[gt.Reference] = struct{}{}
 
-		testRowModel := j.testRowFactory(gt.Reference, j.ws)
+		testRowModel := j.rowFactory(gt, j.ws)
 
-		j.frame.AppendModel(testRowModel)
+		if testRowModel != nil {
+			j.frame.AppendModel(testRowModel)
+			actionTaken = true
+		}
 	}
 
 	if gt.Reference == j.pkgRef {
 		switch gt.Action {
 		case gotest.RunAction, gotest.PassAction, gotest.FailAction, gotest.SkipAction, gotest.StartAction:
 			j.action = gt.Action
+			actionTaken = true
 		}
 	}
+	return actionTaken
 }
 
 func (j Model) View() string {

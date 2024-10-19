@@ -21,10 +21,12 @@ type Event struct {
 	Error          error
 }
 
-func (e Event) HasAnnotation(a Annotation) bool {
+func (e Event) HasAnnotation(as ...Annotation) bool {
 	for _, ann := range e.Annotations {
-		if ann == a {
-			return true
+		for _, a := range as {
+			if ann == a {
+				return true
+			}
 		}
 	}
 	return false

@@ -126,7 +126,7 @@ func (n *defaultPackage) render(writer io.Writer) {
 			}
 			fmt.Fprint(writer, n.renderOutput(resultEvent))
 		default:
-			if e.HasAnnotation(gotest.NoTestFiles) && n.config.HidePackagesWithNoTestFiles {
+			if e.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) && n.config.HidePackagesWithNoTestFiles {
 				continue
 			}
 			if hasRunMarking(e.Output) || hasPassMarking(e.Output) {

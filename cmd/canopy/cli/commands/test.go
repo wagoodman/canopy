@@ -56,8 +56,8 @@ type testConfig struct {
 	options.Coverage   `yaml:",inline" json:"" mapstructure:",squash"`
 	options.GoBuild    `yaml:",inline" json:"" mapstructure:",squash"`
 	options.Format     `yaml:",inline" json:"" mapstructure:",squash"`
-	options.Appearance `yaml:",inline" json:"" mapstructure:",squash"`
 	options.Open       `yaml:",inline" json:"" mapstructure:",squash"`
+	options.Appearance `yaml:",inline" json:"" mapstructure:",squash"`
 	ExtraFlags         []string `yaml:"extra-flags" json:"extra-flags" mapstructure:"extra-flags"`
 
 	// post parse
@@ -253,19 +253,19 @@ func setUI(app clio.Application, formatStr string, appearance options.Appearance
 
 	state := app.(Stater).State()
 
+	uiConfig := getUIConfig(appearance, state.Config)
+
 	var logTestFailuresAsErrors bool
 	switch formatStr {
 	case "go-std", "go", "std":
-		ux = ui.NewGoStdUI(testPkgs, false, state.Config.Log.Verbosity, !appearance.NoColor)
+		ux = ui.NewGoStdUI(testPkgs, false, uiConfig)
 	case "go-std-json", "go-json":
 		// TODO: we're not passing testPkgs intentionally?
-		ux = ui.NewGoStdUI(nil, true, state.Config.Log.Verbosity, !appearance.NoColor)
-	case "jest-log":
-		ux = ui.NewJestLogUI(state.Config.Log.Verbosity, !appearance.NoColor)
+		ux = ui.NewGoStdUI(nil, true, uiConfig)
 	case "jest":
-		ux = ui.NewJestUI(state.Config.Log.Verbosity, !appearance.NoColor)
+		ux = ui.NewJestUI(uiConfig)
 	case "dot":
-		ux = ui.NewDotUI(state.Config.Log.Verbosity, !appearance.NoColor)
+		ux = ui.NewDotUI(uiConfig)
 	case "log":
 		if state.Config.Log.Verbosity == 0 || !logger.IsVerbose(state.Config.Log.Level) {
 			if state.Config.Log.Verbosity == 0 {
@@ -292,6 +292,14 @@ func setUI(app clio.Application, formatStr string, appearance options.Appearance
 	}
 
 	return logTestFailuresAsErrors, nil
+}
+
+func getUIConfig(appearance options.Appearance, clioCfg clio.Config) ui.Config {
+	return ui.Config{
+		Color:                    !appearance.NoColor,
+		Verbose:                  clioCfg.Log.Verbosity,
+		ShowPackagesMissingTests: appearance.ShowPackagesWithNoTests,
+	}
 }
 
 func openUIWithExisting(app clio.Application, s *test.Manager, resultErr error) error {

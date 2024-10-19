@@ -14,7 +14,8 @@ var (
 )
 
 type Appearance struct {
-	NoColor bool `yaml:"no-color" json:"no-color" mapstructure:"no-color"`
+	NoColor                 bool `yaml:"no-color" json:"no-color" mapstructure:"no-color"`
+	ShowPackagesWithNoTests bool `yaml:"show-packages-with-no-tests" json:"show-packages-with-no-tests" mapstructure:"show-packages-with-no-tests"`
 
 	// tracker      *xflagset.Decorator
 	//NamedFlagSet *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`

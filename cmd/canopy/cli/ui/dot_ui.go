@@ -11,28 +11,30 @@ import (
 	"github.com/anchore/clio"
 )
 
-func NewDotUI(_ int, color bool) clio.UI {
-	testRowFactory := func(ref gotest.Reference, ws tea.WindowSizeMsg) tea.Model {
-		return dottestrow.NewModel(
-			ref,
-			ws,
-			dottestrow.Config{
-				Color:                  color,
-				ShowPackages:           true,
-				KeepFailedTestOutput:   true,
-				NestNonPackages:        true,
-				ExpireOnCompletion:     false,
-				ShowIntermediateOutput: false,
-				// TODO: allow for style overrides
-			},
-		)
+func NewDotUI(config Config) clio.UI {
+	rowCfg := dottestrow.Config{
+		Color:                  config.Color,
+		ShowPackages:           true,
+		KeepFailedTestOutput:   true,
+		NestNonPackages:        true,
+		ExpireOnCompletion:     false,
+		ShowIntermediateOutput: false,
+		// TODO: allow for style overrides
 	}
 
-	bodyHandler := pkgframe.NewFactory(testRowFactory)
+	testRowFactory := func(e gotest.Event, ws tea.WindowSizeMsg) tea.Model {
+		return dottestrow.NewModel(e.Reference, ws, rowCfg)
+	}
+
+	pkgModelFactory := func(e gotest.Event, ws tea.WindowSizeMsg) tea.Model {
+		return pkgframe.NewPackageModel(e.Reference, ws, testRowFactory)
+	}
+
+	bodyHandler := pkgframe.NewFactory(pkgModelFactory)
 
 	summaryHandler := jestsummary.NewFactory(
 		presenter.JestTestResultSummaryConfig{
-			Color:       color,
+			Color:       config.Color,
 			ShowElapsed: true,
 		},
 	)

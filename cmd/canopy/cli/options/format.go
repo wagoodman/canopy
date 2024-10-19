@@ -29,7 +29,7 @@ type Format struct {
 func DefaultTestFormat() Format {
 	return Format{
 		Output:           "go-std",
-		AllowableFormats: []string{"go-std", "go-std-json", "log", "jest", "jest-log", "dot"},
+		AllowableFormats: []string{"go-std", "go-std-json", "log", "jest", "dot"},
 		Aliases:          []string{"go", "std", "go-json"},
 	}
 }

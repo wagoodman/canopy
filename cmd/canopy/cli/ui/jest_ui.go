@@ -11,29 +11,34 @@ import (
 	"github.com/anchore/clio"
 )
 
-func NewJestUI(verbose int, color bool) clio.UI {
-	testRowFactory := func(ref gotest.Reference, ws tea.WindowSizeMsg) tea.Model {
-		return jesttestrow.NewModel(
-			ref,
-			ws,
-			jesttestrow.Config{
-				Color:                  color,
-				ShowPackages:           true,
-				KeepAllTestOutput:      verbose > 0,
-				KeepFailedTestOutput:   true,
-				NestNonPackages:        true,
-				ExpireOnCompletion:     false,
-				ShowIntermediateOutput: false,
-				// TODO: allow for style overrides
-			},
-		)
+func NewJestUI(config Config) clio.UI {
+	rowCfg := jesttestrow.Config{
+		Color:                       config.Color,
+		ShowPackages:                true,
+		KeepAllTestOutput:           config.Verbose > 0,
+		KeepFailedTestOutput:        true,
+		NestNonPackages:             true,
+		ExpireOnCompletion:          false,
+		ShowIntermediateOutput:      false,
+		HidePackagesWithNoTestFiles: !config.ShowPackagesMissingTests,
+		// TODO: allow for style overrides
+	}
+	testRowFactory := func(e gotest.Event, ws tea.WindowSizeMsg) tea.Model {
+		return jesttestrow.NewModel(e.Reference, ws, rowCfg)
 	}
 
-	bodyHandler := pkgframe.NewFactory(testRowFactory)
+	pkgModelFactory := func(e gotest.Event, ws tea.WindowSizeMsg) tea.Model {
+		if e.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) && rowCfg.HidePackagesWithNoTestFiles {
+			return nil
+		}
+		return pkgframe.NewPackageModel(e.Reference, ws, testRowFactory)
+	}
+
+	bodyHandler := pkgframe.NewFactory(pkgModelFactory)
 
 	summaryHandler := jestsummary.NewFactory(
 		presenter.JestTestResultSummaryConfig{
-			Color:       color,
+			Color:       config.Color,
 			ShowElapsed: true,
 		},
 	)
