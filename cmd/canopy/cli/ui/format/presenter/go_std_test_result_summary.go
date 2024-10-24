@@ -48,7 +48,7 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error {
 
 	// refStr := refCompactString(s.config.RunningState, s.run.Result.ReferencesByAction(gotest.RunAction), s.run.Result.ReferencesByAction(gotest.OutputAction))
 	//
-	//if refStr != "" {
+	// if refStr != "" {
 	//	result += refStr + "\n"
 	//}
 

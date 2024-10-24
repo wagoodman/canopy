@@ -1,10 +1,11 @@
 package ui
 
 import (
-	"io"
 	"os"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/adapter"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gostd"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/gostddefaultpkg"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/gostdsummary"
@@ -88,74 +89,11 @@ func newDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 		WithFooter(summaryHandler)
 
 	return NewTeaUI(c)
-
-	////reportWriter := os.Stdout
-	////notificationWriter := os.Stderr
-	// reportReader, reportWriter := readerWriterPair()
-	//notificationReader, notificationWriter := readerWriterPair()
-	//
-	//switch {
-	//case json:
-	//	handler = gostd.NewJSONHandler(reportWriter)
-	//	//writeToStderr = true
-	//case cfg.Verbose > 0:
-	//	handler = gostd.NewVerboseHandler(
-	//		reportWriter,
-	//		gostd.VerbosePackageConfig{
-	//			PackageNameWidth:            maxPkgName,
-	//			Color:                       cfg.Color,
-	//			IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
-	//			HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
-	//		},
-	//	)
-	//default:
-	//	handler = gostd.NewDefaultHandler(
-	//		reportWriter,
-	//		gostd.DefaultPackageConfig{
-	//			PackageNameWidth:            maxPkgName,
-	//			Color:                       cfg.Color,
-	//			IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
-	//			HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
-	//		},
-	//	)
-	//}
-	//
-	//ux := newSimpleUI().
-	//	withNotifications().
-	//	withReports().
-	//	withHandlers(handler).
-	//	withStdout(reportWriter).
-	//	withStderr(notificationWriter)
-	////withHandledPresenters(
-	////	adapter.NewTestRun(presenter.GoStdTestResultSummaryConfig{
-	////		WriteToStderr:    writeToStderr,
-	////		PackageNameWidth: maxPkgName,
-	////		PackageCount:     pkgCount,
-	////		Color:            color,
-	////	}.New),
-	////)
-	//
-	//summaryHandler := gostdsummary.NewFactory(
-	//	presenter.GoStdTestResultSummaryConfig{
-	//		Color:            cfg.Color,
-	//		PackageNameWidth: maxPkgName,
-	//		PackageCount:     pkgCount,
-	//		HidePackageCount: true,
-	//		//ShowElapsed: true,
-	//	},
-	//)
-	//
-	//c := NewTeaUIConfig().
-	//	WithSimpleUI(ux).
-	//	WithPrintReader(reportReader, notificationReader).
-	//	WithFooter(summaryHandler)
-	//
-	//return NewTeaUI(c)
 }
 
 func newSafeGoStdUI(testPkgs *golist.PackageCollection, json bool, cfg Config) clio.UI {
 	var handler partybus.Handler
-	// var writeToStderr bool
+	var writeToStderr bool
 	var pkgCount int
 	maxPkgName := 30
 	if testPkgs != nil {
@@ -168,15 +106,13 @@ func newSafeGoStdUI(testPkgs *golist.PackageCollection, json bool, cfg Config) c
 		pkgCount = len(pkgs)
 	}
 
-	// reportWriter := os.Stdout
-	//notificationWriter := os.Stderr
-	reportReader, reportWriter := readerWriterPair()
-	notificationReader, notificationWriter := readerWriterPair()
+	reportWriter := os.Stdout
+	notificationWriter := os.Stderr
 
 	switch {
 	case json:
 		handler = gostd.NewJSONHandler(reportWriter)
-		// writeToStderr = true
+		writeToStderr = true
 	case cfg.Verbose > 0:
 		handler = gostd.NewVerboseHandler(
 			reportWriter,
@@ -204,47 +140,30 @@ func newSafeGoStdUI(testPkgs *golist.PackageCollection, json bool, cfg Config) c
 		withReports().
 		withHandlers(handler).
 		withStdout(reportWriter).
-		withStderr(notificationWriter)
-	// withHandledPresenters(
-	//	adapter.NewTestRun(presenter.GoStdTestResultSummaryConfig{
-	//		WriteToStderr:    writeToStderr,
-	//		PackageNameWidth: maxPkgName,
-	//		PackageCount:     pkgCount,
-	//		Color:            color,
-	//	}.New),
-	//)
+		withStderr(notificationWriter).
+		withHandledPresenters(
+			adapter.NewTestRun(presenter.GoStdTestResultSummaryConfig{
+				WriteToStderr:    writeToStderr,
+				PackageNameWidth: maxPkgName,
+				PackageCount:     pkgCount,
+				Color:            cfg.Color,
+			}.New),
+		)
 
-	spin := syncspinner.New()
-
-	common := state.Common{
-		Spinner: spin.CurrentTick(),
-	}
-
-	summaryHandler := gostdsummary.NewFactory(
-		presenter.GoStdTestResultSummaryConfig{
-			Color:            cfg.Color,
-			PackageNameWidth: maxPkgName,
-			PackageCount:     pkgCount,
-			HidePackageCount: true,
-			//ShowElapsed: true,
-		},
-		common,
-	)
-
-	c := NewTeaUIConfig().
-		WithSimpleUI(ux).
-		WithPrintReader(reportReader, notificationReader).
-		WithSyncSpinner(spin).
-		WithFooter(summaryHandler)
-
-	return NewTeaUI(c)
+	return ux
 }
 
 func isATTY() bool {
+	if val := os.Getenv("NO_TTY"); val != "" {
+		return !isPositive(val)
+	}
 	return term.IsTerminal(int(os.Stdout.Fd()))
 }
 
-func readerWriterPair() (io.Reader, io.WriteCloser) {
-	r, w := io.Pipe()
-	return r, w
+func isPositive(val string) bool {
+	switch strings.ToLower(strings.TrimSpace(val)) {
+	case "true", "yes", "y", "1", "t":
+		return true
+	}
+	return false
 }
