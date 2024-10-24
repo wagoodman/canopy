@@ -20,7 +20,7 @@ func NewJestUI(config Config) clio.UI {
 		NestNonPackages:             true,
 		ExpireOnCompletion:          false,
 		ShowIntermediateOutput:      false,
-		HidePackagesWithNoTestFiles: !config.ShowPackagesMissingTests,
+		HidePackagesWithNoTestFiles: !config.ShowPackagesWithNoTests,
 		// TODO: allow for style overrides
 	}
 	testRowFactory := func(e gotest.Event, ws tea.WindowSizeMsg) tea.Model {
@@ -28,13 +28,10 @@ func NewJestUI(config Config) clio.UI {
 	}
 
 	pkgModelFactory := func(e gotest.Event, ws tea.WindowSizeMsg) tea.Model {
-		if e.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) && rowCfg.HidePackagesWithNoTestFiles {
-			return nil
-		}
 		return pkgframe.NewPackageModel(e.Reference, ws, testRowFactory)
 	}
 
-	bodyHandler := pkgframe.NewFactory(pkgModelFactory)
+	bodyHandler := pkgframe.NewFactory(pkgModelFactory, config.ShowPackagesWithNoTests)
 
 	summaryHandler := jestsummary.NewFactory(
 		presenter.JestTestResultSummaryConfig{

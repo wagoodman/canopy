@@ -96,7 +96,7 @@ func TestVerbosePackage(t *testing.T) {
 				Color:            false,
 				PackageNameWidth: 150,
 			}
-			subject := newVerbosePackage(&sb, cfg, tt.ref)
+			subject := NewVerbosePackage(&sb, cfg, tt.ref)
 			events := fixtureEvents(t, tt.fixture)
 			for e := range events {
 				err := subject.OnGoTestEvent(e)

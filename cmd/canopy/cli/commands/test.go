@@ -296,9 +296,9 @@ func setUI(app clio.Application, formatStr string, appearance options.Appearance
 
 func getUIConfig(appearance options.Appearance, clioCfg clio.Config) ui.Config {
 	return ui.Config{
-		Color:                    !appearance.NoColor,
-		Verbose:                  clioCfg.Log.Verbosity,
-		ShowPackagesMissingTests: appearance.ShowPackagesWithNoTests,
+		Color:                   !appearance.NoColor,
+		Verbose:                 clioCfg.Log.Verbosity,
+		ShowPackagesWithNoTests: appearance.ShowPackagesWithNoTests,
 	}
 }
 

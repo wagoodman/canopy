@@ -22,15 +22,11 @@ func NewDotUI(config Config) clio.UI {
 		// TODO: allow for style overrides
 	}
 
-	testRowFactory := func(e gotest.Event, ws tea.WindowSizeMsg) tea.Model {
+	pkgModelFactory := func(e gotest.Event, ws tea.WindowSizeMsg) tea.Model {
 		return dottestrow.NewModel(e.Reference, ws, rowCfg)
 	}
 
-	pkgModelFactory := func(e gotest.Event, ws tea.WindowSizeMsg) tea.Model {
-		return pkgframe.NewPackageModel(e.Reference, ws, testRowFactory)
-	}
-
-	bodyHandler := pkgframe.NewFactory(pkgModelFactory)
+	bodyHandler := pkgframe.NewFactory(pkgModelFactory, config.ShowPackagesWithNoTests)
 
 	summaryHandler := jestsummary.NewFactory(
 		presenter.JestTestResultSummaryConfig{

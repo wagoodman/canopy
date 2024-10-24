@@ -22,15 +22,19 @@ var (
 type ModelFactory func(gotest.Event, tea.WindowSizeMsg) tea.Model
 
 type Factory struct {
-	pkgModelFactory ModelFactory
-	seen            map[gotest.Reference]struct{}
-	ws              tea.WindowSizeMsg
+	showPackagesMissingTests bool
+	pkgModelFactory          ModelFactory
+	seenPkg                  map[string]struct{}
+	startPkgEvent            map[string]gotest.Event
+	ws                       tea.WindowSizeMsg
 }
 
-func NewFactory(pkgModelFactory ModelFactory) *Factory {
+func NewFactory(pkgModelFactory ModelFactory, showPackagesMissingTests bool) *Factory {
 	return &Factory{
-		pkgModelFactory: pkgModelFactory,
-		seen:            make(map[gotest.Reference]struct{}),
+		showPackagesMissingTests: showPackagesMissingTests,
+		pkgModelFactory:          pkgModelFactory,
+		seenPkg:                  make(map[string]struct{}),
+		startPkgEvent:            make(map[string]gotest.Event),
 	}
 }
 
@@ -55,28 +59,100 @@ func (j Factory) Handle(e partybus.Event) ([]tea.Model, tea.Cmd) {
 		return nil, nil
 	}
 
+	if j.showPackagesMissingTests {
+		return j.handlePackageEvent(gt)
+	}
+	return j.handleAnyTestEvent(gt, e)
+}
+
+func (j *Factory) handleAnyTestEvent(gt gotest.Event, e partybus.Event) ([]tea.Model, tea.Cmd) {
+	hasSeenPkg := j.hasSeenPackage(gt.Reference)
+	isPkg := gt.Reference.IsPackage()
+	startPkgEvent, hasSeenStartPkgEvent := j.startPkgEvent[gt.Reference.Package]
+
+	if isPkg {
+		if hasSeenPkg {
+			return nil, nil
+		}
+
+		if hasSeenStartPkgEvent {
+			// we've seen the startPkgEvent package event already, and this is the second event!
+			// make a new model, pass all events... only if the second event is NOT a no-test indication
+			delete(j.startPkgEvent, gt.Reference.Package)
+			if gt.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) {
+				return nil, nil
+			}
+
+			return j.newModel(startPkgEvent, e)
+		}
+
+		switch gt.Action {
+		case gotest.StartAction:
+			// we'll check the second event to see if it is a no-test indication from a package ref...
+			// but a pure package ref is not guaranteed either.
+			j.startPkgEvent[gt.Reference.Package] = gt
+			return nil, nil
+		case gotest.SkipAction:
+			// we're never going to show this package
+			j.markPackageAsSeen(gt.Reference)
+			return nil, nil
+		}
+		// this isn't a start event! this is odd (maybe a panic in testing?) let's handle it.
+		return j.newModel(gt, e)
+	}
+
+	if hasSeenStartPkgEvent {
+		// we've seen the startPkgEvent package event already, and this is the second event!
+		// make a new model, pass all events... only if the second event is NOT a no-test indication
+		delete(j.startPkgEvent, gt.Reference.Package)
+		if gt.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) {
+			return nil, nil
+		}
+
+		return j.newModel(startPkgEvent, e)
+	}
+
+	return nil, nil
+}
+
+func (j *Factory) handlePackageEvent(gt gotest.Event) ([]tea.Model, tea.Cmd) {
 	if !gt.Reference.IsPackage() {
 		return nil, nil
 	}
 
-	if _, ok := j.seen[gt.Reference]; ok {
+	if j.hasSeenPackage(gt.Reference) {
 		return nil, nil
-	} else {
-		// we only want to register that we have seen the package, not any indication of testing that will start
-		// this is because we will only see no-test indications on the second event at the earliest
-		if gt.Action == gotest.StartAction {
-			return nil, nil
-		}
-		// this isn't a simple start action! this is odd (maybe a panic in testing?) let's handle it.
 	}
 
-	j.seen[gt.Reference] = struct{}{}
+	return j.newModel(gt)
+}
+
+func (j Factory) hasSeenPackage(ref gotest.Reference) bool {
+	_, ok := j.seenPkg[ref.Package]
+	return ok
+}
+
+func (j *Factory) newModel(gt gotest.Event, es ...partybus.Event) ([]tea.Model, tea.Cmd) {
+	j.markPackageAsSeen(gt.Reference)
 
 	pkgMod := j.pkgModelFactory(gt, j.ws)
-	if pkgMod != nil {
-		return []tea.Model{pkgMod}, nil
+
+	if pkgMod == nil {
+		return nil, nil
 	}
-	return nil, nil
+
+	var cmd tea.Cmd
+	for _, e := range es {
+		newPkgMod, newCmd := pkgMod.Update(e)
+		cmd = tea.Batch(cmd, newCmd)
+		pkgMod = newPkgMod
+	}
+
+	return []tea.Model{pkgMod}, cmd
+}
+
+func (j *Factory) markPackageAsSeen(ref gotest.Reference) {
+	j.seenPkg[ref.Package] = struct{}{}
 }
 
 type Model struct {

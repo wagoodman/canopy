@@ -15,6 +15,12 @@ import (
 	"github.com/wagoodman/go-partybus"
 )
 
+var (
+	_ handler.Handler  = (*VerbosePackage)(nil)
+	_ partybus.Handler = (*VerbosePackage)(nil)
+	_ fmt.Stringer     = (*VerbosePackage)(nil)
+)
+
 type VerbosePackageConfig struct {
 	Color                       bool
 	PackageNameWidth            int
@@ -25,11 +31,11 @@ type VerbosePackageConfig struct {
 func NewVerboseHandler(writer io.Writer, config VerbosePackageConfig) handler.Handler {
 	return newPackageHandler(
 		func(ref gotest.Reference, writer io.Writer) handler.Handler {
-			return newVerbosePackage(writer, config, ref)
+			return NewVerbosePackage(writer, config, ref)
 		}, writer)
 }
 
-type verbosePackage struct {
+type VerbosePackage struct {
 	writer          io.Writer
 	config          VerbosePackageConfig
 	style           style.GoStd
@@ -40,11 +46,11 @@ type verbosePackage struct {
 	packageCoverage map[gotest.Reference]string
 }
 
-func newVerbosePackage(writer io.Writer, config VerbosePackageConfig, ref gotest.Reference) *verbosePackage {
+func NewVerbosePackage(writer io.Writer, config VerbosePackageConfig, ref gotest.Reference) *VerbosePackage {
 	if !ref.IsPackage() {
 		ref = ref.PackageRef()
 	}
-	return &verbosePackage{
+	return &VerbosePackage{
 		writer:          writer,
 		config:          config,
 		style:           style.NewGoStd(config.Color),
@@ -55,7 +61,7 @@ func newVerbosePackage(writer io.Writer, config VerbosePackageConfig, ref gotest
 	}
 }
 
-func (n *verbosePackage) Handle(e partybus.Event) error {
+func (n *VerbosePackage) Handle(e partybus.Event) error {
 	switch e.Type {
 	case event.GoTestType:
 		goTestEvent, err := parser.ParseGoTestType(e)
@@ -69,11 +75,11 @@ func (n *verbosePackage) Handle(e partybus.Event) error {
 	return nil
 }
 
-func (n *verbosePackage) String() string {
+func (n *VerbosePackage) String() string {
 	return n.buffer.String()
 }
 
-func (n *verbosePackage) OnGoTestEvent(e gotest.Event) error {
+func (n *VerbosePackage) OnGoTestEvent(e gotest.Event) error {
 	if e.Reference.Package != n.pkg {
 		return nil
 	}
@@ -128,7 +134,7 @@ func (n *verbosePackage) OnGoTestEvent(e gotest.Event) error {
 	return nil
 }
 
-func (n *verbosePackage) funcRefConcluded(ref gotest.Reference) bool {
+func (n *VerbosePackage) funcRefConcluded(ref gotest.Reference) bool {
 	funcRef := ref.FuncRef()
 	if funcRef != nil {
 		if _, exists := n.funcConcluded[*funcRef]; exists {
@@ -138,16 +144,16 @@ func (n *verbosePackage) funcRefConcluded(ref gotest.Reference) bool {
 	return false
 }
 
-func (n *verbosePackage) renderOutput(e gotest.Event) string {
+func (n *VerbosePackage) renderOutput(e gotest.Event) string {
 	if e.Reference.IsPackage() {
 		return n.formatPackage(e)
 	}
 	return n.format(e)
 }
 
-func (n *verbosePackage) formatPackage(e gotest.Event) string {
+func (n *VerbosePackage) formatPackage(e gotest.Event) string {
 	if hasFailedPackageMarking(e.Output) || hasPassedPackageMarking(e.Output) || hasUnknownPackageMarking(e.Output) || hasPassMarking(e.Output) {
-		return formatPackageLine(e.Output, n.style, n.config.PackageNameWidth)
+		return parseAndFormatPackageLine(e.Output, n.style, n.config.PackageNameWidth)
 	}
 	if hasPackageCoverageMarking(e.Output) {
 		// withhold this until you are showing the final package output
@@ -157,7 +163,7 @@ func (n *verbosePackage) formatPackage(e gotest.Event) string {
 	return e.Output
 }
 
-func (n *verbosePackage) format(e gotest.Event) string {
+func (n *VerbosePackage) format(e gotest.Event) string {
 	if hasFailedTestMarking(e.Output) {
 		return formatFailedTest(e.Output, n.style)
 	}

@@ -97,6 +97,10 @@ func (j Model) IsAlive() bool {
 }
 
 func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if msg, ok := msg.(tea.WindowSizeMsg); ok {
+		j.ws = msg
+	}
+
 	e, ok := msg.(partybus.Event)
 	if !ok {
 		return j, nil

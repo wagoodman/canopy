@@ -9,16 +9,6 @@
 
 ---
 
-[TestDefaultHandler/go1.23.0/hide-no-tests=true - 1]
-
----
-
-[TestDefaultHandler/go1.23.0/hide-no-tests=false - 1]
-    github.com/wagoodman/canopy/cmd/canopy/cli/options                                                                                                         coverage: 0.0% of statements
-    github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset                                                                                                coverage: 0.0% of statements
-
----
-
 [TestDefaultPackage/failing_package - 1]
 --- FAIL: TestAddNested (0.00s)
     sum_test.go:39: fail anyway!
@@ -31,7 +21,7 @@
             sum_test.go:117: Expected 37 but got 4
         --- FAIL: TestAddFailingSubtest/Test_weird_numbers_(oops)/offset=3 (0.00s)
             sum_test.go:117: Expected 37 but got 5
-FAIL
+FAIL 
 FAIL github.com/wagoodman/canopy/internal/test-fixtures/weird.d                                                                                             0.670s
 
 ---

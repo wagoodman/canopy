@@ -328,7 +328,7 @@ func (j Model) View() string { //nolint: gocognit, funlen
 		// testCount = j.style.Dot.Render(testCount)
 	}
 
-	rendered := fmt.Sprintf("%-5s %s%s%s %s", title, testPkg, testName, testCount, output)
+	rendered := fmt.Sprintf("%-1s %s%s%s %s", title, testPkg, testName, testCount, output)
 	if lipgloss.Width(rendered) > j.ws.Width && j.ws.Width > 0 {
 		trailer := fmt.Sprintf("[%d]", len(j.testsSeen))
 		if hasFailed {

@@ -9,16 +9,6 @@
 
 ---
 
-[TestVerboseHandler/go1.23.0/hide-no-tests=true - 1]
-
----
-
-[TestVerboseHandler/go1.23.0/hide-no-tests=false - 1]
-    github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset                                                                                                coverage: 0.0% of statements
-    github.com/wagoodman/canopy/cmd/canopy/cli/options                                                                                                         coverage: 0.0% of statements
-
----
-
 [TestVerbosePackage/failing_package - 1]
 === RUN   TestAddNested
 === RUN   TestAddNested/Test_positive_numbers
@@ -94,7 +84,7 @@
         --- FAIL: TestAddFailingSubtest/Test_weird_numbers_(oops)/offset=1 (0.00s)
         --- FAIL: TestAddFailingSubtest/Test_weird_numbers_(oops)/offset=2 (0.00s)
         --- FAIL: TestAddFailingSubtest/Test_weird_numbers_(oops)/offset=3 (0.00s)
-FAIL
+FAIL 
 FAIL github.com/wagoodman/canopy/internal/test-fixtures/weird.d                                                                                             0.587s
 
 ---
@@ -200,7 +190,7 @@ FAIL github.com/wagoodman/canopy/internal/test-fixtures/weird.d                 
     --- PASS: Test_dfsTreeIterator_Next/multiple_cases (0.00s)
     --- PASS: Test_dfsTreeIterator_Next/duplicate_case (0.00s)
     --- PASS: Test_dfsTreeIterator_Next/many_cases (0.00s)
-PASS
+PASS 
 ok   github.com/wagoodman/canopy/cmd/canopy/internal/gotest                                                                                                 (cached)
 
 ---
