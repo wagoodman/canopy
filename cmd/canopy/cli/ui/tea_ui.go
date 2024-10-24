@@ -10,6 +10,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/syncspinner"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
@@ -84,6 +85,7 @@ type TeaUIConfig struct {
 	footerHandler *bubbly.HandlerCollection
 	simpleUI      *simpleUI
 	printReaders  []io.Reader
+	spinner       *syncspinner.Model
 
 	frame frameWithFooter
 }
@@ -117,6 +119,14 @@ func (c *TeaUIConfig) WithFooter(handlers ...bubbly.EventHandler) *TeaUIConfig {
 	return c
 }
 
+func (c *TeaUIConfig) WithSyncSpinner(s syncspinner.Model) *TeaUIConfig {
+	if c.spinner != nil {
+		panic("spinner already set")
+	}
+	c.spinner = &s
+	return c
+}
+
 func NewTeaUI(c *TeaUIConfig) *UI {
 	return &UI{
 		config:  *c,
@@ -130,12 +140,12 @@ func (m *UI) Setup(subscription partybus.Unsubscribable) error {
 	}
 	m.subscription = subscription
 	m.program = tea.NewProgram(m, tea.WithOutput(os.Stderr), tea.WithInput(os.Stdin), tea.WithoutSignalHandler())
-	//m.config.frame.withPrinter(m.program)
+	// m.config.frame.withPrinter(m.program)
 
 	m.running.Add(1)
 
 	go func() {
-		//defer m.running.Done()
+		// defer m.running.Done()
 		if _, err := m.program.Run(); err != nil {
 			log.Errorf("unable to start UI: %+v", err)
 			bus.ExitWithInterrupt()
@@ -147,7 +157,6 @@ func (m *UI) Setup(subscription partybus.Unsubscribable) error {
 	for i := range m.config.printReaders {
 		m.running.Add(1)
 		go func(reader io.Reader) {
-
 			// scan for every line in the reader and print it just behind the UI
 			scanner := bufio.NewScanner(reader)
 			for scanner.Scan() {
@@ -155,7 +164,6 @@ func (m *UI) Setup(subscription partybus.Unsubscribable) error {
 			}
 
 			m.running.Done()
-
 		}(m.config.printReaders[i])
 	}
 
@@ -228,7 +236,15 @@ func (m *UI) Teardown(force bool) error {
 // bubbletea.Model functions
 
 func (m UI) Init() tea.Cmd {
-	return m.config.frame.Init()
+	cmds := []tea.Cmd{
+		m.config.frame.Init(),
+	}
+
+	if m.config.spinner != nil {
+		cmds = append(cmds, m.config.spinner.Tick)
+	}
+
+	return tea.Batch(cmds...)
 }
 
 func (m UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -254,6 +270,11 @@ func (m UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			bus.ExitWithInterrupt()
 			return m, tea.Quit
 		}
+
+	case syncspinner.TickMsg:
+		spinnerModel, cmd := m.config.spinner.Update(msg)
+		m.config.spinner = &spinnerModel
+		cmds = append(cmds, cmd)
 
 	case partybus.Event:
 		log.WithFields("component", "ui").Tracef("event: %q", msg.Type)

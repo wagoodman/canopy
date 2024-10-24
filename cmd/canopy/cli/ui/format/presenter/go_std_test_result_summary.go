@@ -46,7 +46,7 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error {
 
 	var result string
 
-	//refStr := refCompactString(s.config.RunningState, s.run.Result.ReferencesByAction(gotest.RunAction), s.run.Result.ReferencesByAction(gotest.OutputAction))
+	// refStr := refCompactString(s.config.RunningState, s.run.Result.ReferencesByAction(gotest.RunAction), s.run.Result.ReferencesByAction(gotest.OutputAction))
 	//
 	//if refStr != "" {
 	//	result += refStr + "\n"
@@ -114,7 +114,7 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error {
 	return nil
 }
 
-//func refCompactString(runningState string, refss ...gotest.References) string {
+// func refCompactString(runningState string, refss ...gotest.References) string {
 //	var refs gotest.References
 //	for _, r := range refss {
 //		refs = append(refs, r...)

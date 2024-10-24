@@ -1,19 +1,22 @@
 package ui
 
 import (
+	"io"
+	"os"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gostd"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/gostddefaultpkg"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/gostdsummary"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/pkgframe"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/syncspinner"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
 	"github.com/wagoodman/go-partybus"
 	"golang.org/x/term"
-	"io"
-	"os"
 
 	"github.com/anchore/clio"
 )
@@ -38,6 +41,12 @@ func newDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 		pkgCount = len(pkgs)
 	}
 
+	spin := syncspinner.New()
+
+	common := state.Common{
+		Spinner: spin.CurrentTick(),
+	}
+
 	rowCfg := gostddefaultpkg.Config{
 		DefaultPackageConfig: gostd.DefaultPackageConfig{
 			PackageNameWidth:            maxPkgName,
@@ -47,11 +56,17 @@ func newDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 		},
 	}
 
-	pkgModelFactory := func(e gotest.Event, ws tea.WindowSizeMsg) tea.Model {
-		return gostddefaultpkg.NewModel(e.Reference, ws, rowCfg)
+	pkgModelFactory := func(e gotest.Event, common state.Common) tea.Model {
+		return gostddefaultpkg.NewModel(e.Reference, common, rowCfg)
 	}
 
-	bodyHandler := pkgframe.NewFactory(pkgModelFactory, cfg.ShowPackagesWithNoTests)
+	bodyHandler := pkgframe.NewFactory(
+		pkgModelFactory,
+		pkgframe.FactoryConfig{
+			ShowPackagesMissingTests: cfg.ShowPackagesWithNoTests,
+			Common:                   common,
+		},
+	)
 
 	summaryHandler := gostdsummary.NewFactory(
 		presenter.GoStdTestResultSummaryConfig{
@@ -61,6 +76,7 @@ func newDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 			HidePackageCount: true,
 			//ShowElapsed: true,
 		},
+		common,
 	)
 
 	c := NewTeaUIConfig(bodyHandler).
@@ -68,13 +84,14 @@ func newDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 			withNotifications().
 			withReports(),
 		).
+		WithSyncSpinner(spin).
 		WithFooter(summaryHandler)
 
 	return NewTeaUI(c)
 
 	////reportWriter := os.Stdout
 	////notificationWriter := os.Stderr
-	//reportReader, reportWriter := readerWriterPair()
+	// reportReader, reportWriter := readerWriterPair()
 	//notificationReader, notificationWriter := readerWriterPair()
 	//
 	//switch {
@@ -138,7 +155,7 @@ func newDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 
 func newSafeGoStdUI(testPkgs *golist.PackageCollection, json bool, cfg Config) clio.UI {
 	var handler partybus.Handler
-	//var writeToStderr bool
+	// var writeToStderr bool
 	var pkgCount int
 	maxPkgName := 30
 	if testPkgs != nil {
@@ -151,7 +168,7 @@ func newSafeGoStdUI(testPkgs *golist.PackageCollection, json bool, cfg Config) c
 		pkgCount = len(pkgs)
 	}
 
-	//reportWriter := os.Stdout
+	// reportWriter := os.Stdout
 	//notificationWriter := os.Stderr
 	reportReader, reportWriter := readerWriterPair()
 	notificationReader, notificationWriter := readerWriterPair()
@@ -159,7 +176,7 @@ func newSafeGoStdUI(testPkgs *golist.PackageCollection, json bool, cfg Config) c
 	switch {
 	case json:
 		handler = gostd.NewJSONHandler(reportWriter)
-		//writeToStderr = true
+		// writeToStderr = true
 	case cfg.Verbose > 0:
 		handler = gostd.NewVerboseHandler(
 			reportWriter,
@@ -188,7 +205,7 @@ func newSafeGoStdUI(testPkgs *golist.PackageCollection, json bool, cfg Config) c
 		withHandlers(handler).
 		withStdout(reportWriter).
 		withStderr(notificationWriter)
-	//withHandledPresenters(
+	// withHandledPresenters(
 	//	adapter.NewTestRun(presenter.GoStdTestResultSummaryConfig{
 	//		WriteToStderr:    writeToStderr,
 	//		PackageNameWidth: maxPkgName,
@@ -196,6 +213,12 @@ func newSafeGoStdUI(testPkgs *golist.PackageCollection, json bool, cfg Config) c
 	//		Color:            color,
 	//	}.New),
 	//)
+
+	spin := syncspinner.New()
+
+	common := state.Common{
+		Spinner: spin.CurrentTick(),
+	}
 
 	summaryHandler := gostdsummary.NewFactory(
 		presenter.GoStdTestResultSummaryConfig{
@@ -205,11 +228,13 @@ func newSafeGoStdUI(testPkgs *golist.PackageCollection, json bool, cfg Config) c
 			HidePackageCount: true,
 			//ShowElapsed: true,
 		},
+		common,
 	)
 
 	c := NewTeaUIConfig().
 		WithSimpleUI(ux).
 		WithPrintReader(reportReader, notificationReader).
+		WithSyncSpinner(spin).
 		WithFooter(summaryHandler)
 
 	return NewTeaUI(c)

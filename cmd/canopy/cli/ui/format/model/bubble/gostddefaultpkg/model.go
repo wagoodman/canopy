@@ -3,16 +3,19 @@ package gostddefaultpkg
 import (
 	"bytes"
 	"errors"
-	"github.com/anchore/bubbly/bubbles/frame"
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gostd"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
-	"strings"
+
+	"github.com/anchore/bubbly/bubbles/frame"
 )
 
 var (
@@ -32,13 +35,15 @@ type Model struct {
 	ref    gotest.Reference
 	action gotest.Action
 	style  style.GoStd
-	ws     tea.WindowSizeMsg
+
+	// event driven state
+	common state.Common
 
 	fragment *gostd.DefaultPackage
 	buffer   *bytes.Buffer
 }
 
-func NewModel(ref gotest.Reference, ws tea.WindowSizeMsg, config Config) *Model {
+func NewModel(ref gotest.Reference, common state.Common, config Config) *Model {
 	stRef := config.Style
 	if stRef == nil {
 		st := style.NewGoStd(config.Color)
@@ -53,7 +58,7 @@ func NewModel(ref gotest.Reference, ws tea.WindowSizeMsg, config Config) *Model 
 		style:    *stRef,
 		fragment: gostd.NewDefaultPackage(&buffer, config.DefaultPackageConfig, ref),
 		buffer:   &buffer,
-		ws:       ws,
+		common:   common,
 	}
 }
 
@@ -81,15 +86,15 @@ func (j Model) IsAlive() bool {
 }
 
 func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.WindowSizeMsg); ok {
-		j.ws = msg
+	j.common.OnMessage(msg)
+	switch msg := msg.(type) {
+	case partybus.Event:
+		return j.handlePartybusEvent(msg)
 	}
+	return j, nil
+}
 
-	e, ok := msg.(partybus.Event)
-	if !ok {
-		return j, nil
-	}
-
+func (j Model) handlePartybusEvent(e partybus.Event) (tea.Model, tea.Cmd) {
 	if e.Type != event.GoTestType {
 		return j, nil
 	}
@@ -131,5 +136,5 @@ func (j Model) View() string {
 		return render
 	}
 
-	return gostd.FormatPackageLine("X", j.ref.Package, nil, "", j.style, false, j.config.PackageNameWidth)
+	return gostd.FormatPackageLine(j.common.Spinner.View, j.ref.Package, nil, "", j.style, false, j.config.PackageNameWidth)
 }

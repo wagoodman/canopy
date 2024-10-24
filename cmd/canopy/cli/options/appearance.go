@@ -18,7 +18,7 @@ type Appearance struct {
 	ShowPackagesWithNoTests bool `yaml:"show-packages-with-no-tests" json:"show-packages-with-no-tests" mapstructure:"show-packages-with-no-tests"`
 
 	// tracker      *xflagset.Decorator
-	//NamedFlagSet *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
+	// NamedFlagSet *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 func (t *Appearance) PostLoad() error {

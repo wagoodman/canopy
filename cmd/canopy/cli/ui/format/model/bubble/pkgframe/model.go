@@ -2,6 +2,7 @@ package pkgframe
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
@@ -19,29 +20,31 @@ var (
 	_ frame.ImprintableElement = (*Model)(nil)
 )
 
-type ModelFactory func(gotest.Event, tea.WindowSizeMsg) tea.Model
+type ModelFactory func(gotest.Event, state.Common) tea.Model
 
-type Factory struct {
-	showPackagesMissingTests bool
-	pkgModelFactory          ModelFactory
-	seenPkg                  map[string]struct{}
-	startPkgEvent            map[string]gotest.Event
-	ws                       tea.WindowSizeMsg
+type FactoryConfig struct {
+	ShowPackagesMissingTests bool
+	Common                   state.Common
 }
 
-func NewFactory(pkgModelFactory ModelFactory, showPackagesMissingTests bool) *Factory {
+type Factory struct {
+	config          FactoryConfig
+	pkgModelFactory ModelFactory
+	seenPkg         map[string]struct{}
+	startPkgEvent   map[string]gotest.Event
+}
+
+func NewFactory(pkgModelFactory ModelFactory, cfg FactoryConfig) *Factory {
 	return &Factory{
-		showPackagesMissingTests: showPackagesMissingTests,
-		pkgModelFactory:          pkgModelFactory,
-		seenPkg:                  make(map[string]struct{}),
-		startPkgEvent:            make(map[string]gotest.Event),
+		config:          cfg,
+		pkgModelFactory: pkgModelFactory,
+		seenPkg:         make(map[string]struct{}),
+		startPkgEvent:   make(map[string]gotest.Event),
 	}
 }
 
 func (j *Factory) OnMessage(msg tea.Msg) {
-	if msg, ok := msg.(tea.WindowSizeMsg); ok {
-		j.ws = msg
-	}
+	j.config.Common.OnMessage(msg)
 }
 
 func (j Factory) RespondsTo() []partybus.EventType {
@@ -59,7 +62,7 @@ func (j Factory) Handle(e partybus.Event) ([]tea.Model, tea.Cmd) {
 		return nil, nil
 	}
 
-	if j.showPackagesMissingTests {
+	if j.config.ShowPackagesMissingTests {
 		return j.handlePackageEvent(gt)
 	}
 	return j.handleAnyTestEvent(gt, e)
@@ -135,7 +138,7 @@ func (j Factory) hasSeenPackage(ref gotest.Reference) bool {
 func (j *Factory) newModel(gt gotest.Event, es ...partybus.Event) ([]tea.Model, tea.Cmd) {
 	j.markPackageAsSeen(gt.Reference)
 
-	pkgMod := j.pkgModelFactory(gt, j.ws)
+	pkgMod := j.pkgModelFactory(gt, j.config.Common)
 
 	if pkgMod == nil {
 		return nil, nil
@@ -161,16 +164,16 @@ type Model struct {
 	frame      frame.Frame
 	testsSeen  map[gotest.Reference]struct{}
 	rowFactory ModelFactory
-	ws         tea.WindowSizeMsg
+	common     state.Common
 }
 
-func NewPackageModel(ref gotest.Reference, ws tea.WindowSizeMsg, rowFactory ModelFactory) *Model {
+func NewPackageModel(ref gotest.Reference, common state.Common, rowFactory ModelFactory) *Model {
 	return &Model{
 		pkgRef:     ref.PackageRef(),
 		frame:      *frame.New(),
 		testsSeen:  make(map[gotest.Reference]struct{}),
 		rowFactory: rowFactory,
-		ws:         ws,
+		common:     common,
 	}
 }
 
@@ -187,9 +190,8 @@ func (j Model) ShouldImprint() bool {
 }
 
 func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	//if !j.update(msg) {
-	//	return j, nil
-	//}
+	j.common.OnMessage(msg)
+
 	j.update(msg)
 
 	newFrame, cmd := j.frame.Update(msg)
@@ -199,10 +201,6 @@ func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (j *Model) update(msg tea.Msg) bool {
-	if msg, ok := msg.(tea.WindowSizeMsg); ok {
-		j.ws = msg
-	}
-
 	e, ok := msg.(partybus.Event)
 	if !ok {
 		return false
@@ -226,7 +224,7 @@ func (j *Model) update(msg tea.Msg) bool {
 	if _, ok := j.testsSeen[gt.Reference]; !ok {
 		j.testsSeen[gt.Reference] = struct{}{}
 
-		testRowModel := j.rowFactory(gt, j.ws)
+		testRowModel := j.rowFactory(gt, j.common)
 
 		if testRowModel != nil {
 			j.frame.AppendModel(testRowModel)

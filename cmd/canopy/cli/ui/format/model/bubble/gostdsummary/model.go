@@ -1,16 +1,17 @@
 package gostdsummary
 
 import (
-	"github.com/charmbracelet/bubbles/spinner"
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/uuid"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
-	"strings"
 
 	"github.com/anchore/bubbly"
 )
@@ -23,12 +24,14 @@ var (
 type Factory struct {
 	config presenter.GoStdTestResultSummaryConfig
 	seen   map[uuid.UUID]struct{}
+	common state.Common
 }
 
-func NewFactory(cfg presenter.GoStdTestResultSummaryConfig) *Factory {
+func NewFactory(cfg presenter.GoStdTestResultSummaryConfig, common state.Common) *Factory {
 	return &Factory{
 		config: cfg,
 		seen:   make(map[uuid.UUID]struct{}),
+		common: common,
 	}
 }
 
@@ -52,17 +55,17 @@ func (j Factory) Handle(e partybus.Event) ([]tea.Model, tea.Cmd) {
 	}
 
 	j.seen[gt.RunID] = struct{}{}
-	return []tea.Model{NewModel(j.config, gt.RunID)}, nil
+	return []tea.Model{NewModel(j.config, j.common, gt.RunID)}, nil
 }
 
 type Model struct {
 	config  presenter.GoStdTestResultSummaryConfig
 	started bool
 	run     gotest.Run
-	spinner spinner.Model
+	common  state.Common
 }
 
-func NewModel(config presenter.GoStdTestResultSummaryConfig, runID uuid.UUID) *Model {
+func NewModel(config presenter.GoStdTestResultSummaryConfig, common state.Common, runID uuid.UUID) *Model {
 	run := gotest.NewRun(gotest.RunnerConfig{}) // we only need the cumulative state, not the run config
 	run.Result = *gotest.NewResult(gotest.ResultConfig{
 		TrackFailingOutput: true,
@@ -70,22 +73,21 @@ func NewModel(config presenter.GoStdTestResultSummaryConfig, runID uuid.UUID) *M
 	})
 	run.ID = runID
 	return &Model{
-		config:  config,
-		run:     *run,
-		spinner: spinner.New(spinner.WithSpinner(spinner.Dot)),
+		config: config,
+		run:    *run,
+		common: common,
 	}
 }
 
 func (j Model) Init() tea.Cmd {
-	return j.spinner.Tick
+	return nil
 }
 
 func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	j.common.OnMessage(msg)
+
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
-	case spinner.TickMsg:
-		j.spinner, cmd = j.spinner.Update(msg)
-
 	case partybus.Event:
 
 		switch msg.Type {
@@ -127,7 +129,7 @@ func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (j Model) View() string {
 	sb := strings.Builder{}
-	j.config.RunningState = j.spinner.View()
+	j.config.RunningState = j.common.Spinner.View
 	err := j.config.New(j.run).Present(&sb, &sb)
 	if err != nil {
 		// TODO

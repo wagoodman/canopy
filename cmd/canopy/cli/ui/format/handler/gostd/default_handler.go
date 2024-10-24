@@ -261,7 +261,6 @@ func parseAndFormatPackageLine(s string, st style.GoStd, maxTestName int) string
 }
 
 func FormatPackageLine(status, pkgName string, aux []string, trailer string, st style.GoStd, formatStatus bool, maxTestName int) string {
-
 	if formatStatus {
 		switch {
 		case hasPassMarking(status):

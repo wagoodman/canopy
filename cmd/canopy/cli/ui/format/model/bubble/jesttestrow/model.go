@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
@@ -43,10 +44,10 @@ type Model struct {
 	output    []string
 	testsSeen map[gotest.Reference]struct{}
 	style     style.Jest
-	ws        tea.WindowSizeMsg
+	common    state.Common
 }
 
-func NewModel(ref gotest.Reference, ws tea.WindowSizeMsg, config Config) *Model {
+func NewModel(ref gotest.Reference, common state.Common, config Config) *Model {
 	stRef := config.Style
 	if stRef == nil {
 		st := style.NewJest(config.Color)
@@ -56,7 +57,7 @@ func NewModel(ref gotest.Reference, ws tea.WindowSizeMsg, config Config) *Model 
 		config:    config,
 		ref:       ref,
 		style:     *stRef,
-		ws:        ws,
+		common:    common,
 		testsSeen: make(map[gotest.Reference]struct{}),
 	}
 }
@@ -97,9 +98,7 @@ func (j Model) IsAlive() bool {
 }
 
 func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.WindowSizeMsg); ok {
-		j.ws = msg
-	}
+	j.common.OnMessage(msg)
 
 	e, ok := msg.(partybus.Event)
 	if !ok {
@@ -150,8 +149,12 @@ func (j Model) testTitleOutput() (title, output string) {
 func (j Model) testNestedTitleOutput() (title, output string) {
 	switch j.action {
 	case gotest.RunAction, gotest.StartAction:
+		status := j.common.Spinner.View
+		if status == "" {
+			status = "…"
+		}
 
-		title = j.style.Aux.Render("  …")
+		title = j.style.Aux.Render(fmt.Sprintf("  %s", status))
 		if j.config.ShowIntermediateOutput && len(j.output) > 0 {
 			output = j.style.Aux.Render(strings.TrimSpace(j.output[len(j.output)-1]))
 		}

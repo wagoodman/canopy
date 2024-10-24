@@ -5,6 +5,8 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/jestsummary"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/jesttestrow"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/pkgframe"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/syncspinner"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 
@@ -23,15 +25,28 @@ func NewJestUI(config Config) clio.UI {
 		HidePackagesWithNoTestFiles: !config.ShowPackagesWithNoTests,
 		// TODO: allow for style overrides
 	}
-	testRowFactory := func(e gotest.Event, ws tea.WindowSizeMsg) tea.Model {
-		return jesttestrow.NewModel(e.Reference, ws, rowCfg)
+
+	spin := syncspinner.New()
+
+	common := state.Common{
+		Spinner: spin.CurrentTick(),
 	}
 
-	pkgModelFactory := func(e gotest.Event, ws tea.WindowSizeMsg) tea.Model {
-		return pkgframe.NewPackageModel(e.Reference, ws, testRowFactory)
+	testRowFactory := func(e gotest.Event, common state.Common) tea.Model {
+		return jesttestrow.NewModel(e.Reference, common, rowCfg)
 	}
 
-	bodyHandler := pkgframe.NewFactory(pkgModelFactory, config.ShowPackagesWithNoTests)
+	pkgModelFactory := func(e gotest.Event, common state.Common) tea.Model {
+		return pkgframe.NewPackageModel(e.Reference, common, testRowFactory)
+	}
+
+	bodyHandler := pkgframe.NewFactory(
+		pkgModelFactory,
+		pkgframe.FactoryConfig{
+			ShowPackagesMissingTests: config.ShowPackagesWithNoTests,
+			Common:                   common,
+		},
+	)
 
 	summaryHandler := jestsummary.NewFactory(
 		presenter.JestTestResultSummaryConfig{
@@ -45,6 +60,7 @@ func NewJestUI(config Config) clio.UI {
 			withNotifications().
 			withReports(),
 		).
+		WithSyncSpinner(spin).
 		WithFooter(summaryHandler)
 
 	return NewTeaUI(c)
