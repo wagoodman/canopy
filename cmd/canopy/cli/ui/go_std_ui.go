@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"io"
 	"os"
 	"strings"
 
@@ -23,13 +24,80 @@ import (
 )
 
 func NewGoStdUI(testPkgs *golist.PackageCollection, json bool, cfg Config) clio.UI {
-	if isATTY() && !json && cfg.Verbose == 0 {
-		return newDynamicGoStdUI(testPkgs, cfg)
+	if isATTY() && !json {
+		if cfg.Verbose > 0 {
+			return newVerboseDynamicGoStdUI(testPkgs, cfg)
+		}
+		return newDefaultDynamicGoStdUI(testPkgs, cfg)
 	}
 	return newSafeGoStdUI(testPkgs, json, cfg)
 }
 
-func newDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
+func newVerboseDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
+	var pkgCount int
+	maxPkgName := 30
+	if testPkgs != nil {
+		pkgs := testPkgs.Packages()
+		for _, pkg := range pkgs {
+			if len(pkg.ImportPath) > maxPkgName {
+				maxPkgName = len(pkg.ImportPath)
+			}
+		}
+		pkgCount = len(pkgs)
+	}
+
+	spin := syncspinner.New()
+
+	common := state.Common{
+		Spinner: spin.CurrentTick(),
+	}
+
+	reportReader, reportWriter := readerWriterPair()
+	notificationReader, notificationWriter := readerWriterPair()
+
+	handler := gostd.NewVerboseHandler(
+		reportWriter,
+		gostd.VerbosePackageConfig{
+			PackageNameWidth:            maxPkgName,
+			Color:                       cfg.Color,
+			IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
+			HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
+		},
+	)
+
+	ux := newSimpleUI().
+		withNotifications().
+		withReports().
+		withHandlers(handler).
+		withStdout(reportWriter).
+		withStderr(notificationWriter)
+
+	summaryHandler := gostdsummary.NewFactory(
+		presenter.GoStdTestResultSummaryConfig{
+			Color:            cfg.Color,
+			PackageNameWidth: maxPkgName,
+			PackageCount:     pkgCount,
+			HidePackageCount: true,
+			//ShowElapsed: true,
+		},
+		common,
+	)
+
+	c := NewTeaUIConfig().
+		WithSimpleUI(ux).
+		WithSyncSpinner(spin).
+		WithPrintReader(reportReader, notificationReader).
+		WithFooter(summaryHandler)
+
+	return NewTeaUI(c)
+}
+
+func readerWriterPair() (io.Reader, io.WriteCloser) {
+	r, w := io.Pipe()
+	return r, w
+}
+
+func newDefaultDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	var pkgCount int
 	maxPkgName := 30
 	if testPkgs != nil {
