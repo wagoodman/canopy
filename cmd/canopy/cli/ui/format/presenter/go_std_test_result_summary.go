@@ -97,7 +97,8 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error {
 	result += "\t" + s.style.Aux.Render(s.run.Elapsed().Round(time.Millisecond).String())
 
 	if coverage, ok := s.run.Result.Coverage(); ok {
-		result += "\t" + s.style.Aux.Render(fmt.Sprintf("coverage: %0.1f%% of statements", coverage))
+		// match the same format changes used in the gostd handlers
+		result += "\t" + s.style.Aux.Render(fmt.Sprintf("[%0.1f%% coverage]", coverage))
 	}
 
 	if _, err := fmt.Fprintln(w, result); err != nil {
@@ -106,31 +107,3 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error {
 
 	return nil
 }
-
-// func refCompactString(runningState string, refss ...gotest.References) string {
-//	var refs gotest.References
-//	for _, r := range refss {
-//		refs = append(refs, r...)
-//	}
-//	sort.Sort(refs)
-//	refsByPkg := make(map[string][]gotest.Reference)
-//
-//	var lastPkg string
-//	var pkgs []string
-//	for _, ref := range refs {
-//		if ref.Package != lastPkg {
-//			pkgs = append(pkgs, ref.Package)
-//			lastPkg = ref.Package
-//		}
-//		refsByPkg[ref.Package] = append(refsByPkg[ref.Package], ref)
-//	}
-//
-//	// show std status line for each in progress
-//
-//	var result strings.Builder
-//	for _, pkg := range pkgs {
-//		result.WriteString(fmt.Sprintf("%s\t%s\t%d running tests\n", runningState, pkg, len(refsByPkg[pkg])))
-//	}
-//
-//	return result.String()
-//}

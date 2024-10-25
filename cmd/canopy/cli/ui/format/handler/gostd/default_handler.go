@@ -141,8 +141,8 @@ func (n *DefaultPackage) render(writer io.Writer) { //nolint: gocognit
 				// skip the run line
 				continue
 			}
-			if !n.isFailedReference(e.Reference) && hasPackageCoverageMarking(e.Output) {
-				// skip "coverage:" lines for passing tests
+			if hasPackageCoverageMarking(e.Output) {
+				// skip "coverage:" lines
 				continue
 			}
 			if strings.TrimSpace(e.Output) == "" {
@@ -194,14 +194,14 @@ func hasPanicMarking(output string) bool {
 	return strings.HasPrefix(output, "panic:")
 }
 
-// func hasTimeMarker(output string) bool {
-//	return timePattern.MatchString(strings.TrimSpace(output))
-//}
+func hasTimeMarker(output string) bool {
+	return timePattern.MatchString(strings.TrimSpace(output))
+}
 
 var (
 	logLinePattern = regexp.MustCompile(`^\s*\S+.go:\d+:`)
 	// coveragePattern = regexp.MustCompile(`coverage:\s*\d+\.\d+%\sof\sstatements\s*$`)
-	// timePattern = regexp.MustCompile(`^\d+\.\d+\S$`)
+	timePattern = regexp.MustCompile(`^\d+\.\d+\S$`)
 )
 
 func isLogLine(output string) bool {
@@ -229,11 +229,6 @@ func (n *DefaultPackage) renderOutput(e gotest.Event, isPanic bool) string {
 func (n *DefaultPackage) formatPackage(e gotest.Event) string {
 	if hasFailedPackageMarking(e.Output) || hasPassedPackageMarking(e.Output) || hasUnknownPackageMarking(e.Output) {
 		return parseAndFormatPackageLine(e.Output, n.style, n.config.PackageNameWidth)
-	}
-	if hasPackageCoverageMarking(e.Output) {
-		// withhold this until you are showing the final package output
-		n.packageCoverage[e.Reference] = e.Output
-		return ""
 	}
 	return e.Output
 }
@@ -310,11 +305,22 @@ func FormatPackageLine(status, pkgName string, aux []string, trailer string, st 
 	}
 
 	for i, a := range aux {
-		// if hasTimeMarker(fields[idx]) {
-		//	aux[i] = "(" + a + ")"
-		//}
+		switch {
+		case hasTimeMarker(a):
+			break
+
+		case strings.ContainsAny(a, "(["):
+			// already formatted
+			break
+		case hasPackageCoverageMarking(a):
+			a = strings.ReplaceAll(a, "coverage: ", "[") + "]"
+
+		default:
+			a = "[" + a + "]"
+		}
 
 		aux[i] = st.Aux.Render(a)
+
 	}
 
 	return strings.Join(append([]string{status, pkgName}, aux...), "\t") + trailer
