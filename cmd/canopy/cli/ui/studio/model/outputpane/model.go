@@ -271,11 +271,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint: funlen
 	return m, tea.Batch(cmds...)
 }
 
-// func (m Model) View() string {
+// func (m Model) view() string {
 //	if !m.ready {
 //		return "\n  Initializing..."
 //	}
-//	return m.viewport.View()
+//	return m.viewport.view()
 //
 //}
 

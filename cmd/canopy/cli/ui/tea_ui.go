@@ -1,12 +1,16 @@
 package ui
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/syncspinner"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
@@ -55,7 +59,17 @@ func (f frameWithFooter) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (f frameWithFooter) View() string {
-	return f.body.View() + f.footer.View()
+	b := f.body.View()
+
+	sb := &strings.Builder{}
+	if b != "" {
+		sb.WriteString(b)
+		if !strings.HasSuffix(b, "\n") {
+			sb.WriteString("\n")
+		}
+	}
+	sb.WriteString(f.footer.View())
+	return sb.String()
 }
 
 type UI struct {
@@ -70,6 +84,8 @@ type TeaUIConfig struct {
 	handler       *bubbly.HandlerCollection
 	footerHandler *bubbly.HandlerCollection
 	simpleUI      *simpleUI
+	printReaders  []io.Reader
+	spinner       *syncspinner.Model
 
 	frame frameWithFooter
 }
@@ -89,12 +105,25 @@ func (c *TeaUIConfig) WithSimpleUI(u *simpleUI) *TeaUIConfig {
 	return c
 }
 
+func (c *TeaUIConfig) WithPrintReader(readers ...io.Reader) *TeaUIConfig {
+	c.printReaders = append(c.printReaders, readers...)
+	return c
+}
+
 func (c *TeaUIConfig) WithFooter(handlers ...bubbly.EventHandler) *TeaUIConfig {
 	if c.footerHandler != nil {
 		panic("footer handler already set")
 	}
 
 	c.footerHandler = bubbly.NewHandlerCollection(handlers...)
+	return c
+}
+
+func (c *TeaUIConfig) WithSyncSpinner(s syncspinner.Model) *TeaUIConfig {
+	if c.spinner != nil {
+		panic("spinner already set")
+	}
+	c.spinner = &s
 	return c
 }
 
@@ -116,12 +145,27 @@ func (m *UI) Setup(subscription partybus.Unsubscribable) error {
 	m.running.Add(1)
 
 	go func() {
-		defer m.running.Done()
+		// defer m.running.Done()
 		if _, err := m.program.Run(); err != nil {
 			log.Errorf("unable to start UI: %+v", err)
 			bus.ExitWithInterrupt()
 		}
+
+		m.running.Done()
 	}()
+
+	for i := range m.config.printReaders {
+		m.running.Add(1)
+		go func(reader io.Reader) {
+			// scan for every line in the reader and print it just behind the UI
+			scanner := bufio.NewScanner(reader)
+			for scanner.Scan() {
+				m.program.Println(scanner.Text())
+			}
+
+			m.running.Done()
+		}(m.config.printReaders[i])
+	}
 
 	return m.config.simpleUI.Setup(subscription)
 }
@@ -147,6 +191,10 @@ func (m *UI) Teardown(force bool) error {
 		return nil
 	}
 	m.teardownCalled = true
+
+	// we need to make certain that any writers are closed before attempting to wait for them to complete
+	err := m.config.simpleUI.Teardown(force)
+
 	if !force {
 		// just wow... tea commands are racy
 		time.Sleep(100 * time.Millisecond)
@@ -182,13 +230,21 @@ func (m *UI) Teardown(force bool) error {
 
 	// TODO: allow for writing out the full log output to the screen (only a partial log is shown currently)
 	// this needs coordination to know what the last frame event is to change the state accordingly (which isn't possible now)
-	return m.config.simpleUI.Teardown(force)
+	return err
 }
 
 // bubbletea.Model functions
 
 func (m UI) Init() tea.Cmd {
-	return m.config.frame.Init()
+	cmds := []tea.Cmd{
+		m.config.frame.Init(),
+	}
+
+	if m.config.spinner != nil {
+		cmds = append(cmds, m.config.spinner.Tick)
+	}
+
+	return tea.Batch(cmds...)
 }
 
 func (m UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -214,6 +270,11 @@ func (m UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			bus.ExitWithInterrupt()
 			return m, tea.Quit
 		}
+
+	case syncspinner.TickMsg:
+		spinnerModel, cmd := m.config.spinner.Update(msg)
+		m.config.spinner = &spinnerModel
+		cmds = append(cmds, cmd)
 
 	case partybus.Event:
 		log.WithFields("component", "ui").Tracef("event: %q", msg.Type)

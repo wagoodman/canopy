@@ -94,7 +94,7 @@ func TestDefaultPackage(t *testing.T) {
 				Color:            false,
 				PackageNameWidth: 150,
 			}
-			subject := newDefaultPackage(&sb, cfg, tt.ref)
+			subject := NewDefaultPackage(&sb, cfg, tt.ref)
 			events := fixtureEvents(t, tt.fixture)
 			for e := range events {
 				err := subject.OnGoTestEvent(e)

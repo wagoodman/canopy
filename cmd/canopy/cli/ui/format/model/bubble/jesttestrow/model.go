@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
@@ -12,74 +13,27 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
 
-	"github.com/anchore/bubbly"
 	"github.com/anchore/bubbly/bubbles/frame"
 )
 
 var (
-	_ bubbly.EventHandler      = (*Factory)(nil)
-	_ bubbly.MessageListener   = (*Factory)(nil)
 	_ tea.Model                = (*Model)(nil)
 	_ frame.ImprintableElement = (*Model)(nil)
 	_ frame.TerminalElement    = (*Model)(nil)
 )
 
 type Config struct {
-	Color                  bool
-	ShowPackages           bool
-	KeepAllTestOutput      bool
-	KeepFailedTestOutput   bool
-	NestNonPackages        bool
-	ExpireOnCompletion     bool
-	DieOnCompletion        bool
-	ShowIntermediateOutput bool
-	Style                  *style.Jest
-}
+	Color                       bool
+	ShowPackages                bool
+	KeepAllTestOutput           bool
+	KeepFailedTestOutput        bool
+	NestNonPackages             bool
+	ExpireOnCompletion          bool
+	DieOnCompletion             bool
+	ShowIntermediateOutput      bool
+	HidePackagesWithNoTestFiles bool
 
-type Factory struct {
-	config Config
-	seen   map[gotest.Reference]struct{}
-	ws     tea.WindowSizeMsg
-}
-
-func NewFactory(config Config) *Factory {
-	return &Factory{
-		config: config,
-		seen:   make(map[gotest.Reference]struct{}),
-	}
-}
-
-func (j *Factory) OnMessage(msg tea.Msg) {
-	if msg, ok := msg.(tea.WindowSizeMsg); ok {
-		j.ws = msg
-	}
-}
-
-func (j Factory) RespondsTo() []partybus.EventType {
-	return []partybus.EventType{event.GoTestType}
-}
-
-func (j Factory) Handle(e partybus.Event) ([]tea.Model, tea.Cmd) {
-	if e.Type != event.GoTestType {
-		return nil, nil
-	}
-
-	gt, err := parser.ParseGoTestType(e)
-	if err != nil {
-		log.WithFields("error", err).Error("unable to parse go test event")
-		return nil, nil
-	}
-
-	if !j.config.ShowPackages && gt.Reference.IsPackage() {
-		return nil, nil
-	}
-
-	if _, ok := j.seen[gt.Reference]; ok {
-		return nil, nil
-	}
-
-	j.seen[gt.Reference] = struct{}{}
-	return []tea.Model{NewModel(gt.Reference, j.ws, j.config)}, nil
+	Style *style.Jest
 }
 
 type Model struct {
@@ -90,10 +44,10 @@ type Model struct {
 	output    []string
 	testsSeen map[gotest.Reference]struct{}
 	style     style.Jest
-	ws        tea.WindowSizeMsg
+	common    state.Common
 }
 
-func NewModel(ref gotest.Reference, ws tea.WindowSizeMsg, config Config) *Model {
+func NewModel(ref gotest.Reference, common state.Common, config Config) *Model {
 	stRef := config.Style
 	if stRef == nil {
 		st := style.NewJest(config.Color)
@@ -103,7 +57,7 @@ func NewModel(ref gotest.Reference, ws tea.WindowSizeMsg, config Config) *Model 
 		config:    config,
 		ref:       ref,
 		style:     *stRef,
-		ws:        ws,
+		common:    common,
 		testsSeen: make(map[gotest.Reference]struct{}),
 	}
 }
@@ -144,6 +98,8 @@ func (j Model) IsAlive() bool {
 }
 
 func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	j.common.OnMessage(msg)
+
 	e, ok := msg.(partybus.Event)
 	if !ok {
 		return j, nil
@@ -193,8 +149,12 @@ func (j Model) testTitleOutput() (title, output string) {
 func (j Model) testNestedTitleOutput() (title, output string) {
 	switch j.action {
 	case gotest.RunAction, gotest.StartAction:
+		status := j.common.Spinner.View
+		if status == "" {
+			status = "…"
+		}
 
-		title = j.style.Aux.Render("  …")
+		title = j.style.Aux.Render(fmt.Sprintf("  %s", status))
 		if j.config.ShowIntermediateOutput && len(j.output) > 0 {
 			output = j.style.Aux.Render(strings.TrimSpace(j.output[len(j.output)-1]))
 		}

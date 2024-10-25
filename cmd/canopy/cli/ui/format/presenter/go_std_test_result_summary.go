@@ -18,6 +18,8 @@ type GoStdTestResultSummaryConfig struct {
 	WriteToStderr    bool
 	PackageNameWidth int
 	PackageCount     int
+	HidePackageCount bool
+	RunningState     string
 }
 
 func (c GoStdTestResultSummaryConfig) New(run gotest.Run) Presenter {
@@ -40,11 +42,20 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error {
 		w = stderr
 	}
 
-	passed, _ := s.run.Result.Passed()
+	passed, isRunning := s.run.Result.Passed()
 
-	result := s.style.Success.Render("PASS")
-	if !passed {
-		result = s.style.Failed.Render("FAIL")
+	var result string
+	switch {
+	case isRunning:
+		if s.config.RunningState != "" {
+			result += s.style.Running.Render(s.config.RunningState)
+		} else {
+			result += s.style.Running.Render("RUNNING")
+		}
+	case !passed:
+		result += s.style.Failed.Render("FAIL")
+	default:
+		result += s.style.Success.Render("PASS")
 	}
 
 	stats := s.run.Result.TestStats()
@@ -63,11 +74,22 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error {
 		tests = append(tests, s.style.Skipped.Render(fmt.Sprintf("%d skipped", stats.Skipped)))
 	}
 
-	tests = append(tests, fmt.Sprintf("%d total", stats.Total()))
+	total := stats.Total()
+	if total != stats.Passed || total == 0 {
+		tests = append(tests, fmt.Sprintf("%d total", stats.Total()))
+	}
 
 	testSummaryCount := strings.Join(tests, " / ")
 
-	summary := fmt.Sprintf("%d packages, %s tests", s.config.PackageCount, testSummaryCount)
+	var sections []string
+
+	if !s.config.HidePackageCount {
+		sections = append(sections, fmt.Sprintf("%d packages", s.config.PackageCount))
+	}
+
+	sections = append(sections, fmt.Sprintf("%s tests", testSummaryCount))
+
+	summary := strings.Join(sections, ", ")
 	wideSummary := lipgloss.NewStyle().Width(s.config.PackageNameWidth).Render(summary)
 
 	result += "\t" + wideSummary
@@ -75,7 +97,8 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error {
 	result += "\t" + s.style.Aux.Render(s.run.Elapsed().Round(time.Millisecond).String())
 
 	if coverage, ok := s.run.Result.Coverage(); ok {
-		result += "\t" + s.style.Aux.Render(fmt.Sprintf("coverage: %0.1f%% of statements", coverage))
+		// match the same format changes used in the gostd handlers
+		result += "\t" + s.style.Aux.Render(fmt.Sprintf("[%0.1f%% coverage]", coverage))
 	}
 
 	if _, err := fmt.Fprintln(w, result); err != nil {

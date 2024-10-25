@@ -8,7 +8,10 @@ import (
 	"github.com/anchore/fangs"
 )
 
-var _ fangs.FlagAdder = (*Coverage)(nil)
+var (
+	_ fangs.FlagAdder  = (*Coverage)(nil)
+	_ fangs.PostLoader = (*Coverage)(nil)
+)
 
 type Coverage struct {
 	Cover    bool    `yaml:"cover" json:"cover" mapstructure:"cover"`          // custom flag

@@ -7,7 +7,6 @@ import (
 )
 
 func TestExtractAnnotations(t *testing.T) {
-
 	tests := []struct {
 		name   string
 		output string

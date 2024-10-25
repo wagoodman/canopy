@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
@@ -40,7 +41,7 @@ type Config struct {
 type Factory struct {
 	config Config
 	seen   map[gotest.Reference]struct{}
-	ws     tea.WindowSizeMsg
+	common state.Common
 }
 
 func NewFactory(config Config) *Factory {
@@ -51,9 +52,7 @@ func NewFactory(config Config) *Factory {
 }
 
 func (j *Factory) OnMessage(msg tea.Msg) {
-	if msg, ok := msg.(tea.WindowSizeMsg); ok {
-		j.ws = msg
-	}
+	j.common.OnMessage(msg)
 }
 
 func (j Factory) RespondsTo() []partybus.EventType {
@@ -80,7 +79,7 @@ func (j Factory) Handle(e partybus.Event) ([]tea.Model, tea.Cmd) {
 	}
 
 	j.seen[gt.Reference] = struct{}{}
-	return []tea.Model{NewModel(gt.Reference, j.ws, j.config)}, nil
+	return []tea.Model{NewModel(gt.Reference, j.common, j.config)}, nil
 }
 
 type Model struct {
@@ -92,10 +91,11 @@ type Model struct {
 	testsSeen map[gotest.Reference]gotest.Action
 	testOrder []gotest.Reference
 	style     style.Dot
-	ws        tea.WindowSizeMsg
+
+	common state.Common
 }
 
-func NewModel(ref gotest.Reference, ws tea.WindowSizeMsg, config Config) *Model {
+func NewModel(ref gotest.Reference, common state.Common, config Config) *Model {
 	stRef := config.Style
 	if stRef == nil {
 		st := style.NewDot(config.Color)
@@ -105,7 +105,7 @@ func NewModel(ref gotest.Reference, ws tea.WindowSizeMsg, config Config) *Model 
 		config:    config,
 		ref:       ref,
 		style:     *stRef,
-		ws:        ws,
+		common:    common,
 		testsSeen: make(map[gotest.Reference]gotest.Action),
 	}
 }
@@ -151,10 +151,7 @@ func (j Model) IsAlive() bool {
 }
 
 func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if msg, ok := msg.(tea.WindowSizeMsg); ok {
-		j.ws = msg
-		return j, nil
-	}
+	j.common.OnMessage(msg)
 
 	e, ok := msg.(partybus.Event)
 	if !ok {
@@ -223,8 +220,14 @@ func (j Model) testNestedTitleOutput() (title, output string) {
 
 func (j Model) testTopTitleOutput() (title, output string) {
 	switch j.action {
-	case gotest.RunAction, gotest.StartAction:
-		title = j.style.RunningTitle.Render("…")
+	// TODO: why is action sometimes empty string?
+	case gotest.RunAction, gotest.StartAction, "":
+		status := j.common.Spinner.View
+		if status == "" {
+			status = "…"
+		}
+
+		title = j.style.RunningTitle.Render(status)
 		if j.config.ShowIntermediateOutput && len(j.output) > 0 {
 			output = j.style.Aux.Render(strings.TrimSpace(j.output[len(j.output)-1]))
 		}
@@ -328,8 +331,8 @@ func (j Model) View() string { //nolint: gocognit, funlen
 		// testCount = j.style.Dot.Render(testCount)
 	}
 
-	rendered := fmt.Sprintf("%-5s %s%s%s %s", title, testPkg, testName, testCount, output)
-	if lipgloss.Width(rendered) > j.ws.Width && j.ws.Width > 0 {
+	rendered := fmt.Sprintf("%-1s %s%s%s %s", title, testPkg, testName, testCount, output)
+	if lipgloss.Width(rendered) > j.common.Window.Width && j.common.Window.Width > 0 {
 		trailer := fmt.Sprintf("[%d]", len(j.testsSeen))
 		if hasFailed {
 			trailer = j.style.FailureTitle.Render(trailer)
@@ -337,7 +340,7 @@ func (j Model) View() string { //nolint: gocognit, funlen
 			trailer = j.style.SkipTitle.Render(trailer)
 		}
 
-		rendered = ansi.Truncate(rendered, j.ws.Width, trailer)
+		rendered = ansi.Truncate(rendered, j.common.Window.Width, trailer)
 	}
 	return rendered
 }

@@ -2,9 +2,12 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 
+	"github.com/gookit/color"
 	"github.com/spf13/cobra"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"
@@ -33,6 +36,9 @@ type ErrTestSuiteFailed struct {
 }
 
 func (e ErrTestSuiteFailed) Error() string {
+	if len(e.Reasons) == 0 {
+		return ""
+	}
 	var render string
 	for _, reason := range e.Reasons {
 		render += fmt.Sprintf("\n  - %s", reason)
@@ -56,8 +62,8 @@ type testConfig struct {
 	options.Coverage   `yaml:",inline" json:"" mapstructure:",squash"`
 	options.GoBuild    `yaml:",inline" json:"" mapstructure:",squash"`
 	options.Format     `yaml:",inline" json:"" mapstructure:",squash"`
-	options.Appearance `yaml:",inline" json:"" mapstructure:",squash"`
 	options.Open       `yaml:",inline" json:"" mapstructure:",squash"`
+	options.Appearance `yaml:"appearance" json:"appearance" mapstructure:"appearance"`
 	ExtraFlags         []string `yaml:"extra-flags" json:"extra-flags" mapstructure:"extra-flags"`
 
 	// post parse
@@ -91,6 +97,7 @@ func Test(app clio.Application) *cobra.Command {
 	opts := defaultTestOptions()
 
 	var logTestFailuresAsErrors bool
+	var runErr error
 	cmd := &cobra.Command{
 		Use:     "test GO-PKG-SPECIFIER...",
 		Short:   "run the tests for the given package(s)",
@@ -118,9 +125,18 @@ func Test(app clio.Application) *cobra.Command {
 			logTestFailuresAsErrors, err = setUI(app, opts.Test.Format.Output, opts.Test.Appearance, testPkgs)
 			return err
 		},
+		PostRunE: func(_ *cobra.Command, _ []string) error {
+			// this runs after the UI, so we can safely print to stdout/stderr now if we need to
+			if runErr != nil {
+				showTestFailure(runErr)
+			}
+			return runErr
+		},
 
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runTest(cmd.Context(), app, *opts, logTestFailuresAsErrors)
+			runErr = runTest(cmd.Context(), app, *opts, logTestFailuresAsErrors)
+
+			return nil
 		},
 	}
 
@@ -133,7 +149,7 @@ func Test(app clio.Application) *cobra.Command {
 		nfs.Merge(opts.Test.GoBuild.NamedFlagSet)
 		nfs.Merge(opts.Test.Packages.NamedFlagSet)
 		nfs.Merge(opts.Test.Format.NamedFlagSet)
-		// nfs.Merge(opts.Test.Appearance.NamedFlagSet)
+		//nfs.Merge(opts.Test.Appearance.NamedFlagSet)
 		nfs.Merge(opts.Test.Open.NamedFlagSet)
 		nfs.Merge(opts.NamedFlagSet)
 		nfs.BindUsageAndHelpFunc(cmd, -1)
@@ -214,7 +230,8 @@ func evaluateResult(run *gotest.Run, logTestFailuresAsErrors bool, coverMin floa
 		if len(result.References()) == 0 {
 			resultErr = ErrTestSuiteFailed{Reasons: []string{"no test events observed"}}
 		} else {
-			resultErr = ErrTestSuiteFailed{Reasons: []string{"not all tests passed"}}
+			// if tests simply failed, let the UI show this as a failure, no need to show an additional message
+			resultErr = ErrTestSuiteFailed{}
 		}
 	}
 
@@ -253,19 +270,19 @@ func setUI(app clio.Application, formatStr string, appearance options.Appearance
 
 	state := app.(Stater).State()
 
+	uiConfig := getUIConfig(appearance, state.Config)
+
 	var logTestFailuresAsErrors bool
 	switch formatStr {
 	case "go-std", "go", "std":
-		ux = ui.NewGoStdUI(testPkgs, false, state.Config.Log.Verbosity, !appearance.NoColor)
+		ux = ui.NewGoStdUI(testPkgs, false, uiConfig)
 	case "go-std-json", "go-json":
 		// TODO: we're not passing testPkgs intentionally?
-		ux = ui.NewGoStdUI(nil, true, state.Config.Log.Verbosity, !appearance.NoColor)
-	case "jest-log":
-		ux = ui.NewJestLogUI(state.Config.Log.Verbosity, !appearance.NoColor)
+		ux = ui.NewGoStdUI(nil, true, uiConfig)
 	case "jest":
-		ux = ui.NewJestUI(state.Config.Log.Verbosity, !appearance.NoColor)
+		ux = ui.NewJestUI(uiConfig)
 	case "dot":
-		ux = ui.NewDotUI(state.Config.Log.Verbosity, !appearance.NoColor)
+		ux = ui.NewDotUI(uiConfig)
 	case "log":
 		if state.Config.Log.Verbosity == 0 || !logger.IsVerbose(state.Config.Log.Level) {
 			if state.Config.Log.Verbosity == 0 {
@@ -292,6 +309,14 @@ func setUI(app clio.Application, formatStr string, appearance options.Appearance
 	}
 
 	return logTestFailuresAsErrors, nil
+}
+
+func getUIConfig(appearance options.Appearance, clioCfg clio.Config) ui.Config {
+	return ui.Config{
+		Color:                   !appearance.NoColor,
+		Verbose:                 clioCfg.Log.Verbosity,
+		ShowPackagesWithNoTests: appearance.ShowPackagesWithNoTests,
+	}
 }
 
 func openUIWithExisting(app clio.Application, s *test.Manager, resultErr error) error {
@@ -328,4 +353,28 @@ func openUIWithExisting(app clio.Application, s *test.Manager, resultErr error) 
 
 	// remember -- we opened this to begin with because there were failing tests... so we need to exit 1
 	return resultErr
+}
+
+func showTestFailure(err error) {
+	var resErr ErrTestSuiteFailed
+	if errors.As(err, &resErr) {
+		msg := renderTestSuiteFailure(resErr)
+		if msg != "" {
+			color.Red.Println(msg)
+		}
+	} else {
+		msg := color.Red.Render(strings.TrimSpace(err.Error()))
+		fmt.Fprintln(os.Stderr, msg)
+	}
+}
+
+func renderTestSuiteFailure(err ErrTestSuiteFailed) string {
+	if len(err.Reasons) == 0 {
+		return ""
+	}
+	var render string
+	for _, reason := range err.Reasons {
+		render += fmt.Sprintf("\n  - %s", reason)
+	}
+	return fmt.Sprintf("Test suite failed: %s", render)
 }

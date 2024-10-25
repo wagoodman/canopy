@@ -19,6 +19,12 @@ import (
 	"github.com/wagoodman/go-partybus"
 )
 
+var (
+	_ handler.Handler  = (*DefaultPackage)(nil)
+	_ partybus.Handler = (*DefaultPackage)(nil)
+	_ fmt.Stringer     = (*DefaultPackage)(nil)
+)
+
 type DefaultPackageConfig struct {
 	Color                       bool
 	PackageNameWidth            int
@@ -29,11 +35,11 @@ type DefaultPackageConfig struct {
 func NewDefaultHandler(writer io.Writer, config DefaultPackageConfig) handler.Handler {
 	return newPackageHandler(
 		func(ref gotest.Reference, writer io.Writer) handler.Handler {
-			return newDefaultPackage(writer, config, ref)
+			return NewDefaultPackage(writer, config, ref)
 		}, writer)
 }
 
-type defaultPackage struct {
+type DefaultPackage struct {
 	writer          io.Writer
 	config          DefaultPackageConfig
 	style           style.GoStd
@@ -44,11 +50,8 @@ type defaultPackage struct {
 	packageCoverage map[gotest.Reference]string
 }
 
-func newDefaultPackage(writer io.Writer, config DefaultPackageConfig, ref gotest.Reference) *defaultPackage {
-	if !ref.IsPackage() {
-		ref = ref.PackageRef()
-	}
-	return &defaultPackage{
+func NewDefaultPackage(writer io.Writer, config DefaultPackageConfig, ref gotest.Reference) *DefaultPackage {
+	return &DefaultPackage{
 		writer:          writer,
 		config:          config,
 		style:           style.NewGoStd(config.Color),
@@ -59,7 +62,7 @@ func newDefaultPackage(writer io.Writer, config DefaultPackageConfig, ref gotest
 	}
 }
 
-func (n *defaultPackage) Handle(e partybus.Event) error {
+func (n *DefaultPackage) Handle(e partybus.Event) error {
 	switch e.Type {
 	case event.GoTestType:
 		goTestEvent, err := parser.ParseGoTestType(e)
@@ -73,7 +76,7 @@ func (n *defaultPackage) Handle(e partybus.Event) error {
 	return nil
 }
 
-func (n *defaultPackage) OnGoTestEvent(e gotest.Event) error {
+func (n *DefaultPackage) OnGoTestEvent(e gotest.Event) error {
 	if e.Reference.Package != n.pkg {
 		return nil
 	}
@@ -99,16 +102,21 @@ func (n *defaultPackage) OnGoTestEvent(e gotest.Event) error {
 	return nil
 }
 
-func (n *defaultPackage) String() string {
+func (n *DefaultPackage) String() string {
 	sb := strings.Builder{}
 	n.render(&sb)
 	return sb.String()
 }
 
-func (n *defaultPackage) render(writer io.Writer) {
+func (n *DefaultPackage) render(writer io.Writer) { //nolint: gocognit
+	panicRefs := make(map[gotest.Reference]bool)
 	for _, e := range n.events {
 		if !e.Reference.IsPackage() && !n.isFailedReference(e.Reference) {
 			continue
+		}
+
+		if hasPanicMarking(e.Output) {
+			panicRefs[e.Reference] = true
 		}
 
 		switch e.Action {
@@ -124,24 +132,24 @@ func (n *defaultPackage) render(writer io.Writer) {
 			if strings.TrimSpace(resultEvent.Output) == "" {
 				continue
 			}
-			fmt.Fprint(writer, n.renderOutput(resultEvent))
+			fmt.Fprint(writer, n.renderOutput(resultEvent, panicRefs[e.Reference]))
 		default:
-			if e.HasAnnotation(gotest.NoTestFiles) && n.config.HidePackagesWithNoTestFiles {
+			if e.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) && n.config.HidePackagesWithNoTestFiles {
 				continue
 			}
 			if hasRunMarking(e.Output) || hasPassMarking(e.Output) {
 				// skip the run line
 				continue
 			}
-			if !n.isFailedReference(e.Reference) && hasPackageCoverageMarking(e.Output) {
-				// skip "coverage:" lines for passing tests
+			if hasPackageCoverageMarking(e.Output) {
+				// skip "coverage:" lines
 				continue
 			}
 			if strings.TrimSpace(e.Output) == "" {
 				continue
 			}
 
-			out := n.renderOutput(e)
+			out := n.renderOutput(e, panicRefs[e.Reference])
 			if out != "" {
 				fmt.Fprint(writer, out)
 			}
@@ -149,7 +157,7 @@ func (n *defaultPackage) render(writer io.Writer) {
 	}
 }
 
-func (n *defaultPackage) isFailedReference(ref gotest.Reference) bool {
+func (n *DefaultPackage) isFailedReference(ref gotest.Reference) bool {
 	_, ok := n.failedRefs[ref]
 	return ok
 }
@@ -182,14 +190,17 @@ func hasFailedPackageMarking(output string) bool {
 	return strings.HasPrefix(output, "FAIL")
 }
 
-// func hasTimeMarker(output string) bool {
-//	return timePattern.MatchString(strings.TrimSpace(output))
-//}
+func hasPanicMarking(output string) bool {
+	return strings.HasPrefix(output, "panic:")
+}
+
+func hasTimeMarker(output string) bool {
+	return timePattern.MatchString(strings.TrimSpace(output))
+}
 
 var (
 	logLinePattern = regexp.MustCompile(`^\s*\S+.go:\d+:`)
-	// coveragePattern = regexp.MustCompile(`coverage:\s*\d+\.\d+%\sof\sstatements\s*$`)
-	// timePattern = regexp.MustCompile(`^\d+\.\d+\S$`)
+	timePattern    = regexp.MustCompile(`^\d+\.?\d*\S+$`)
 )
 
 func isLogLine(output string) bool {
@@ -198,27 +209,30 @@ func isLogLine(output string) bool {
 	return logLinePattern.MatchString(output)
 }
 
-func (n *defaultPackage) renderOutput(e gotest.Event) string {
+func (n *DefaultPackage) renderOutput(e gotest.Event, isPanic bool) string {
 	if e.Reference.IsPackage() {
 		return n.formatPackage(e)
 	}
+
+	var out string
+	if isPanic {
+		out = formatPanic(e.Output, n.style)
+	} else {
+		out = n.format(e)
+	}
+
 	// indent
-	return strings.Repeat("    ", strings.Count(e.Reference.TestName(false), "/")) + n.format(e)
+	return strings.Repeat("    ", strings.Count(e.Reference.TestName(false), "/")) + out
 }
 
-func (n *defaultPackage) formatPackage(e gotest.Event) string {
+func (n *DefaultPackage) formatPackage(e gotest.Event) string {
 	if hasFailedPackageMarking(e.Output) || hasPassedPackageMarking(e.Output) || hasUnknownPackageMarking(e.Output) {
-		return formatPackageLine(e.Output, n.style, n.config.PackageNameWidth)
-	}
-	if hasPackageCoverageMarking(e.Output) {
-		// withhold this until you are showing the final package output
-		n.packageCoverage[e.Reference] = e.Output
-		return ""
+		return parseAndFormatPackageLine(e.Output, n.style, n.config.PackageNameWidth)
 	}
 	return e.Output
 }
 
-func (n *defaultPackage) format(e gotest.Event) string {
+func (n *DefaultPackage) format(e gotest.Event) string {
 	if hasFailedTestMarking(e.Output) {
 		return formatFailedTest(e.Output, n.style)
 	}
@@ -228,7 +242,20 @@ func (n *defaultPackage) format(e gotest.Event) string {
 	return e.Output
 }
 
-func formatPackageLine(s string, st style.GoStd, maxTestName int) string {
+func formatPanic(in string, sty style.GoStd) string {
+	lines := strings.Split(in, "\n")
+	for i, line := range lines {
+		if i == 0 && hasPanicMarking(line) {
+			line = sty.Failed.Italic(true).Render(line)
+		} else if line == "" && i == len(lines)-1 {
+			continue
+		}
+		lines[i] = sty.PanicGroup.Render("░") + " " + line
+	}
+	return strings.Join(lines, "\n")
+}
+
+func parseAndFormatPackageLine(s string, st style.GoStd, maxTestName int) string {
 	// preserve trailer
 	var trailer string
 	endIdx := strings.Index(s, "\n")
@@ -238,33 +265,68 @@ func formatPackageLine(s string, st style.GoStd, maxTestName int) string {
 	}
 
 	fields := strings.Split(s, "\t")
-	switch {
-	case hasPassMarking(fields[0]):
-		fields[0] = st.Success.Render(fields[0])
-	case hasPassedPackageMarking(fields[0]):
-		fields[0] = st.Success.Render(fields[0])
-	case hasUnknownPackageMarking(fields[0]):
-		fields[0] = st.Aux.Render(fields[0])
-	case hasFailedPackageMarking(fields[0]):
-		fields[0] = st.Failed.Render(fields[0])
+
+	var pkgName, status string
+	var aux []string
+
+	if len(fields) > 0 {
+		status = fields[0]
 	}
 
 	if len(fields) > 1 {
-		// make all test names the same width
-		fields[1] = fmt.Sprintf("%-*s", maxTestName, fields[1])
+		pkgName = fields[1]
 	}
 
 	if len(fields) > 2 {
-		for idx := 2; idx < len(fields); idx++ {
-			// if hasTimeMarker(fields[idx]) {
-			//	fields[idx] = "(" + fields[idx] + ")"
-			//}
-
-			fields[idx] = st.Aux.Render(fields[idx])
-		}
+		aux = fields[2:]
 	}
 
-	return strings.Join(fields, "\t") + trailer
+	return FormatPackageLine(status, pkgName, 0, aux, trailer, st, true, maxTestName)
+}
+
+func FormatPackageLine(status, pkgName string, testsCompleted int, aux []string, trailer string, st style.GoStd, formatStatus bool, maxTestName int) string {
+
+	if formatStatus {
+		switch {
+		case hasPassMarking(status):
+			status = st.Success.Render(status)
+		case hasPassedPackageMarking(status):
+			status = st.Success.Render(status)
+		case hasUnknownPackageMarking(status):
+			status = st.Aux.Render(status)
+		case hasFailedPackageMarking(status):
+			status = st.Failed.Render(status)
+		}
+	} else if testsCompleted > 0 {
+		runStr := fmt.Sprintf("%d tests", testsCompleted)
+		aux = append(aux, runStr)
+	}
+
+	if pkgName != "" {
+		// make all test names the same width
+		pkgName = fmt.Sprintf("%-*s", maxTestName, pkgName)
+	}
+
+	for i, a := range aux {
+		switch {
+		case hasTimeMarker(a):
+			break
+
+		case strings.ContainsAny(a, "(["):
+			// already formatted
+			break
+		case hasPackageCoverageMarking(a):
+			a = strings.ReplaceAll(strings.ReplaceAll(a, "coverage: ", "[")+"]", "of statements", "coverage")
+
+		default:
+			a = "[" + a + "]"
+		}
+
+		aux[i] = st.Aux.Render(a)
+
+	}
+
+	return strings.Join(append([]string{status, pkgName}, aux...), "\t") + trailer
 }
 
 func formatLogLine(dir, s string, st style.GoStd, i ide.Context) string {
