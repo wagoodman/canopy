@@ -1,8 +1,6 @@
 package pkgframe
 
 import (
-	"fmt"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
@@ -62,10 +60,6 @@ func (j Factory) Handle(e partybus.Event) ([]tea.Model, tea.Cmd) {
 	if err != nil {
 		log.WithFields("error", err).Error("unable to parse go test event")
 		return nil, nil
-	}
-
-	if gt.Error != nil {
-		fmt.Printf("\r\n\nfactory: %q\r\n\n", gt)
 	}
 
 	if j.config.ShowPackagesMissingTests {
