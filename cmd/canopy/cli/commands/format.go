@@ -17,8 +17,8 @@ import (
 )
 
 var (
-	_ fangs.FlagAdder  = (*showCoreConfig)(nil)
-	_ fangs.PostLoader = (*showCoreConfig)(nil)
+	_ fangs.FlagAdder  = (*formatCoreConfig)(nil)
+	_ fangs.PostLoader = (*formatCoreConfig)(nil)
 )
 
 // canopy show FILE                          Read go test json output from a file and reformat as go-std to stdout
@@ -33,21 +33,21 @@ var (
 // ... alternative name: view
 // show vs view vs open... we're getting a little too close to each other
 
-type showCoreConfig struct {
+type formatCoreConfig struct {
 	options.Config `yaml:",inline" mapstructure:",squash"`
 	options.Store  `yaml:"store" json:"store" mapstructure:"store"`
 
 	Test showTestConfig `yaml:"test" json:"test" mapstructure:"test"`
-	Show showConfig     `yaml:"show" json:"show" mapstructure:"show"`
+	Show formatConfig   `yaml:"show" json:"show" mapstructure:"show"`
 }
 
-type showConfig struct {
+type formatConfig struct {
 	File string `yaml:"file" json:"file" mapstructure:"file"`
 
 	reader io.ReadCloser
 }
 
-func (o *showConfig) PostLoad() error {
+func (o *formatConfig) PostLoad() error {
 	switch o.File {
 	case "-":
 		log.Debug("reading test json from stdin")
@@ -74,8 +74,8 @@ type showTestConfig struct {
 	options.Appearance `yaml:"appearance" json:"appearance" mapstructure:"appearance"`
 }
 
-func defaultShowOptions() *showCoreConfig {
-	return &showCoreConfig{
+func defaultShowOptions() *formatCoreConfig {
+	return &formatCoreConfig{
 		Store: options.DefaultStore(),
 		Test: showTestConfig{
 			Format: options.DefaultTestFormat(),
@@ -83,13 +83,13 @@ func defaultShowOptions() *showCoreConfig {
 	}
 }
 
-func Show(app clio.Application) *cobra.Command {
+func Format(app clio.Application) *cobra.Command {
 	opts := defaultShowOptions()
 
 	var logTestFailuresAsErrors bool
 	cmd := &cobra.Command{
-		Use:   "show FILE",
-		Short: "Show formatted test output from a given `go test -json` input",
+		Use:   "format [FILE]",
+		Short: "Show formatted test output from a given `go test -json` input (from a file or stdin)",
 		Args: func(_ *cobra.Command, args []string) error {
 			switch len(args) {
 			case 0:
@@ -136,7 +136,7 @@ func isPipedInput() (bool, error) {
 	return fi.Mode()&os.ModeNamedPipe != 0, nil
 }
 
-func runFormat(ctx context.Context, app clio.Application, coreCfg showCoreConfig, logTestFailuresAsErrors bool) error {
+func runFormat(ctx context.Context, app clio.Application, coreCfg formatCoreConfig, logTestFailuresAsErrors bool) error {
 	cfg := coreCfg.Test
 
 	s, err := test.NewManager(

@@ -106,7 +106,7 @@ func (s *Manager) RunTests(ctx context.Context, cfg RunConfig) (*gotest.Run, err
 	return r, nil
 }
 
-func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <-chan error) {
+func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <-chan error) { //nolint:funlen
 	var r *gotest.Run
 	var errs <-chan error
 	var runModel *run
@@ -165,29 +165,24 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 
 	if cfg.Reader != nil {
 		// replay json events from the reader
-		r, errs = replayAdapter(cfg, onEvent)
+		var evs <-chan *gotest.Event
+		r, evs = gotest.StartReplayRun(cfg.Reader, cfg.Runner, cfg.Result)
+
+		// we don't expect any errors, but we're making this adapter for the caller, which in other modes can get errors
+		errsCtrl := make(chan error)
+
+		go func() {
+			defer close(errsCtrl)
+			for e := range evs {
+				onEvent(e)
+			}
+		}()
+
+		errs = errsCtrl
 	} else {
 		// run the test ourselves
 		r, errs = gotest.NewRunner(cfg.Runner).Start(ctx, cfg.Result, onEvent)
 	}
-
-	return r, errs
-}
-
-func replayAdapter(cfg RunConfig, onEvent ...func(event *gotest.Event)) (*gotest.Run, <-chan error) {
-	r, evs := gotest.StartReplayRun(cfg.Reader, cfg.Runner, cfg.Result)
-
-	// we don't expect any errors, but we're making this adapter for the caller, which in other modes can get errors
-	errs := make(chan error)
-
-	go func() {
-		defer close(errs)
-		for e := range evs {
-			for _, fn := range onEvent {
-				fn(e)
-			}
-		}
-	}()
 
 	return r, errs
 }
