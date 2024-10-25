@@ -139,13 +139,11 @@ func (m *UI) Setup(subscription partybus.Unsubscribable) error {
 		return nil
 	}
 	m.subscription = subscription
-	m.program = tea.NewProgram(m, tea.WithOutput(os.Stderr), tea.WithInput(os.Stdin), tea.WithoutSignalHandler())
-	// m.config.frame.withPrinter(m.program)
+	m.program = tea.NewProgram(m, tea.WithOutput(os.Stderr), tea.WithoutSignalHandler())
 
 	m.running.Add(1)
 
 	go func() {
-		// defer m.running.Done()
 		if _, err := m.program.Run(); err != nil {
 			log.Errorf("unable to start UI: %+v", err)
 			bus.ExitWithInterrupt()

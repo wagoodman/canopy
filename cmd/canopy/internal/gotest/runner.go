@@ -283,7 +283,7 @@ func jsonLFromReader(stdout io.Reader, events chan<- JSONL) {
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil && err != io.EOF {
-			events <- JSONL{Index: math.MaxInt64, Error: fmt.Errorf("error reading stdout: %v", err)}
+			events <- JSONL{Index: math.MaxInt64, Error: fmt.Errorf("error reading input: %v", err)}
 			return
 		}
 

@@ -72,7 +72,7 @@ func NewJSONL(ogLine string, idx int64) JSONL {
 	}
 	var event JSONL
 	if err := json.Unmarshal([]byte(line), &event); err != nil {
-		return JSONL{Index: idx, Raw: ogLine, Error: fmt.Errorf("error unmarshalling go test JSONL: %v", err)}
+		return JSONL{Index: idx, Raw: ogLine, Error: fmt.Errorf("unable to unmarshal go test JSONL: %v", err)}
 	}
 	event.Index = idx
 	event.Raw = ogLine

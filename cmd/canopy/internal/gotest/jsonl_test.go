@@ -62,7 +62,7 @@ func TestNewJSONL(t *testing.T) {
 			expected: JSONL{
 				Index: 4,
 				Raw:   "invalid JSONL",
-				Error: fmt.Errorf("error unmarshalling go test JSONL: invalid character 'i' looking for beginning of value"),
+				Error: fmt.Errorf("unable to unmarshal go test JSONL: invalid character 'i' looking for beginning of value"),
 			},
 		},
 	}

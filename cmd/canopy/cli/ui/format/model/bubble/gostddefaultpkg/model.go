@@ -3,6 +3,7 @@ package gostddefaultpkg
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -109,6 +110,10 @@ func (j Model) handlePartybusEvent(e partybus.Event) (tea.Model, tea.Cmd) {
 	if err != nil {
 		log.WithFields("error", err).Error("unable to parse go test event")
 		return j, nil
+	}
+
+	if gt.Error != nil {
+		fmt.Printf("\r\n\ngt: %q\r\n\n", gt.Output)
 	}
 
 	if gt.Reference.Package != j.ref.Package {
