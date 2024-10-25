@@ -232,8 +232,6 @@ func (s *Manager) GetRun(runID uuid.UUID) (*gotest.Run, error) {
 
 	r := &gotest.Run{
 		ID:     runInfo.UUID,
-		Start:  runInfo.Started,
-		End:    runInfo.Ended,
 		Config: runInfo.Config,
 		Result: *gotest.NewResult(gotest.ResultConfig{
 			TrackOtherOutput:   true,

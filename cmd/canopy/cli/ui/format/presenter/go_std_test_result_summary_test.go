@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/require"
@@ -66,8 +65,6 @@ func TestGoStdTestResultSummary_Present(t *testing.T) {
 
 			subject := tt.presenter
 			subject.run = *fixtureRun(t, tt.fixture)
-			end := subject.run.Start.Add(555 * time.Second)
-			subject.run.End = &end
 
 			err := subject.Present(&sb, &sb)
 			require.NoError(t, err)

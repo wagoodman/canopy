@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/debug"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/cover"
@@ -61,7 +60,6 @@ func (r *Runner) Run(ctx context.Context, resultConfig ResultConfig, onEvent ...
 
 func (r *Runner) Start(ctx context.Context, resultConfig ResultConfig, onEvent ...func(*Event)) (*Run, <-chan error) { //nolint: gocognit
 	run := NewRun(r.config)
-	run.Start = time.Now() // TODO: get this from the first event!
 	run.Result = *NewResult(resultConfig)
 	done := make(chan error)
 
@@ -75,8 +73,6 @@ func (r *Runner) Start(ctx context.Context, resultConfig ResultConfig, onEvent .
 
 	go func() {
 		defer func() {
-			n := time.Now()
-			run.End = &n // TODO: get this from the last event!
 			for _, fn := range onEvent {
 				fn(nil)
 			}

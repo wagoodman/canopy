@@ -3,6 +3,7 @@ package gotest
 import (
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/lindell/go-ordered-set/orderedset"
 )
@@ -19,6 +20,9 @@ type Result struct {
 
 	testReferencesByAction map[Action]*orderedset.OrderedSet[Reference]
 	conclusion             map[Reference]Action
+	start                  time.Time
+	offset                 time.Duration
+	lastEventTime          time.Time
 
 	coverage *float64
 }
@@ -60,11 +64,28 @@ func NewResult(config ResultConfig) *Result {
 	}
 }
 
+func (r *Result) Elapsed() time.Duration {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	if r.lastEventTime.IsZero() {
+		return time.Now().Add(r.offset).Sub(r.start)
+	}
+	return r.lastEventTime.Sub(r.start)
+}
+
 func (r *Result) Update(e Event) {
 	// TODO: check for e.Error and report to the UI when found...
 
 	r.lock.Lock()
 	defer r.lock.Unlock()
+
+	if r.start.IsZero() {
+		r.start = e.Time
+		r.offset = time.Since(e.Time)
+	}
+
+	r.lastEventTime = e.Time
 
 	// process output and events
 	switch e.Action {

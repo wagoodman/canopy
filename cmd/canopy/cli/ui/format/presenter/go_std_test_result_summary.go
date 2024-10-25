@@ -94,7 +94,7 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error {
 
 	result += "\t" + wideSummary
 
-	result += "\t" + s.style.Aux.Render(s.run.Elapsed().Round(time.Millisecond).String())
+	result += "\t" + s.style.Aux.Render(s.run.Result.Elapsed().Round(time.Millisecond).String())
 
 	if coverage, ok := s.run.Result.Coverage(); ok {
 		// match the same format changes used in the gostd handlers

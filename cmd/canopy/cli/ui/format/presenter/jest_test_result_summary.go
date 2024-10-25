@@ -91,7 +91,7 @@ func (s JestTestResultSummary) Present(stdout, stderr io.Writer) error {
 	summary := s.style.wideTitle.Render("Tests: ") + strings.Join(tests, ", ") + "\n"
 
 	if s.config.ShowElapsed {
-		el := s.run.Elapsed()
+		el := s.run.Result.Elapsed()
 		el = el.Truncate(time.Millisecond)
 		summary += s.style.wideTitle.Render("Elapsed:") + fmt.Sprintf("%s\n", el)
 	}

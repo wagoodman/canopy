@@ -80,19 +80,10 @@ func StartReplayRun(reader io.Reader, runnerCfg RunnerConfig, resultCfg ResultCo
 
 	go func() {
 		defer close(evs)
-		var lastEvent *Event
 
 		for e := range ReplayEvents(reader, runnerCfg.Packages) {
-			if run.Start.IsZero() {
-				run.Start = e.Time
-			}
 			run.Result.Update(e)
 			evs <- &e
-
-			lastEvent = &e
-		}
-		if lastEvent != nil {
-			run.End = &lastEvent.Time
 		}
 		evs <- nil
 	}()

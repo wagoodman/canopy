@@ -235,7 +235,7 @@ func evaluateResult(run *gotest.Run, logTestFailuresAsErrors bool, coverMin floa
 		}
 	}
 
-	nested := log.WithFields("result", resultStr, "elapsed", fmt.Sprintf("%2.2fs", run.Elapsed().Seconds()))
+	nested := log.WithFields("result", resultStr, "elapsed", fmt.Sprintf("%2.2fs", run.Result.Elapsed().Seconds()))
 
 	if !passed && logTestFailuresAsErrors {
 		nested.Error("completed test suite")

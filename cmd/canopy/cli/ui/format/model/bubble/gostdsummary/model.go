@@ -104,7 +104,6 @@ func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if !j.started {
 				j.started = true
-				j.run.Start = testEvent.Time
 			}
 
 			j.run.Result.Update(testEvent)
