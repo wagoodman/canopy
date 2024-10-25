@@ -2,7 +2,10 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/gookit/color"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -33,6 +36,9 @@ type ErrTestSuiteFailed struct {
 }
 
 func (e ErrTestSuiteFailed) Error() string {
+	if len(e.Reasons) == 0 {
+		return ""
+	}
 	var render string
 	for _, reason := range e.Reasons {
 		render += fmt.Sprintf("\n  - %s", reason)
@@ -91,6 +97,7 @@ func Test(app clio.Application) *cobra.Command {
 	opts := defaultTestOptions()
 
 	var logTestFailuresAsErrors bool
+	var runErr error
 	cmd := &cobra.Command{
 		Use:     "test GO-PKG-SPECIFIER...",
 		Short:   "run the tests for the given package(s)",
@@ -118,9 +125,18 @@ func Test(app clio.Application) *cobra.Command {
 			logTestFailuresAsErrors, err = setUI(app, opts.Test.Format.Output, opts.Test.Appearance, testPkgs)
 			return err
 		},
+		PostRunE: func(_ *cobra.Command, _ []string) error {
+			// this runs after the UI, so we can safely print to stdout/stderr now if we need to
+			if runErr != nil {
+				showTestFailure(runErr)
+			}
+			return runErr
+		},
 
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runTest(cmd.Context(), app, *opts, logTestFailuresAsErrors)
+			runErr = runTest(cmd.Context(), app, *opts, logTestFailuresAsErrors)
+
+			return nil
 		},
 	}
 
@@ -214,7 +230,8 @@ func evaluateResult(run *gotest.Run, logTestFailuresAsErrors bool, coverMin floa
 		if len(result.References()) == 0 {
 			resultErr = ErrTestSuiteFailed{Reasons: []string{"no test events observed"}}
 		} else {
-			resultErr = ErrTestSuiteFailed{Reasons: []string{"not all tests passed"}}
+			// if tests simply failed, let the UI show this as a failure, no need to show an additional message
+			resultErr = ErrTestSuiteFailed{}
 		}
 	}
 
@@ -336,4 +353,28 @@ func openUIWithExisting(app clio.Application, s *test.Manager, resultErr error) 
 
 	// remember -- we opened this to begin with because there were failing tests... so we need to exit 1
 	return resultErr
+}
+
+func showTestFailure(err error) {
+	var resErr ErrTestSuiteFailed
+	if errors.As(err, &resErr) {
+		msg := renderTestSuiteFailure(resErr)
+		if msg != "" {
+			color.Red.Println(msg)
+		}
+	} else {
+		msg := color.Red.Render(strings.TrimSpace(err.Error()))
+		fmt.Fprintln(os.Stderr, msg)
+	}
+}
+
+func renderTestSuiteFailure(err ErrTestSuiteFailed) string {
+	if len(err.Reasons) == 0 {
+		return ""
+	}
+	var render string
+	for _, reason := range err.Reasons {
+		render += fmt.Sprintf("\n  - %s", reason)
+	}
+	return fmt.Sprintf("Test suite failed: %s", render)
 }

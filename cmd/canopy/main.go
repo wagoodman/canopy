@@ -2,19 +2,12 @@ package main
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"os"
-	"os/signal"
-	"strings"
-
-	"github.com/gookit/color"
+	"github.com/anchore/clio"
 	"github.com/wagoodman/canopy/cmd/canopy/cli"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/commands"
 	"github.com/wagoodman/canopy/cmd/canopy/internal"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
-
-	"github.com/anchore/clio"
+	"os"
+	"os/signal"
 )
 
 const valueNotProvided = "[not provided]"
@@ -72,22 +65,6 @@ func main() {
 	}()
 
 	if err := cmd.Execute(); err != nil {
-		// report an issue on stdout
-		var resErr commands.ErrTestSuiteFailed
-		if errors.As(err, &resErr) {
-			color.Red.Println(renderTestSuiteFailure(resErr))
-		} else {
-			msg := color.Red.Render(strings.TrimSpace(err.Error()))
-			fmt.Fprintln(os.Stderr, msg)
-		}
 		exitCode = 1
 	}
-}
-
-func renderTestSuiteFailure(err commands.ErrTestSuiteFailed) string {
-	var render string
-	for _, reason := range err.Reasons {
-		render += fmt.Sprintf("\n  - %s", reason)
-	}
-	return fmt.Sprintf("Test suite failed: %s", render)
 }
