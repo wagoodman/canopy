@@ -164,7 +164,6 @@ func (j Model) View() string {
 	var elapsed string
 	if j.start != nil {
 		elapsed = time.Since(*j.start).Truncate(time.Millisecond).String()
-
 	}
 
 	return gostd.FormatPackageLine(j.common.Spinner.View, j.ref.Package, len(j.completed), []string{elapsed}, "", j.style, false, j.config.PackageNameWidth)

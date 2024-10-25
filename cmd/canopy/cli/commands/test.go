@@ -149,7 +149,7 @@ func Test(app clio.Application) *cobra.Command {
 		nfs.Merge(opts.Test.GoBuild.NamedFlagSet)
 		nfs.Merge(opts.Test.Packages.NamedFlagSet)
 		nfs.Merge(opts.Test.Format.NamedFlagSet)
-		//nfs.Merge(opts.Test.Appearance.NamedFlagSet)
+		// nfs.Merge(opts.Test.Appearance.NamedFlagSet)
 		nfs.Merge(opts.Test.Open.NamedFlagSet)
 		nfs.Merge(opts.NamedFlagSet)
 		nfs.BindUsageAndHelpFunc(cmd, -1)

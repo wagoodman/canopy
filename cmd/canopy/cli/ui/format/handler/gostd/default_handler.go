@@ -285,7 +285,6 @@ func parseAndFormatPackageLine(s string, st style.GoStd, maxTestName int) string
 }
 
 func FormatPackageLine(status, pkgName string, testsCompleted int, aux []string, trailer string, st style.GoStd, formatStatus bool, maxTestName int) string {
-
 	if formatStatus {
 		switch {
 		case hasPassMarking(status):
@@ -323,7 +322,6 @@ func FormatPackageLine(status, pkgName string, testsCompleted int, aux []string,
 		}
 
 		aux[i] = st.Aux.Render(a)
-
 	}
 
 	return strings.Join(append([]string{status, pkgName}, aux...), "\t") + trailer
