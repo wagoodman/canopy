@@ -66,11 +66,12 @@ func (o *showConfig) PostLoad() error {
 	return nil
 }
 
+// TODO: make this a shared struct between test and show commands... this is brittle when using with the config command
 type showTestConfig struct {
 	options.Format     `yaml:",inline" json:"" mapstructure:",squash"`
-	options.Appearance `yaml:",inline" json:"" mapstructure:",squash"`
 	options.Open       `yaml:",inline" json:"" mapstructure:",squash"`
 	options.Coverage   `yaml:",inline" json:"" mapstructure:",squash"`
+	options.Appearance `yaml:"appearance" json:"appearance" mapstructure:"appearance"`
 }
 
 func defaultShowOptions() *showCoreConfig {

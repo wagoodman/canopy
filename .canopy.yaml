@@ -1,5 +1,8 @@
 test:
-  show-packages-with-no-tests: false
+  appearance:
+    no-color: false
+    show-packages-with-no-tests: false
+
 profiles:
   unit:
     test:

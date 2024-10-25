@@ -63,7 +63,7 @@ type testConfig struct {
 	options.GoBuild    `yaml:",inline" json:"" mapstructure:",squash"`
 	options.Format     `yaml:",inline" json:"" mapstructure:",squash"`
 	options.Open       `yaml:",inline" json:"" mapstructure:",squash"`
-	options.Appearance `yaml:",inline" json:"" mapstructure:",squash"`
+	options.Appearance `yaml:"appearance" json:"appearance" mapstructure:"appearance"`
 	ExtraFlags         []string `yaml:"extra-flags" json:"extra-flags" mapstructure:"extra-flags"`
 
 	// post parse
@@ -149,7 +149,7 @@ func Test(app clio.Application) *cobra.Command {
 		nfs.Merge(opts.Test.GoBuild.NamedFlagSet)
 		nfs.Merge(opts.Test.Packages.NamedFlagSet)
 		nfs.Merge(opts.Test.Format.NamedFlagSet)
-		// nfs.Merge(opts.Test.Appearance.NamedFlagSet)
+		//nfs.Merge(opts.Test.Appearance.NamedFlagSet)
 		nfs.Merge(opts.Test.Open.NamedFlagSet)
 		nfs.Merge(opts.NamedFlagSet)
 		nfs.BindUsageAndHelpFunc(cmd, -1)
