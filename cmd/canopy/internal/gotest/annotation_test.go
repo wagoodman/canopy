@@ -2,13 +2,11 @@ package gotest
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestExtractAnnotations(t *testing.T) {
-	time.Sleep(3 * time.Second)
 	tests := []struct {
 		name   string
 		output string

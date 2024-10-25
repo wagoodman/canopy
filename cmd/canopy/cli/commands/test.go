@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/gookit/color"
 	"os"
 	"strings"
 
+	"github.com/gookit/color"
 	"github.com/spf13/cobra"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"

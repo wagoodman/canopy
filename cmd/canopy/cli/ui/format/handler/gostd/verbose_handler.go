@@ -44,6 +44,7 @@ type VerbosePackage struct {
 	buffer          *strings.Builder
 	funcConcluded   map[gotest.Reference]struct{}
 	packageCoverage map[gotest.Reference]string
+	panic           map[gotest.Reference]bool
 }
 
 func NewVerbosePackage(writer io.Writer, config VerbosePackageConfig, ref gotest.Reference) *VerbosePackage {
@@ -58,6 +59,7 @@ func NewVerbosePackage(writer io.Writer, config VerbosePackageConfig, ref gotest
 		buffer:          &strings.Builder{},
 		funcConcluded:   make(map[gotest.Reference]struct{}),
 		packageCoverage: make(map[gotest.Reference]string),
+		panic:           make(map[gotest.Reference]bool),
 	}
 }
 
@@ -86,6 +88,10 @@ func (n *VerbosePackage) OnGoTestEvent(e gotest.Event) error {
 
 	if e.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) && n.config.HidePackagesWithNoTestFiles {
 		return nil
+	}
+
+	if hasPanicMarking(e.Output) {
+		n.panic[e.Reference] = true
 	}
 
 	if e.Action == gotest.OutputAction {
@@ -164,6 +170,9 @@ func (n *VerbosePackage) formatPackage(e gotest.Event) string {
 }
 
 func (n *VerbosePackage) format(e gotest.Event) string {
+	if n.panic[e.Reference] {
+		return formatPanic(e.Output, n.style)
+	}
 	if hasFailedTestMarking(e.Output) {
 		return formatFailedTest(e.Output, n.style)
 	}

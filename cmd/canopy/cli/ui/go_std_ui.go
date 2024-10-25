@@ -225,7 +225,7 @@ func isATTY() bool {
 	if val := os.Getenv("NO_TTY"); val != "" {
 		return !isPositive(val)
 	}
-	return term.IsTerminal(int(os.Stdout.Fd()))
+	return term.IsTerminal(int(os.Stdout.Fd())) //nolint: gosec
 }
 
 func isPositive(val string) bool {

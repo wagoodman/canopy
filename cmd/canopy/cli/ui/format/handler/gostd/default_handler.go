@@ -108,10 +108,15 @@ func (n *DefaultPackage) String() string {
 	return sb.String()
 }
 
-func (n *DefaultPackage) render(writer io.Writer) {
+func (n *DefaultPackage) render(writer io.Writer) { //nolint: gocognit
+	panicRefs := make(map[gotest.Reference]bool)
 	for _, e := range n.events {
 		if !e.Reference.IsPackage() && !n.isFailedReference(e.Reference) {
 			continue
+		}
+
+		if hasPanicMarking(e.Output) {
+			panicRefs[e.Reference] = true
 		}
 
 		switch e.Action {
@@ -127,7 +132,7 @@ func (n *DefaultPackage) render(writer io.Writer) {
 			if strings.TrimSpace(resultEvent.Output) == "" {
 				continue
 			}
-			fmt.Fprint(writer, n.renderOutput(resultEvent))
+			fmt.Fprint(writer, n.renderOutput(resultEvent, panicRefs[e.Reference]))
 		default:
 			if e.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) && n.config.HidePackagesWithNoTestFiles {
 				continue
@@ -144,7 +149,7 @@ func (n *DefaultPackage) render(writer io.Writer) {
 				continue
 			}
 
-			out := n.renderOutput(e)
+			out := n.renderOutput(e, panicRefs[e.Reference])
 			if out != "" {
 				fmt.Fprint(writer, out)
 			}
@@ -185,6 +190,10 @@ func hasFailedPackageMarking(output string) bool {
 	return strings.HasPrefix(output, "FAIL")
 }
 
+func hasPanicMarking(output string) bool {
+	return strings.HasPrefix(output, "panic:")
+}
+
 // func hasTimeMarker(output string) bool {
 //	return timePattern.MatchString(strings.TrimSpace(output))
 //}
@@ -201,12 +210,20 @@ func isLogLine(output string) bool {
 	return logLinePattern.MatchString(output)
 }
 
-func (n *DefaultPackage) renderOutput(e gotest.Event) string {
+func (n *DefaultPackage) renderOutput(e gotest.Event, isPanic bool) string {
 	if e.Reference.IsPackage() {
 		return n.formatPackage(e)
 	}
+
+	var out string
+	if isPanic {
+		out = formatPanic(e.Output, n.style)
+	} else {
+		out = n.format(e)
+	}
+
 	// indent
-	return strings.Repeat("    ", strings.Count(e.Reference.TestName(false), "/")) + n.format(e)
+	return strings.Repeat("    ", strings.Count(e.Reference.TestName(false), "/")) + out
 }
 
 func (n *DefaultPackage) formatPackage(e gotest.Event) string {
@@ -229,6 +246,19 @@ func (n *DefaultPackage) format(e gotest.Event) string {
 		return formatLogLine(e.PackageDirPath, e.Output, n.style, n.config.IDE)
 	}
 	return e.Output
+}
+
+func formatPanic(in string, sty style.GoStd) string {
+	lines := strings.Split(in, "\n")
+	for i, line := range lines {
+		if i == 0 && hasPanicMarking(line) {
+			line = sty.Failed.Italic(true).Render(line)
+		} else if line == "" && i == len(lines)-1 {
+			continue
+		}
+		lines[i] = sty.PanicGroup.Render("░") + " " + line
+	}
+	return strings.Join(lines, "\n")
 }
 
 func parseAndFormatPackageLine(s string, st style.GoStd, maxTestName int) string {

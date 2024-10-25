@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
-	"github.com/anchore/clio"
+	"os"
+	"os/signal"
+
 	"github.com/wagoodman/canopy/cmd/canopy/cli"
 	"github.com/wagoodman/canopy/cmd/canopy/internal"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
-	"os"
-	"os/signal"
+
+	"github.com/anchore/clio"
 )
 
 const valueNotProvided = "[not provided]"

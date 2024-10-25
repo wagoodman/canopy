@@ -207,22 +207,22 @@ ok   github.com/wagoodman/canopy/cmd/canopy/internal/gotest                     
     panic_test.go:15: panic test case
 --- FAIL: TestPanic (0.00s)
     --- FAIL: TestPanic/sub-test (0.00s)
-panic: err, woops? [recovered]
-    panic: err, woops?
-
-goroutine 37 [running]:
-testing.tRunner.func1.2({0x1030f0f80, 0x103117c88})
-    /Users/wagoodman/.local/share/mise/installs/go/1.21.1/go/src/testing/testing.go:1545 +0x1c8
-testing.tRunner.func1()
-    /Users/wagoodman/.local/share/mise/installs/go/1.21.1/go/src/testing/testing.go:1548 +0x360
-panic({0x1030f0f80?, 0x103117c88?})
-    /Users/wagoodman/.local/share/mise/installs/go/1.21.1/go/src/runtime/panic.go:914 +0x218
-github.com/wagoodman/canopy/internal/test-fixtures/panic.TestPanic.func1(0x0?)
-    /Users/wagoodman/code/canopy/internal/test-fixtures/panic/panic_test.go:17 +0x5c
-testing.tRunner(0x14000123040, 0x1031174e8)
-    /Users/wagoodman/.local/share/mise/installs/go/1.21.1/go/src/testing/testing.go:1595 +0xe8
-created by testing.(*T).Run in goroutine 36
-     /Users/wagoodman/.local/share/mise/installs/go/1.21.1/go/src/testing/testing.go:1648 +0x33c
+░ panic: err, woops? [recovered]
+░   panic: err, woops?
+░ 
+░ goroutine 37 [running]:
+░ testing.tRunner.func1.2({0x1030f0f80, 0x103117c88})
+░   /Users/wagoodman/.local/share/mise/installs/go/1.21.1/go/src/testing/testing.go:1545 +0x1c8
+░ testing.tRunner.func1()
+░   /Users/wagoodman/.local/share/mise/installs/go/1.21.1/go/src/testing/testing.go:1548 +0x360
+░ panic({0x1030f0f80?, 0x103117c88?})
+░   /Users/wagoodman/.local/share/mise/installs/go/1.21.1/go/src/runtime/panic.go:914 +0x218
+░ github.com/wagoodman/canopy/internal/test-fixtures/panic.TestPanic.func1(0x0?)
+░   /Users/wagoodman/code/canopy/internal/test-fixtures/panic/panic_test.go:17 +0x5c
+░ testing.tRunner(0x14000123040, 0x1031174e8)
+░   /Users/wagoodman/.local/share/mise/installs/go/1.21.1/go/src/testing/testing.go:1595 +0xe8
+░ created by testing.(*T).Run in goroutine 36
+░    /Users/wagoodman/.local/share/mise/installs/go/1.21.1/go/src/testing/testing.go:1648 +0x33c
 FAIL github.com/wagoodman/canopy/internal/test-fixtures/panic                                                                                               0.550s
 
 ---

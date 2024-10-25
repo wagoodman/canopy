@@ -45,13 +45,6 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error {
 	passed, isRunning := s.run.Result.Passed()
 
 	var result string
-
-	// refStr := refCompactString(s.config.RunningState, s.run.Result.ReferencesByAction(gotest.RunAction), s.run.Result.ReferencesByAction(gotest.OutputAction))
-	//
-	// if refStr != "" {
-	//	result += refStr + "\n"
-	//}
-
 	switch {
 	case isRunning:
 		if s.config.RunningState != "" {

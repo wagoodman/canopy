@@ -65,10 +65,10 @@ func (j Factory) Handle(e partybus.Event) ([]tea.Model, tea.Cmd) {
 	if j.config.ShowPackagesMissingTests {
 		return j.handlePackageEvent(gt)
 	}
-	return j.handleAnyTestEvent(gt, e)
+	return j.handleAnyTestEvent(gt)
 }
 
-func (j *Factory) handleAnyTestEvent(gt gotest.Event, e partybus.Event) ([]tea.Model, tea.Cmd) {
+func (j *Factory) handleAnyTestEvent(gt gotest.Event) ([]tea.Model, tea.Cmd) {
 	hasSeenPkg := j.hasSeenPackage(gt.Reference)
 	isPkg := gt.Reference.IsPackage()
 	startPkgEvent, hasSeenStartPkgEvent := j.startPkgEvent[gt.Reference.Package]
@@ -86,7 +86,7 @@ func (j *Factory) handleAnyTestEvent(gt gotest.Event, e partybus.Event) ([]tea.M
 				return nil, nil
 			}
 
-			return j.newModel(startPkgEvent, e)
+			return j.newModel(startPkgEvent)
 		}
 
 		switch gt.Action {
@@ -101,7 +101,7 @@ func (j *Factory) handleAnyTestEvent(gt gotest.Event, e partybus.Event) ([]tea.M
 			return nil, nil
 		}
 		// this isn't a start event! this is odd (maybe a panic in testing?) let's handle it.
-		return j.newModel(gt, e)
+		return j.newModel(gt)
 	}
 
 	if hasSeenStartPkgEvent {
@@ -112,7 +112,7 @@ func (j *Factory) handleAnyTestEvent(gt gotest.Event, e partybus.Event) ([]tea.M
 			return nil, nil
 		}
 
-		return j.newModel(startPkgEvent, e)
+		return j.newModel(startPkgEvent)
 	}
 
 	return nil, nil
@@ -135,7 +135,7 @@ func (j Factory) hasSeenPackage(ref gotest.Reference) bool {
 	return ok
 }
 
-func (j *Factory) newModel(gt gotest.Event, es ...partybus.Event) ([]tea.Model, tea.Cmd) {
+func (j *Factory) newModel(gt gotest.Event) ([]tea.Model, tea.Cmd) {
 	j.markPackageAsSeen(gt.Reference)
 
 	pkgMod := j.pkgModelFactory(gt, j.config.Common)
@@ -144,14 +144,7 @@ func (j *Factory) newModel(gt gotest.Event, es ...partybus.Event) ([]tea.Model, 
 		return nil, nil
 	}
 
-	var cmd tea.Cmd
-	for _, e := range es {
-		newPkgMod, newCmd := pkgMod.Update(e)
-		cmd = tea.Batch(cmd, newCmd)
-		pkgMod = newPkgMod
-	}
-
-	return []tea.Model{pkgMod}, cmd
+	return []tea.Model{pkgMod}, nil
 }
 
 func (j *Factory) markPackageAsSeen(ref gotest.Reference) {

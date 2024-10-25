@@ -3,14 +3,12 @@ package ide
 import (
 	"os"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestOSEnvironmentGetter(t *testing.T) {
-	time.Sleep(3 * time.Second)
 	tests := []struct {
 		name      string
 		setupEnv  map[string]string
