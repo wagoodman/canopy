@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gostd"
@@ -37,7 +38,10 @@ type Model struct {
 	style  style.GoStd
 
 	// event driven state
-	common state.Common
+	common    state.Common
+	start     *time.Time
+	running   map[gotest.Reference]struct{}
+	completed map[gotest.Reference]struct{}
 
 	fragment *gostd.DefaultPackage
 	buffer   *bytes.Buffer
@@ -53,12 +57,14 @@ func NewModel(ref gotest.Reference, common state.Common, config Config) *Model {
 	var buffer bytes.Buffer
 
 	return &Model{
-		config:   config,
-		ref:      ref.PackageRef(),
-		style:    *stRef,
-		fragment: gostd.NewDefaultPackage(&buffer, config.DefaultPackageConfig, ref),
-		buffer:   &buffer,
-		common:   common,
+		config:    config,
+		ref:       ref.PackageRef(),
+		style:     *stRef,
+		fragment:  gostd.NewDefaultPackage(&buffer, config.DefaultPackageConfig, ref),
+		buffer:    &buffer,
+		common:    common,
+		running:   make(map[gotest.Reference]struct{}),
+		completed: make(map[gotest.Reference]struct{}),
 	}
 }
 
@@ -109,6 +115,12 @@ func (j Model) handlePartybusEvent(e partybus.Event) (tea.Model, tea.Cmd) {
 		return j, nil
 	}
 
+	j.trackRunningTests(gt)
+
+	if j.start == nil {
+		j.start = &gt.Time
+	}
+
 	if gt.Reference == j.ref {
 		j.action = gt.Action
 	}
@@ -126,6 +138,19 @@ func (j Model) handlePartybusEvent(e partybus.Event) (tea.Model, tea.Cmd) {
 	return j, nil
 }
 
+func (j *Model) trackRunningTests(e gotest.Event) {
+	if e.Reference.IsPackage() {
+		return
+	}
+	switch e.Action {
+	case gotest.RunAction:
+		j.running[e.Reference] = struct{}{}
+	case gotest.PassAction, gotest.FailAction, gotest.SkipAction:
+		delete(j.running, e.Reference)
+		j.completed[e.Reference] = struct{}{}
+	}
+}
+
 func (j Model) View() string {
 	if buffer := j.buffer.String(); buffer != "" {
 		return strings.TrimSpace(buffer)
@@ -136,5 +161,11 @@ func (j Model) View() string {
 		return render
 	}
 
-	return gostd.FormatPackageLine(j.common.Spinner.View, j.ref.Package, nil, "", j.style, false, j.config.PackageNameWidth)
+	var elapsed string
+	if j.start != nil {
+		elapsed = time.Since(*j.start).Truncate(time.Millisecond).String()
+
+	}
+
+	return gostd.FormatPackageLine(j.common.Spinner.View, j.ref.Package, len(j.completed), []string{elapsed}, "", j.style, false, j.config.PackageNameWidth)
 }

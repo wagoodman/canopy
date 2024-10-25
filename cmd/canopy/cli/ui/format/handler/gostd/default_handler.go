@@ -200,8 +200,7 @@ func hasTimeMarker(output string) bool {
 
 var (
 	logLinePattern = regexp.MustCompile(`^\s*\S+.go:\d+:`)
-	// coveragePattern = regexp.MustCompile(`coverage:\s*\d+\.\d+%\sof\sstatements\s*$`)
-	timePattern = regexp.MustCompile(`^\d+\.\d+\S$`)
+	timePattern    = regexp.MustCompile(`^\d+\.?\d*\S+$`)
 )
 
 func isLogLine(output string) bool {
@@ -282,10 +281,11 @@ func parseAndFormatPackageLine(s string, st style.GoStd, maxTestName int) string
 		aux = fields[2:]
 	}
 
-	return FormatPackageLine(status, pkgName, aux, trailer, st, true, maxTestName)
+	return FormatPackageLine(status, pkgName, 0, aux, trailer, st, true, maxTestName)
 }
 
-func FormatPackageLine(status, pkgName string, aux []string, trailer string, st style.GoStd, formatStatus bool, maxTestName int) string {
+func FormatPackageLine(status, pkgName string, testsCompleted int, aux []string, trailer string, st style.GoStd, formatStatus bool, maxTestName int) string {
+
 	if formatStatus {
 		switch {
 		case hasPassMarking(status):
@@ -297,6 +297,9 @@ func FormatPackageLine(status, pkgName string, aux []string, trailer string, st 
 		case hasFailedPackageMarking(status):
 			status = st.Failed.Render(status)
 		}
+	} else if testsCompleted > 0 {
+		runStr := fmt.Sprintf("%d tests", testsCompleted)
+		aux = append(aux, runStr)
 	}
 
 	if pkgName != "" {
@@ -313,7 +316,7 @@ func FormatPackageLine(status, pkgName string, aux []string, trailer string, st 
 			// already formatted
 			break
 		case hasPackageCoverageMarking(a):
-			a = strings.ReplaceAll(a, "coverage: ", "[") + "]"
+			a = strings.ReplaceAll(strings.ReplaceAll(a, "coverage: ", "[")+"]", "of statements", "coverage")
 
 		default:
 			a = "[" + a + "]"
