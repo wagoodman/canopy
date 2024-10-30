@@ -17,6 +17,7 @@ import (
 type Manager struct {
 	config Config
 	store
+	sessionManager
 	*session
 }
 
@@ -39,7 +40,7 @@ func NewManager(cfg Config) (*Manager, error) {
 		return nil, errors.New("cannot specify both an existing session and to load the last session")
 	}
 
-	s, err := newStore(cfg)
+	s, err := newDBStore(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -47,8 +48,9 @@ func NewManager(cfg Config) (*Manager, error) {
 		return nil, fmt.Errorf("no store created")
 	}
 	m := &Manager{
-		config: cfg,
-		store:  *s,
+		config:         cfg,
+		store:          s,
+		sessionManager: s,
 	}
 
 	if cfg.ExistingSession != uuid.Nil {
@@ -86,7 +88,7 @@ func (s *Manager) CurrentSession() (*SessionInfo, error) {
 		return nil, nil
 	}
 
-	sessionInfo, err := s.store.getSessionInfo(s.session.uuid)
+	sessionInfo, err := s.session.info()
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +115,7 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 	var err error
 
 	if s.session == nil {
-		s.session, err = s.store.newSession()
+		s.session, err = s.newSession()
 		if err != nil {
 			done := make(chan error)
 			go func() {
@@ -188,46 +190,14 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 }
 
 func (s *Manager) GetRun(runID uuid.UUID) (*gotest.Run, error) {
-	tr, err := s.store.db.GetTestRun(runID)
+	runInfo, err := s.GetRunInfo(runID)
 	if err != nil {
 		return nil, err
 	}
 
-	runInfo := newRunInfo(tr)
-
-	eventInfos, err := s.store.db.GetTestEvents(runID)
+	events, err := s.GetTestEvents(runID)
 	if err != nil {
 		return nil, err
-	}
-
-	var events []gotest.Event
-	for _, e := range eventInfos {
-		var annotations []gotest.Annotation
-		for _, a := range e.Annotations {
-			annotations = append(annotations, gotest.Annotation(a.Value))
-		}
-
-		var eventErr error
-		if e.Error != "" {
-			// TODO: use gob to preserve the error type
-			eventErr = errors.New(e.Error)
-		}
-
-		events = append(events, gotest.Event{
-			RunID: runID,
-			JSONL: "", // TODO: is this a problem?
-			Index: e.Index,
-			Time:  e.Time,
-			Reference: gotest.Reference{
-				Package:  e.Reference.Package,
-				FuncName: e.Reference.FuncName,
-				TRunName: e.Reference.TRunName,
-			},
-			Action:      gotest.Action(e.Action),
-			Output:      e.Output,
-			Annotations: annotations,
-			Error:       eventErr,
-		})
 	}
 
 	r := &gotest.Run{
@@ -239,7 +209,7 @@ func (s *Manager) GetRun(runID uuid.UUID) (*gotest.Run, error) {
 		}),
 	}
 
-	r.Result.SetCoverage(tr.Coverage)
+	r.Result.SetCoverage(runInfo.Coverage)
 
 	for _, e := range events {
 		r.Result.Update(e)
@@ -247,54 +217,6 @@ func (s *Manager) GetRun(runID uuid.UUID) (*gotest.Run, error) {
 
 	return r, nil
 }
-
-// func (s *Manager) GetRunResult(runID uuid.UUID) (*gotest.RunnerConfig, *gotest.Result, error) {
-//	r, err := s.store.db.GetTestRun(runID)
-//	if err != nil {
-//		return nil, nil, err
-//	}
-//
-//	eventInfos, err := s.store.db.GetTestEvents(runID)
-//	if err != nil {
-//		return nil, nil, err
-//	}
-//
-//	var events []gotest.Event
-//	for _, e := range eventInfos {
-//		var annotations []gotest.Annotation
-//		for _, a := range e.Annotations {
-//			annotations = append(annotations, gotest.Annotation(a.Value))
-//		}
-//
-//		events = append(events, gotest.Event{
-//			RunID: runID,
-//			JSONL: "", // TODO: is this a problem?
-//			Time:  e.Time,
-//			Reference: gotest.Reference{
-//				Package:  e.Reference.Package,
-//				FuncName: e.Reference.FuncName,
-//				TRunName: e.Reference.TRunName,
-//			},
-//			Action:      gotest.Action(e.Action),
-//			Output:      e.Output,
-//			Annotations: annotations,
-//		})
-//
-//	}
-//
-//	result := gotest.NewResult(gotest.ResultConfig{
-//		TrackOtherOutput:   true,
-//		TrackFailingOutput: true,
-//	})
-//
-//	for _, e := range events {
-//		result.Update(e)
-//	}
-//
-//	runInfo := newRunInfo(r)
-//
-//	return &runInfo.Config, result, nil
-//}
 
 func (s *Manager) Close() error {
 	if s.config.Ephemeral {

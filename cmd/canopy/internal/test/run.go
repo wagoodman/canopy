@@ -43,7 +43,7 @@ func (r run) addEvent(event gotest.Event) error {
 	if r.complete {
 		return fmt.Errorf("cannot add event to completed test run")
 	}
-	return r.session.store.db.AddTestEvent(r.uuid, event)
+	return r.session.store.AddTestEvent(r.uuid, event)
 }
 
 func (r *run) end(coverage *float64) error {
@@ -51,5 +51,5 @@ func (r *run) end(coverage *float64) error {
 	if r.session == nil || r.session.store == nil {
 		return nil
 	}
-	return r.session.store.db.EndTestRun(r.uuid, coverage)
+	return r.session.store.EndTestRun(r.uuid, coverage)
 }
