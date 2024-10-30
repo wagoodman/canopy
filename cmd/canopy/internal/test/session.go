@@ -1,21 +1,37 @@
 package test
 
 import (
-	"encoding/json"
-	"fmt"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/db"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
 
 type session struct {
-	store    *store
+	store    store
 	complete bool
 	uuid     uuid.UUID
 }
 
+type SessionInfo struct {
+	UUID    uuid.UUID  `json:"uuid"`
+	Started time.Time  `json:"started"`
+	Ended   *time.Time `json:"ended"`
+	Runs    []RunInfo  `json:"runs"`
+}
+
+func newSessionInfo(se db.TestSession, runs []RunInfo) SessionInfo {
+	return SessionInfo{
+		UUID:    uuid.MustParse(se.UUID),
+		Started: se.Started,
+		Ended:   se.Ended,
+		Runs:    runs,
+	}
+}
+
 func (s session) newRun(cfg gotest.RunnerConfig) (*run, error) {
-	id, err := s.store.db.StartTestRun(s.uuid, cfg)
+	id, err := s.store.StartTestRun(s.uuid, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -26,21 +42,8 @@ func (s session) newRun(cfg gotest.RunnerConfig) (*run, error) {
 	}, nil
 }
 
-func (s session) ListRuns() ([]RunInfo, error) {
-	runs, err := s.store.db.GetSessionTestRuns(s.uuid, true)
-	if err != nil {
-		return nil, err
-	}
-
-	var runInfos []RunInfo
-	for _, run := range runs {
-		var cfg gotest.RunnerConfig
-		if err := json.Unmarshal(run.Config, &cfg); err != nil {
-			return nil, fmt.Errorf("unable to unmarshal runner config: %w", err)
-		}
-		runInfos = append(runInfos, newRunInfo(run))
-	}
-	return runInfos, nil
+func (s session) info() (*SessionInfo, error) {
+	return s.store.GetSessionInfo(s.uuid)
 }
 
 func (s *session) end() error {
@@ -48,5 +51,5 @@ func (s *session) end() error {
 	if s.store == nil {
 		return nil
 	}
-	return s.store.db.EndTestSession(s.uuid)
+	return s.store.EndTestSession(s.uuid)
 }
