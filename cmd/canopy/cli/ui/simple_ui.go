@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -121,13 +122,17 @@ func (n *simpleUI) Teardown(_ bool) error {
 
 	if n.stdout != nil {
 		if err := n.stdout.Close(); err != nil {
-			errs = multierror.Append(errs, fmt.Errorf("failed to close stdout: %w", err))
+			if !errors.Is(err, os.ErrClosed) {
+				errs = multierror.Append(errs, fmt.Errorf("failed to close stdout: %w", err))
+			}
 		}
 	}
 
 	if n.stderr != nil {
 		if err := n.stderr.Close(); err != nil {
-			errs = multierror.Append(errs, fmt.Errorf("failed to close stderr: %w", err))
+			if !errors.Is(err, os.ErrClosed) {
+				errs = multierror.Append(errs, fmt.Errorf("failed to close stderr: %w", err))
+			}
 		}
 	}
 

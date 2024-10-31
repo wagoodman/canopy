@@ -47,9 +47,10 @@ func List(app clio.Application) *cobra.Command {
 				Specifiers: []string{defaultPackageSelection},
 			},
 			Format: options.Format{
-				Output:           "function",
+				Outputs:          []string{"function"},
 				AllowableFormats: []string{"function", "json", "package"},
 				Aliases:          []string{"fn", "fns", "f", "p", "pkg", "pkgs", "functions", "packages"},
+				AllowMultiple:    false,
 			},
 		},
 	}
@@ -88,7 +89,7 @@ func runList(cfg listConfig) error {
 	}
 
 	var report string
-	switch strings.ToLower(cfg.Output) {
+	switch strings.ToLower(cfg.Outputs[0]) {
 	case "package", "packages", "pkg", "pkgs", "p":
 		report = listTestPkgs(tests)
 	case "function", "functions", "fn", "fns", "f":
@@ -96,7 +97,7 @@ func runList(cfg listConfig) error {
 	case "json":
 		report, err = listTestJSON(tests)
 	default:
-		err = fmt.Errorf("unknown format: %s", cfg.Output)
+		err = fmt.Errorf("unknown format: %s", cfg.Outputs)
 	}
 
 	if err != nil {
