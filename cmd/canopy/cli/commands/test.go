@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gookit/color"
+	"github.com/hashicorp/go-multierror"
 	"github.com/spf13/cobra"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"
@@ -21,7 +22,6 @@ import (
 	"github.com/anchore/clio"
 	"github.com/anchore/fangs"
 	"github.com/anchore/go-logger"
-	"github.com/anchore/go-logger/adapter/discard"
 )
 
 const defaultPackageSelection = "./..."
@@ -122,8 +122,20 @@ func Test(app clio.Application) *cobra.Command {
 			opts.Test.Runtime.Packages = testPkgs
 
 			// set the UI dynamically
-			logTestFailuresAsErrors, err = setUI(app, opts.Test.Format.Output, opts.Test.Appearance, testPkgs)
+			logTestFailuresAsErrors, err = setupUIs(app, opts.Test.Format.Writers, opts.Test.Appearance, testPkgs)
 			return err
+		},
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			defer func() {
+				if err := opts.Test.Format.Writers.Close(); err != nil {
+					runErr = multierror.Append(runErr, err)
+					log.WithFields("error", err).Error("unable to close format writers")
+				}
+			}()
+
+			runErr = runTest(cmd.Context(), app, *opts, logTestFailuresAsErrors)
+
+			return nil
 		},
 		PostRunE: func(_ *cobra.Command, _ []string) error {
 			// this runs after the UI, so we can safely print to stdout/stderr now if we need to
@@ -131,12 +143,6 @@ func Test(app clio.Application) *cobra.Command {
 				showTestFailure(runErr)
 			}
 			return runErr
-		},
-
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			runErr = runTest(cmd.Context(), app, *opts, logTestFailuresAsErrors)
-
-			return nil
 		},
 	}
 
@@ -255,14 +261,44 @@ func evaluateResult(run *gotest.Run, logTestFailuresAsErrors bool, coverMin floa
 	return passed, resultErr
 }
 
-func setUI(app clio.Application, formatStr string, appearance options.Appearance, testPkgs *golist.PackageCollection) (bool, error) {
+func setupUIs(app clio.Application, writers []options.FormatWriter, appearance options.Appearance, testPkgs *golist.PackageCollection) (bool, error) {
+	var logTestFailuresAsErrors bool
+
+	var uxs []clio.UI
+	for _, writer := range writers {
+		ux, ltaf, err := setupUI(app, writer, appearance, testPkgs)
+		if err != nil {
+			return false, fmt.Errorf("unable to setup UI %q: %w", writer.Name, err)
+		}
+		uxs = append(uxs, ux)
+		logTestFailuresAsErrors = logTestFailuresAsErrors || ltaf
+	}
+
+	if len(uxs) > 0 {
+		type Stater interface {
+			State() *clio.State
+		}
+
+		state := app.(Stater).State()
+
+		if err := state.UI.Replace(ui.NewCollection(uxs...)); err != nil {
+			return logTestFailuresAsErrors, err
+		}
+	}
+
+	return logTestFailuresAsErrors, nil
+}
+
+func setupUI(app clio.Application, format options.FormatWriter, appearance options.Appearance, testPkgs *golist.PackageCollection) (clio.UI, bool, error) {
 	var ux clio.UI
 
-	formatStr = strings.ToLower(formatStr)
-
-	if formatStr != "log" {
-		log.Set(discard.New())
+	fields := logger.Fields{
+		"format": format.Name,
 	}
+	if format.Path != "" {
+		fields["path"] = format.Path
+	}
+	log.WithFields(fields).Debug("setting up UI")
 
 	type Stater interface {
 		State() *clio.State
@@ -270,13 +306,13 @@ func setUI(app clio.Application, formatStr string, appearance options.Appearance
 
 	state := app.(Stater).State()
 
-	uiConfig := getUIConfig(appearance, state.Config)
+	uiConfig := getUIConfig(appearance, state.Config, format)
 
 	var logTestFailuresAsErrors bool
-	switch formatStr {
-	case "go-std", "go", "std":
+	switch format.Name {
+	case "go":
 		ux = ui.NewGoStdUI(testPkgs, false, uiConfig)
-	case "go-std-json", "go-json":
+	case "json":
 		// TODO: we're not passing testPkgs intentionally?
 		ux = ui.NewGoStdUI(nil, true, uiConfig)
 	case "jest":
@@ -293,29 +329,27 @@ func setUI(app clio.Application, formatStr string, appearance options.Appearance
 			var err error
 			state.Logger, err = clio.DefaultLogger(state.Config, state.RedactStore)
 			if err != nil {
-				return false, fmt.Errorf("unable to setup logger: %w", err)
+				return nil, false, fmt.Errorf("unable to setup logger: %w", err)
 			}
 			log.Set(state.Logger)
 		}
 
 		ux = ui.None()
-		logTestFailuresAsErrors = true
-	}
-
-	if ux != nil {
-		if err := state.UI.Replace(ux); err != nil {
-			return false, err
+		if format.PrimaryUI {
+			logTestFailuresAsErrors = true
 		}
 	}
 
-	return logTestFailuresAsErrors, nil
+	return ux, logTestFailuresAsErrors, nil
 }
 
-func getUIConfig(appearance options.Appearance, clioCfg clio.Config) ui.Config {
+func getUIConfig(appearance options.Appearance, clioCfg clio.Config, format options.FormatWriter) ui.Config {
 	return ui.Config{
 		Color:                   !appearance.NoColor,
 		Verbose:                 clioCfg.Log.Verbosity,
 		ShowPackagesWithNoTests: appearance.ShowPackagesWithNoTests,
+		Writer:                  format.Writer,
+		IsTTY:                   format.IsTTY,
 	}
 }
 

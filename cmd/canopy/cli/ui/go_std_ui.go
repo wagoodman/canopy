@@ -3,7 +3,6 @@ package ui
 import (
 	"io"
 	"os"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/adapter"
@@ -18,19 +17,21 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
 	"github.com/wagoodman/go-partybus"
-	"golang.org/x/term"
 
 	"github.com/anchore/clio"
 )
 
 func NewGoStdUI(testPkgs *golist.PackageCollection, json bool, cfg Config) clio.UI {
-	if isATTY() && !json {
+	if json {
+		return newJSONGoStdUI(cfg)
+	}
+	if cfg.IsTTY && cfg.Writer == nil {
 		if cfg.Verbose > 0 {
 			return newVerboseDynamicGoStdUI(testPkgs, cfg)
 		}
 		return newDefaultDynamicGoStdUI(testPkgs, cfg)
 	}
-	return newSafeGoStdUI(testPkgs, json, cfg)
+	return newSafeGoStdUI(testPkgs, cfg)
 }
 
 func newVerboseDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
@@ -159,7 +160,26 @@ func newDefaultDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) cl
 	return NewTeaUI(c)
 }
 
-func newSafeGoStdUI(testPkgs *golist.PackageCollection, json bool, cfg Config) clio.UI {
+func newJSONGoStdUI(cfg Config) clio.UI {
+	var handler partybus.Handler
+	var reportWriter io.WriteCloser
+	if cfg.Writer != nil {
+		reportWriter = cfg.Writer
+	} else {
+		reportWriter = os.Stdout
+	}
+
+	handler = gostd.NewJSONHandler(reportWriter)
+	ux := newSimpleUI().
+		withNotifications().
+		withReports().
+		withHandlers(handler).
+		withStdout(reportWriter)
+
+	return ux
+}
+
+func newSafeGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	var handler partybus.Handler
 	var writeToStderr bool
 	var pkgCount int
@@ -174,13 +194,15 @@ func newSafeGoStdUI(testPkgs *golist.PackageCollection, json bool, cfg Config) c
 		pkgCount = len(pkgs)
 	}
 
-	reportWriter := os.Stdout
+	var reportWriter io.WriteCloser
+	if cfg.Writer != nil {
+		reportWriter = cfg.Writer
+	} else {
+		reportWriter = os.Stdout
+	}
 	notificationWriter := os.Stderr
 
 	switch {
-	case json:
-		handler = gostd.NewJSONHandler(reportWriter)
-		writeToStderr = true
 	case cfg.Verbose > 0:
 		handler = gostd.NewVerboseHandler(
 			reportWriter,
@@ -219,19 +241,4 @@ func newSafeGoStdUI(testPkgs *golist.PackageCollection, json bool, cfg Config) c
 		)
 
 	return ux
-}
-
-func isATTY() bool {
-	if val := os.Getenv("NO_TTY"); val != "" {
-		return !isPositive(val)
-	}
-	return term.IsTerminal(int(os.Stdout.Fd())) //nolint: gosec
-}
-
-func isPositive(val string) bool {
-	switch strings.ToLower(strings.TrimSpace(val)) {
-	case "true", "yes", "y", "1", "t":
-		return true
-	}
-	return false
 }

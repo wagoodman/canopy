@@ -1,9 +1,13 @@
 package ui
 
+import "io"
+
 type Config struct {
 	Color                   bool
 	Verbose                 int
 	ShowPackagesWithNoTests bool
+	Writer                  io.WriteCloser
+	IsTTY                   bool
 }
 
 func DefaultConfig() Config {
