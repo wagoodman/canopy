@@ -3,6 +3,7 @@ package gostd
 import (
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -245,14 +246,71 @@ func (n *DefaultPackage) format(e gotest.Event) string {
 func formatPanic(in string, sty style.GoStd) string {
 	lines := strings.Split(in, "\n")
 	for i, line := range lines {
-		if i == 0 && hasPanicMarking(line) {
-			line = sty.Failed.Italic(true).Render(line)
-		} else if line == "" && i == len(lines)-1 {
+		prefix := " "
+		switch {
+		case hasPanicMarking(line):
+
+			// split at the first space
+			spaceIdx := strings.Index(line, " ")
+			line = strings.Replace(line, ":", "", 1)
+			if spaceIdx == -1 {
+				line = sty.PanicTitle.Render(" " + line)
+			} else {
+				line = sty.PanicTitle.Render(" "+line[:spaceIdx]) + " " + line[spaceIdx:]
+			}
+			prefix = ""
+		case line == "" && i == len(lines)-1:
 			continue
+		default:
+			switch {
+			case isPanicGoRoutineLine(line):
+				line = sty.PanicFile.Render(line)
+			case isPanicFuncLine(line):
+				// format everything after the last slash, if no slash, format the entire line
+				slashIdx := strings.LastIndex(line, "/")
+				if slashIdx == -1 {
+					line = sty.PanicFunc.Render(line)
+				} else {
+					line = sty.PanicFuncAux.Render(line[:slashIdx+1]) + sty.PanicFunc.Render(line[slashIdx+1:])
+				}
+			case isPanicFileLine(line):
+				// format the section of the line between the last / and the following space
+				// which is the file name. If one of the two is missing, just format the whole line.
+				slashIdx := strings.LastIndex(line, "/")
+				if slashIdx == -1 {
+					line = sty.PanicFile.Render(line)
+				} else {
+					spaceIdx := strings.Index(line[slashIdx+1:], " ")
+					if spaceIdx == -1 {
+						line = sty.PanicFile.Render(line)
+					} else {
+						line = sty.PanicFileAux.Render(line[:slashIdx+1]) + sty.PanicFile.Render(line[slashIdx+1:slashIdx+1+spaceIdx]) + sty.PanicFileAux.Render(line[slashIdx+1+spaceIdx:])
+					}
+				}
+			case strings.HasPrefix(line, "\t"):
+				// this is the top header, which seems to be off by one character
+				// lets pad this to vertically align it with the other lines
+				line = strings.Replace(line, "\t", "\t ", 1)
+			}
 		}
-		lines[i] = sty.PanicGroup.Render("░") + " " + line
+
+		lines[i] = sty.PanicGroup.Render("░") + prefix + line
 	}
 	return strings.Join(lines, "\n")
+}
+
+var goroutinePattern = regexp.MustCompile(`^goroutine \d+`)
+
+func isPanicGoRoutineLine(s string) bool {
+	return goroutinePattern.MatchString(s)
+}
+
+func isPanicFuncLine(s string) bool {
+	return !strings.HasPrefix(s, "\t") && strings.Contains(s, "(") && strings.Contains(s, ")")
+}
+
+func isPanicFileLine(s string) bool {
+	return strings.HasPrefix(s, "\t"+string(os.PathSeparator))
 }
 
 func parseAndFormatPackageLine(s string, st style.GoStd, maxTestName int) string {
