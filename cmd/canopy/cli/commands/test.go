@@ -22,6 +22,7 @@ import (
 	"github.com/anchore/clio"
 	"github.com/anchore/fangs"
 	"github.com/anchore/go-logger"
+	"github.com/anchore/go-logger/adapter/discard"
 )
 
 const defaultPackageSelection = "./..."
@@ -338,6 +339,13 @@ func setupUI(app clio.Application, format options.FormatWriter, appearance optio
 		if format.PrimaryUI {
 			logTestFailuresAsErrors = true
 		}
+	}
+
+	// if the format is not log, then we should discard the logger since it may be noisy
+	// and write over the default UI in the terminal
+	if format.PrimaryUI && format.Name != "log" {
+		state.Logger = discard.New()
+		log.Set(state.Logger)
 	}
 
 	return ux, logTestFailuresAsErrors, nil
