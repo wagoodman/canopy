@@ -1,6 +1,7 @@
 package bus
 
 import (
+	"github.com/google/uuid"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/go-partybus"
@@ -19,6 +20,14 @@ func TestRun(r gotest.Run) {
 	publish(partybus.Event{
 		Type:  event.GoTestRunType,
 		Value: r,
+	})
+}
+
+func TestRunRequest(id uuid.UUID, r gotest.RunnerConfig) {
+	publish(partybus.Event{
+		Type:   event.GoTestRunRequestType,
+		Value:  r,
+		Source: id,
 	})
 }
 

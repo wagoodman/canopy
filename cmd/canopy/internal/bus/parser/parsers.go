@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/go-partybus"
@@ -95,4 +96,22 @@ func ParseGoTestRunType(e partybus.Event) (*gotest.Run, error) {
 	}
 
 	return &r, nil
+}
+
+func ParseGoTestRunRequestType(e partybus.Event) (*gotest.RunnerConfig, *uuid.UUID, error) {
+	if err := checkEventType(e.Type, event.GoTestRunRequestType); err != nil {
+		return nil, nil, err
+	}
+
+	obj, ok := e.Value.(gotest.RunnerConfig)
+	if !ok {
+		return nil, nil, newPayloadErr(e.Type, "Value", e.Value)
+	}
+
+	id, ok := e.Source.(uuid.UUID)
+	if !ok {
+		return nil, nil, newPayloadErr(e.Type, "Source", e.Source)
+	}
+
+	return &obj, &id, nil
 }

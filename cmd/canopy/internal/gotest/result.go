@@ -21,8 +21,9 @@ type Result struct {
 	testReferencesByAction map[Action]*orderedset.OrderedSet[Reference]
 	conclusion             map[Reference]Action
 	start                  time.Time
-	offset                 time.Duration
+	startOffset            time.Duration
 	lastEventTime          time.Time
+	totalElapsed           time.Duration
 
 	coverage *float64
 }
@@ -64,14 +65,23 @@ func NewResult(config ResultConfig) *Result {
 	}
 }
 
-func (r *Result) Elapsed() time.Duration {
+func (r *Result) Elapsed(live bool) time.Duration {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
 	if r.lastEventTime.IsZero() {
-		return time.Now().Add(r.offset).Sub(r.start)
+		return 0
 	}
-	return r.lastEventTime.Sub(r.start)
+
+	if !live {
+		return r.lastEventTime.Sub(r.start)
+	}
+
+	// we want to use the timestamps as the source of truth for calculating elapsed, however, we also need to ensure
+	// this is always relative to time.Now() so that subsequent calls will result in updated (non-static) values.
+	replayStart := time.Now().Add(-r.startOffset)
+	return replayStart.Add(r.totalElapsed).Sub(r.start)
+	// return time.Now().Add(-r.startOffset).Sub(r.start)
 }
 
 func (r *Result) Update(e Event) {
@@ -82,9 +92,11 @@ func (r *Result) Update(e Event) {
 
 	if r.start.IsZero() {
 		r.start = e.Time
-		r.offset = time.Since(e.Time)
+		r.startOffset = time.Since(e.Time)
 	}
-
+	if !r.lastEventTime.IsZero() {
+		r.totalElapsed += e.Time.Sub(r.lastEventTime)
+	}
 	r.lastEventTime = e.Time
 
 	// process output and events

@@ -277,7 +277,7 @@ func (m Model) statsView() string {
 
 	coverage, covExists := m.currentTestRun.Coverage()
 
-	elapsed := formatDuration(m.currentTestRun.Elapsed())
+	elapsed := formatDuration(m.currentTestRun.Elapsed(m.isRunning()))
 
 	var status string
 	if m.isRunning() {

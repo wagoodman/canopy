@@ -36,26 +36,28 @@ func NewFactory(cfg presenter.GoStdTestResultSummaryConfig, common state.Common)
 }
 
 func (j Factory) RespondsTo() []partybus.EventType {
-	return []partybus.EventType{event.GoTestType, event.GoTestRunType}
+	return []partybus.EventType{event.GoTestType, event.GoTestRunType, event.GoTestRunRequestType}
 }
 
 func (j Factory) Handle(e partybus.Event) ([]tea.Model, tea.Cmd) {
-	if e.Type != event.GoTestType {
+	if e.Type != event.GoTestRunRequestType {
 		return nil, nil
 	}
 
-	gt, err := parser.ParseGoTestType(e)
+	cfg, id, err := parser.ParseGoTestRunRequestType(e)
 	if err != nil {
 		log.WithFields("error", err).Error("unable to parse go test event")
 		return nil, nil
 	}
 
-	if _, ok := j.seen[gt.RunID]; ok {
+	idVal := *id
+
+	if _, ok := j.seen[idVal]; ok {
 		return nil, nil
 	}
 
-	j.seen[gt.RunID] = struct{}{}
-	return []tea.Model{NewModel(j.config, j.common, gt.RunID)}, nil
+	j.seen[idVal] = struct{}{}
+	return []tea.Model{NewModel(j.config, j.common, idVal, *cfg)}, nil
 }
 
 type Model struct {
@@ -65,13 +67,14 @@ type Model struct {
 	common  state.Common
 }
 
-func NewModel(config presenter.GoStdTestResultSummaryConfig, common state.Common, runID uuid.UUID) *Model {
+func NewModel(config presenter.GoStdTestResultSummaryConfig, common state.Common, runID uuid.UUID, runCfg gotest.RunnerConfig) *Model {
 	run := gotest.NewRun(gotest.RunnerConfig{}) // we only need the cumulative state, not the run config
 	run.Result = *gotest.NewResult(gotest.ResultConfig{
 		TrackFailingOutput: true,
 		TrackOtherOutput:   false,
 	})
 	run.ID = runID
+	run.Config = runCfg
 	return &Model{
 		config: config,
 		run:    *run,

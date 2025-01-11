@@ -20,6 +20,7 @@ type GoStdTestResultSummaryConfig struct {
 	PackageCount     int
 	HidePackageCount bool
 	RunningState     string
+	StaticTimer      bool
 }
 
 func (c GoStdTestResultSummaryConfig) New(run gotest.Run) Presenter {
@@ -36,7 +37,7 @@ type GoStdTestResultSummary struct {
 	run    gotest.Run
 }
 
-func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error {
+func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error { //nolint:funlen
 	var w = stdout
 	if s.config.WriteToStderr {
 		w = stderr
@@ -75,7 +76,12 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error {
 	}
 
 	total := stats.Total()
-	if total != stats.Passed || total == 0 {
+	testCountSuffix := " tests"
+	switch {
+	case total == 0:
+		tests = append(tests, s.style.Waiting.Render("(waiting for tests results)"))
+		testCountSuffix = ""
+	case total != stats.Passed:
 		tests = append(tests, fmt.Sprintf("%d total", stats.Total()))
 	}
 
@@ -87,14 +93,19 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error {
 		sections = append(sections, fmt.Sprintf("%d packages", s.config.PackageCount))
 	}
 
-	sections = append(sections, fmt.Sprintf("%s tests", testSummaryCount))
+	sections = append(sections, fmt.Sprintf("%s%s", testSummaryCount, testCountSuffix))
 
 	summary := strings.Join(sections, ", ")
 	wideSummary := lipgloss.NewStyle().Width(s.config.PackageNameWidth).Render(summary)
 
 	result += "\t" + wideSummary
 
-	result += "\t" + s.style.Aux.Render(s.run.Result.Elapsed().Round(time.Millisecond).String())
+	elapsed := s.run.Result.Elapsed(!s.config.StaticTimer)
+	if elapsed > 0 {
+		result += "\t" + s.style.Aux.Render(elapsed.Round(time.Millisecond).String())
+	} else {
+		result += "\t" + s.style.Aux.Render("compiling...")
+	}
 
 	if coverage, ok := s.run.Result.Coverage(); ok {
 		// match the same format changes used in the gostd handlers

@@ -138,6 +138,7 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 
 	onEvent := func(event *gotest.Event) {
 		if event == nil {
+			// this is the end of the test run...
 			var coverage *float64
 			cov, ok := r.Result.Coverage()
 			if ok {
@@ -151,6 +152,7 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 			return
 		}
 
+		// a test event has occurred...
 		e := *event
 
 		logEvent(e, cfg.LogTestFailuresAsErrors)
@@ -185,6 +187,8 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 		// run the test ourselves
 		r, errs = gotest.NewRunner(cfg.Runner).Start(ctx, cfg.Result, onEvent)
 	}
+
+	bus.TestRunRequest(r.ID, cfg.Runner)
 
 	return r, errs
 }

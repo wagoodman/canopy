@@ -10,6 +10,7 @@ type GoStd struct {
 	Skipped      lipgloss.Style
 	Aux          lipgloss.Style
 	Info         lipgloss.Style
+	Waiting      lipgloss.Style
 	PanicGroup   lipgloss.Style
 	PanicTitle   lipgloss.Style
 	PanicFunc    lipgloss.Style
@@ -28,6 +29,7 @@ func NewGoStd(color bool) GoStd {
 			Skipped: lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
 			Aux:     lipgloss.NewStyle().Faint(true),
 			Info:    lipgloss.NewStyle().Foreground(lipgloss.Color("13")),
+			Waiting: lipgloss.NewStyle().Italic(true),
 
 			PanicGroup: lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
 			// red background with white text
@@ -53,6 +55,7 @@ func NewGoStd(color bool) GoStd {
 		Skipped:      lipgloss.NewStyle(),
 		Aux:          lipgloss.NewStyle(),
 		Info:         lipgloss.NewStyle(),
+		Waiting:      lipgloss.NewStyle(),
 		PanicGroup:   lipgloss.NewStyle(),
 		PanicTitle:   lipgloss.NewStyle(),
 		PanicFunc:    lipgloss.NewStyle(),

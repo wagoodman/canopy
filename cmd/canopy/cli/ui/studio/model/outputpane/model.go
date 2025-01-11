@@ -114,6 +114,7 @@ type viewModel struct {
 func newViewModel(userArgs []string) viewModel {
 	sb := bytes.Buffer{}
 
+	// TODO: this is broken... and the user can still select this via the config and not CLI
 	isVerbose := slices.Contains(userArgs, "-v")
 	var hnd handler.Handler
 	if isVerbose {

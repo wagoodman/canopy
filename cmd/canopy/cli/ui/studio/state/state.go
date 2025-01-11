@@ -28,7 +28,7 @@ type RunViewer interface {
 	ReferenceOutput(gotest.Reference) string
 	ReferenceEvents(gotest.Reference) []gotest.Event
 	TestStats() gotest.ResultStats
-	Elapsed() time.Duration
+	Elapsed(bool) time.Duration
 	Coverage() (float64, bool)
 	Passed() (bool, bool) // indicates pass/fail and is-still-running
 }
