@@ -29,6 +29,13 @@ type Config struct {
 	SessionInfo     test.SessionInfo
 	Debug           bool
 	FailedTestsOnly bool
+
+	// hidden options
+	showVerticalBorder bool
+}
+
+func setHiddenDefaults(cfg *Config) {
+	cfg.showVerticalBorder = false
 }
 
 type Model struct {
@@ -47,6 +54,8 @@ func New(config Config, wg *sync.WaitGroup) Model {
 	zone.NewGlobal()
 
 	wg.Add(1)
+
+	setHiddenDefaults(&config)
 
 	referenceWidthRatio := 0.3
 	outputWidthRatio := 1 - referenceWidthRatio
@@ -230,13 +239,25 @@ func (m Model) Wait() {
 }
 
 func (m Model) dispatchView(dispatch model.Dispatch) string {
-	rightBrd := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder(), false, true, false, false).
-		BorderForeground(lipgloss.Color("#FFFFFF"))
+	refPaneView := dispatch.Get(referencespane.Name).View()
+	if m.config.showVerticalBorder {
+		rightBrd := lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder(), false, true, false, false).
+			BorderForeground(lipgloss.Color("#FFFFFF"))
+
+		refPaneView = rightBrd.Render(refPaneView)
+	}
+	//else {
+	//	// pad the right side of the reference pane with one space
+	//	rightBrd := lipgloss.NewStyle().
+	//		Border(lipgloss.HiddenBorder(), false, true, false, false)
+	//
+	//	refPaneView = rightBrd.Render(refPaneView)
+	//}refPaneView
 
 	return lipgloss.JoinHorizontal(
 		lipgloss.Top,
-		rightBrd.Render(dispatch.Get(referencespane.Name).View()),
+		refPaneView,
 		dispatch.Get(outputpane.Name).View(),
 	)
 }

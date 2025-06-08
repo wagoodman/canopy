@@ -143,7 +143,7 @@ func newListItemDelegate(navigateBindings ...key.Binding) *listItemDelegate {
 	//	Padding(0, 0, 0, 1)
 
 	cursorBrd := lipgloss.NormalBorder()
-	cursorBrd.Left = "●" // ❯❱ ●• »
+	cursorBrd.Left = "\U0001FB6A" // ❯❱ ●• » ▚
 
 	highlightPadding := lipgloss.NewStyle().Padding(0, 0, 0, 1)
 	notHighlightedPadding := lipgloss.NewStyle().Padding(0, 0, 0, 2)
@@ -164,7 +164,7 @@ func newListItemDelegate(navigateBindings ...key.Binding) *listItemDelegate {
 	// Foreground(lipgloss.AdaptiveColor{Light: "#EE6FF8", Dark: "#EE6FF8"})
 
 	multiSelectBrd := lipgloss.NormalBorder()
-	multiSelectBrd.Left = "✔"
+	multiSelectBrd.Left = "█" // ✔
 
 	multiSelectStyle := highlightStyle.
 		Border(multiSelectBrd, false, false, false, true).

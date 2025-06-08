@@ -309,14 +309,21 @@ func (m Model) statsView() string {
 
 	left := lipgloss.JoinHorizontal(lipgloss.Top, status, m.testCountsView.View(stats.Passed, stats.Failed, stats.Skipped))
 
+	var right string
 	var covStr string
 	if stats.Total() > 0 && covExists {
 		covStr = drop0Decimal(coverage)
+		right += "with " + covStr + ", "
 	}
 
-	right := m.config.SummaryLineStyle.Width(width - lipgloss.Width(left)).Align(lipgloss.Right).Faint(true).Render(covStr + " " + elapsed)
+	right += "in " + elapsed
 
-	line := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	// right aligned variant...
+	//right := m.config.SummaryLineStyle.Width(width - lipgloss.Width(left)).Align(lipgloss.Right).Faint(true).Render(right)
+	//
+	//line := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+
+	line := left + " " + right
 
 	return m.config.BorderSummaryStyle.Width(width).Render(line)
 }

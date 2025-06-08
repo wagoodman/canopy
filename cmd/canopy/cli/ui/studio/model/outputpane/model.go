@@ -7,6 +7,7 @@ import (
 	"io"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -281,10 +282,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint: funlen
 //}
 
 func (m Model) View() string {
-	if !m.ready {
-		return lipgloss.NewStyle().Faint(true).Render("\n  Initializing...")
+	outputView := m.viewport.View()
+	if !m.ready || len(strings.TrimSpace(outputView)) == 0 {
+		outputView = lipgloss.NewStyle().Faint(true).Italic(true).Render("\nNo output")
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, m.statsView(), m.viewport.View())
+
+	return lipgloss.JoinVertical(lipgloss.Left, m.statsView(), outputView)
 }
 
 func (m Model) statsView() string {
