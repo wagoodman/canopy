@@ -3,16 +3,18 @@ package ui
 import (
 	"io"
 	"os"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/adapter"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gostd"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/gostddefaultpkg"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/gostdref"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/gostdsummary"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/pkgframe"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/syncspinner"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
@@ -63,6 +65,7 @@ func newVerboseDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) cl
 			Color:                       cfg.Color,
 			IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
 			HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
+			HideStartTestEvents:         !cfg.ShowStartTestEvents,
 		},
 	)
 
@@ -113,21 +116,31 @@ func newDefaultDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) cl
 
 	spin := syncspinner.New()
 
-	common := state.Common{
-		Spinner: spin.CurrentTick(),
+	pkgConfig := gostd.DefaultPackageConfig{
+		PackageNameWidth:            maxPkgName,
+		Color:                       cfg.Color,
+		IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
+		HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
 	}
 
-	rowCfg := gostddefaultpkg.Config{
-		DefaultPackageConfig: gostd.DefaultPackageConfig{
-			PackageNameWidth:            maxPkgName,
-			Color:                       cfg.Color,
-			IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
-			HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
-		},
-	}
+	sty := style.NewGoStd(cfg.Color)
 
 	pkgModelFactory := func(e gotest.Event, common state.Common) tea.Model {
-		return gostddefaultpkg.NewModel(e.Reference, common, rowCfg)
+		return gostdref.NewModel(
+			e.Reference.PackageRef(), // pass the package ref, not the exact test ref, as this will react to all package events
+			common,
+			func(ref gotest.Reference, common state.Common, completed map[gotest.Reference]struct{}, elapsed time.Duration) string {
+				// show the package name, the number of completed tests, the elapsed time + the spinner
+				return gostd.FormatPackageLine(common.Spinner.View, ref.Package, len(completed), []string{elapsed.String()}, "", sty, false, maxPkgName)
+			},
+			func(writer io.Writer, ref gotest.Reference) gostdref.Reactor {
+				return gostd.NewDefaultPackage(writer, pkgConfig, ref)
+			},
+		)
+	}
+
+	common := state.Common{
+		Spinner: spin.CurrentTick(),
 	}
 
 	bodyHandler := pkgframe.NewFactory(
@@ -211,6 +224,7 @@ func newSafeGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 				Color:                       cfg.Color,
 				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
 				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
+				HideStartTestEvents:         !cfg.ShowStartTestEvents,
 			},
 		)
 	default:

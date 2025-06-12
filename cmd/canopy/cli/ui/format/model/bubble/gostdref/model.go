@@ -1,15 +1,17 @@
-package gostddefaultpkg
+package gostdref
 
 import (
 	"bytes"
 	"errors"
+	"fmt"
+	"io"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gostd"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
@@ -25,17 +27,16 @@ var (
 	_ frame.TerminalElement    = (*Model)(nil)
 )
 
-type Config struct {
-	gostd.DefaultPackageConfig
-
-	Style *style.GoStd
+type Reactor interface {
+	handler.TestEventHandler
+	fmt.Stringer
 }
 
+type Viewer func(ref gotest.Reference, common state.Common, completed map[gotest.Reference]struct{}, elapsed time.Duration) string
+
 type Model struct {
-	config Config
 	ref    gotest.Reference
 	action gotest.Action
-	style  style.GoStd
 
 	// event driven state
 	common    state.Common
@@ -43,24 +44,18 @@ type Model struct {
 	running   map[gotest.Reference]struct{}
 	completed map[gotest.Reference]struct{}
 
-	fragment *gostd.DefaultPackage
+	fragment Reactor
+	viewer   Viewer
 	buffer   *bytes.Buffer
 }
 
-func NewModel(ref gotest.Reference, common state.Common, config Config) *Model {
-	stRef := config.Style
-	if stRef == nil {
-		st := style.NewGoStd(config.Color)
-		stRef = &st
-	}
-
+func NewModel(ref gotest.Reference, common state.Common, viewer Viewer, rowFactory func(io.Writer, gotest.Reference) Reactor) *Model {
 	var buffer bytes.Buffer
 
 	return &Model{
-		config:    config,
-		ref:       ref.PackageRef(),
-		style:     *stRef,
-		fragment:  gostd.NewDefaultPackage(&buffer, config.DefaultPackageConfig, ref),
+		ref:       ref,
+		viewer:    viewer,
+		fragment:  rowFactory(&buffer, ref),
 		buffer:    &buffer,
 		common:    common,
 		running:   make(map[gotest.Reference]struct{}),
@@ -132,7 +127,7 @@ func (j Model) handlePartybusEvent(e partybus.Event) (tea.Model, tea.Cmd) {
 	case errors.Is(err, gostd.ErrPackageComplete):
 		return j, nil
 	default:
-		panic("TODO: gostddefaultpkg error: " + err.Error())
+		panic("TODO: gostdref error: " + err.Error())
 	}
 
 	return j, nil
@@ -161,10 +156,10 @@ func (j Model) View() string {
 		return render
 	}
 
-	var elapsed string
+	var elapsed time.Duration
 	if j.start != nil {
-		elapsed = time.Since(*j.start).Truncate(time.Millisecond).String()
+		elapsed = time.Since(*j.start).Truncate(time.Millisecond)
 	}
 
-	return gostd.FormatPackageLine(j.common.Spinner.View, j.ref.Package, len(j.completed), []string{elapsed}, "", j.style, false, j.config.PackageNameWidth)
+	return j.viewer(j.ref, j.common, j.completed, elapsed)
 }

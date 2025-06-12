@@ -26,6 +26,7 @@ type VerbosePackageConfig struct {
 	PackageNameWidth            int
 	IDE                         ide.Context
 	HidePackagesWithNoTestFiles bool
+	HideStartTestEvents         bool
 }
 
 func NewVerboseHandler(writer io.Writer, config VerbosePackageConfig) handler.Handler {
@@ -180,6 +181,9 @@ func (n *VerbosePackage) format(e gotest.Event) string {
 		return formatPassedTest(e.Output, n.style)
 	}
 	if hasTestStartMarking(e.Output) {
+		if n.config.HideStartTestEvents {
+			return ""
+		}
 		return formatTestStart(e.Output, n.style)
 	}
 	if isLogLine(e.Output) {

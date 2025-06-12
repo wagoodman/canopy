@@ -21,6 +21,9 @@ type GoStdTestResultSummaryConfig struct {
 	HidePackageCount bool
 	RunningState     string
 	StaticTimer      bool
+
+	ShowRunningPackages bool
+	ShowRunningTests    bool
 }
 
 func (c GoStdTestResultSummaryConfig) New(run gotest.Run) Presenter {
@@ -42,6 +45,20 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error { //noli
 	if s.config.WriteToStderr {
 		w = stderr
 	}
+
+	footer, err := s.summaryFooter()
+	if err != nil {
+		return fmt.Errorf("failed to create summary footer: %w", err)
+	}
+
+	if _, err := fmt.Fprintln(w, footer); err != nil {
+		return fmt.Errorf("failed to write summary footer: %w", err)
+	}
+
+	return nil
+}
+
+func (s GoStdTestResultSummary) summaryFooter() (string, error) { //nolint:funlen
 
 	passed, isRunning := s.run.Result.Passed()
 
@@ -112,9 +129,5 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error { //noli
 		result += "\t" + s.style.Aux.Render(fmt.Sprintf("[%0.1f%% coverage]", coverage))
 	}
 
-	if _, err := fmt.Fprintln(w, result); err != nil {
-		return fmt.Errorf("failed to write final report: %w", err)
-	}
-
-	return nil
+	return result, nil
 }
