@@ -83,6 +83,10 @@ func newVerboseDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) cl
 			PackageCount:     pkgCount,
 			HidePackageCount: true,
 			//ShowElapsed: true,
+
+			ShowRunningPackages: true,
+			ShowRunningTests:    true,
+			ShowRunningSubTests: true,
 		},
 		common,
 	)
@@ -158,6 +162,11 @@ func newDefaultDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) cl
 			PackageCount:     pkgCount,
 			HidePackageCount: true,
 			//ShowElapsed: true,
+
+			// we turn all of this off since pkgModelFactory will handle these details
+			ShowRunningPackages: false,
+			ShowRunningTests:    false,
+			ShowRunningSubTests: false,
 		},
 		common,
 	)

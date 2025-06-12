@@ -2,6 +2,7 @@ package presenter
 
 import (
 	"fmt"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gostd"
 	"io"
 	"strings"
 	"time"
@@ -24,6 +25,7 @@ type GoStdTestResultSummaryConfig struct {
 
 	ShowRunningPackages bool
 	ShowRunningTests    bool
+	ShowRunningSubTests bool
 }
 
 func (c GoStdTestResultSummaryConfig) New(run gotest.Run) Presenter {
@@ -46,16 +48,57 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error { //noli
 		w = stderr
 	}
 
+	var runningFooter string
+	if s.config.ShowRunningPackages || s.config.ShowRunningTests {
+		var err error
+		runningFooter, err = s.runningFooter()
+		if err != nil {
+			return fmt.Errorf("failed to create running footer: %w", err)
+		}
+
+	}
+
 	footer, err := s.summaryFooter()
 	if err != nil {
 		return fmt.Errorf("failed to create summary footer: %w", err)
 	}
 
-	if _, err := fmt.Fprintln(w, footer); err != nil {
+	if _, err := fmt.Fprintln(w, runningFooter+footer); err != nil {
 		return fmt.Errorf("failed to write summary footer: %w", err)
 	}
 
 	return nil
+}
+
+func (s GoStdTestResultSummary) runningFooter() (string, error) { //nolint:funlen
+	runningRefs := s.run.Result.ReferencesByAction(gotest.RunAction)
+
+	var lines []string
+	for i, ref := range runningRefs {
+
+		var line string
+		switch {
+		case s.config.ShowRunningPackages && ref.IsPackage():
+			line = gostd.FormatPackageLine(s.config.RunningState, ref.Package, 0, nil, "", s.style, false, s.config.PackageNameWidth)
+		case s.config.ShowRunningSubTests && ref.IsSubTest():
+			subtestBranch := "  └── "
+			if i+1 < len(runningRefs) && runningRefs[i+1].IsSubTest() {
+				subtestBranch = "  ├── "
+			}
+			line = gostd.FormatPackageLine("", subtestBranch+ref.SubTestName(true), 0, nil, "", s.style, false, s.config.PackageNameWidth)
+		case s.config.ShowRunningTests && !ref.IsSubTest() && !ref.IsPackage():
+			line = gostd.FormatPackageLine(s.config.RunningState, ref.String(true), 0, nil, "", s.style, false, s.config.PackageNameWidth)
+		}
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+
+	if len(lines) == 0 {
+		return "", nil
+	}
+
+	return strings.Join(lines, "\n") + "\n", nil
 }
 
 func (s GoStdTestResultSummary) summaryFooter() (string, error) { //nolint:funlen
