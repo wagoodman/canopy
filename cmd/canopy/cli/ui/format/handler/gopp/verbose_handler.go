@@ -1,4 +1,4 @@
-package gostd
+package gopp
 
 import (
 	"fmt"
@@ -39,7 +39,7 @@ func NewVerboseHandler(writer io.Writer, config VerbosePackageConfig) handler.Ha
 type VerbosePackage struct {
 	writer          io.Writer
 	config          VerbosePackageConfig
-	style           style.GoStd
+	style           style.Go
 	lastOutputRef   *gotest.Reference
 	pkg             string
 	buffer          *strings.Builder
@@ -55,7 +55,7 @@ func NewVerbosePackage(writer io.Writer, config VerbosePackageConfig, ref gotest
 	return &VerbosePackage{
 		writer:          writer,
 		config:          config,
-		style:           style.NewGoStd(config.Color),
+		style:           style.NewGo(config.Color),
 		pkg:             ref.Package,
 		buffer:          &strings.Builder{},
 		funcConcluded:   make(map[gotest.Reference]struct{}),
@@ -200,7 +200,7 @@ func hasTestStartMarking(output string) bool {
 	return strings.HasPrefix(output, "=== RUN")
 }
 
-func formatTestExecutionMark(s string, st style.GoStd) string {
+func formatTestExecutionMark(s string, st style.Go) string {
 	// preserve but partition the line ending(s)
 	lnIdx := strings.LastIndex(s, "\n")
 	var trailer string
@@ -224,7 +224,7 @@ func formatTestExecutionMark(s string, st style.GoStd) string {
 	// return st.Aux.Render(before) + after
 }
 
-func formatPassedTest(s string, st style.GoStd) string {
+func formatPassedTest(s string, st style.Go) string {
 	// split into "-- PASS:" and the rest
 	idx := strings.Index(s, ":")
 

@@ -28,7 +28,7 @@ func TestGoStdTestResultSummary_Present(t *testing.T) {
 					PackageNameWidth: 100,
 					PackageCount:     50,
 				},
-				style: style.NewGoStd(false),
+				style: style.NewGo(false),
 			},
 		},
 		{
@@ -41,7 +41,7 @@ func TestGoStdTestResultSummary_Present(t *testing.T) {
 					PackageNameWidth: 100,
 					PackageCount:     50,
 				},
-				style: style.NewGoStd(false),
+				style: style.NewGo(false),
 			},
 		},
 		{
@@ -54,7 +54,7 @@ func TestGoStdTestResultSummary_Present(t *testing.T) {
 					PackageNameWidth: 100,
 					PackageCount:     50,
 				},
-				style: style.NewGoStd(false),
+				style: style.NewGo(false),
 			},
 		},
 	}

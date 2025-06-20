@@ -311,11 +311,13 @@ func setupUI(app clio.Application, format options.FormatWriter, appearance optio
 
 	var logTestFailuresAsErrors bool
 	switch format.Name {
+	case "go++":
+		ux = ui.NewGoPPUI(testPkgs, false, uiConfig)
 	case "go":
-		ux = ui.NewGoStdUI(testPkgs, false, uiConfig)
+		panic("not implemented")
 	case "json":
 		// TODO: we're not passing testPkgs intentionally?
-		ux = ui.NewGoStdUI(nil, true, uiConfig)
+		ux = ui.NewGoPPUI(nil, true, uiConfig)
 	case "jest":
 		ux = ui.NewJestUI(uiConfig)
 	case "dot":

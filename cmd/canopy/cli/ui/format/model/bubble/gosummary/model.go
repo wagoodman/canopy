@@ -1,4 +1,4 @@
-package gostdsummary
+package gosummary
 
 import (
 	"strings"

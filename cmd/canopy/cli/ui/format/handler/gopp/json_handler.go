@@ -1,4 +1,4 @@
-package gostd
+package gopp
 
 import (
 	"fmt"

@@ -13,7 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gostd"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gopp"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/event"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/fragment"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/state"
@@ -97,7 +97,7 @@ func (m *Model) onSelect(cfg gotest.RunnerConfig, refs []gotest.Reference) error
 	for _, e := range events {
 		err := m.viewModel.OnGoTestEvent(e)
 		if err != nil {
-			if !errors.Is(err, gostd.ErrPackageComplete) {
+			if !errors.Is(err, gopp.ErrPackageComplete) {
 				return err
 			}
 		}
@@ -119,18 +119,18 @@ func newViewModel(userArgs []string) viewModel {
 	isVerbose := slices.Contains(userArgs, "-v")
 	var hnd handler.Handler
 	if isVerbose {
-		hnd = gostd.NewVerboseHandler(
+		hnd = gopp.NewVerboseHandler(
 			&sb,
-			gostd.VerbosePackageConfig{
+			gopp.VerbosePackageConfig{
 				Color:            true,
 				PackageNameWidth: 50,
 				IDE:              ide.Select(&ide.OSEnvironmentGetter{}),
 			},
 		)
 	} else {
-		hnd = gostd.NewDefaultHandler(
+		hnd = gopp.NewDefaultHandler(
 			&sb,
-			gostd.DefaultPackageConfig{
+			gopp.DefaultPackageConfig{
 				Color:            true,
 				PackageNameWidth: 50,
 				IDE:              ide.Select(&ide.OSEnvironmentGetter{}),
@@ -138,7 +138,7 @@ func newViewModel(userArgs []string) viewModel {
 		)
 	}
 
-	h := gostd.NewMultiPackageHandler(
+	h := gopp.NewMultiPackageHandler(
 		func(_ gotest.Reference, _ io.Writer) handler.Handler {
 			return hnd
 		},

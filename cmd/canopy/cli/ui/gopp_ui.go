@@ -7,9 +7,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/adapter"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gostd"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/gostdref"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/gostdsummary"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gopp"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/goref"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/gosummary"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/pkgframe"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/syncspinner"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
@@ -23,20 +23,20 @@ import (
 	"github.com/anchore/clio"
 )
 
-func NewGoStdUI(testPkgs *golist.PackageCollection, json bool, cfg Config) clio.UI {
+func NewGoPPUI(testPkgs *golist.PackageCollection, json bool, cfg Config) clio.UI {
 	if json {
-		return newJSONGoStdUI(cfg)
+		return newJSONGoPPUI(cfg)
 	}
 	if cfg.IsTTY && cfg.Writer == nil {
 		if cfg.Verbose > 0 {
-			return newVerboseDynamicGoStdUI(testPkgs, cfg)
+			return newVerboseDynamicGoPPUI(testPkgs, cfg)
 		}
-		return newDefaultDynamicGoStdUI(testPkgs, cfg)
+		return newDefaultDynamicGoPPUI(testPkgs, cfg)
 	}
-	return newSafeGoStdUI(testPkgs, cfg)
+	return newSafeGoPPUI(testPkgs, cfg)
 }
 
-func newVerboseDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
+func newVerboseDynamicGoPPUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	var pkgCount int
 	maxPkgName := 30
 	if testPkgs != nil {
@@ -58,9 +58,9 @@ func newVerboseDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) cl
 	reportReader, reportWriter := readerWriterPair()
 	notificationReader, notificationWriter := readerWriterPair()
 
-	handler := gostd.NewVerboseHandler(
+	handler := gopp.NewVerboseHandler(
 		reportWriter,
-		gostd.VerbosePackageConfig{
+		gopp.VerbosePackageConfig{
 			PackageNameWidth:            maxPkgName,
 			Color:                       cfg.Color,
 			IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
@@ -76,7 +76,7 @@ func newVerboseDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) cl
 		withStdout(reportWriter).
 		withStderr(notificationWriter)
 
-	summaryHandler := gostdsummary.NewFactory(
+	summaryHandler := gosummary.NewFactory(
 		presenter.GoStdTestResultSummaryConfig{
 			Color:            cfg.Color,
 			PackageNameWidth: maxPkgName,
@@ -105,7 +105,7 @@ func readerWriterPair() (io.Reader, io.WriteCloser) {
 	return r, w
 }
 
-func newDefaultDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
+func newDefaultDynamicGoPPUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	var pkgCount int
 	maxPkgName := 30
 	if testPkgs != nil {
@@ -120,25 +120,25 @@ func newDefaultDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) cl
 
 	spin := syncspinner.New()
 
-	pkgConfig := gostd.DefaultPackageConfig{
+	pkgConfig := gopp.DefaultPackageConfig{
 		PackageNameWidth:            maxPkgName,
 		Color:                       cfg.Color,
 		IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
 		HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
 	}
 
-	sty := style.NewGoStd(cfg.Color)
+	sty := style.NewGo(cfg.Color)
 
 	pkgModelFactory := func(e gotest.Event, common state.Common) tea.Model {
-		return gostdref.NewModel(
+		return goref.NewModel(
 			e.Reference.PackageRef(), // pass the package ref, not the exact test ref, as this will react to all package events
 			common,
 			func(ref gotest.Reference, common state.Common, completed map[gotest.Reference]struct{}, elapsed time.Duration) string {
 				// show the package name, the number of completed tests, the elapsed time + the spinner
-				return gostd.FormatPackageLine(common.Spinner.View, ref.Package, len(completed), []string{elapsed.String()}, "", sty, false, maxPkgName)
+				return gopp.FormatPackageLine(common.Spinner.View, ref.Package, len(completed), []string{elapsed.String()}, "", sty, false, maxPkgName)
 			},
-			func(writer io.Writer, ref gotest.Reference) gostdref.Reactor {
-				return gostd.NewDefaultPackage(writer, pkgConfig, ref)
+			func(writer io.Writer, ref gotest.Reference) goref.Reactor {
+				return gopp.NewDefaultPackage(writer, pkgConfig, ref)
 			},
 		)
 	}
@@ -155,7 +155,7 @@ func newDefaultDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) cl
 		},
 	)
 
-	summaryHandler := gostdsummary.NewFactory(
+	summaryHandler := gosummary.NewFactory(
 		presenter.GoStdTestResultSummaryConfig{
 			Color:            cfg.Color,
 			PackageNameWidth: maxPkgName,
@@ -182,7 +182,7 @@ func newDefaultDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) cl
 	return NewTeaUI(c)
 }
 
-func newJSONGoStdUI(cfg Config) clio.UI {
+func newJSONGoPPUI(cfg Config) clio.UI {
 	var handler partybus.Handler
 	var reportWriter io.WriteCloser
 	if cfg.Writer != nil {
@@ -191,7 +191,7 @@ func newJSONGoStdUI(cfg Config) clio.UI {
 		reportWriter = os.Stdout
 	}
 
-	handler = gostd.NewJSONHandler(reportWriter)
+	handler = gopp.NewJSONHandler(reportWriter)
 	ux := newSimpleUI().
 		withNotifications().
 		withReports().
@@ -201,7 +201,7 @@ func newJSONGoStdUI(cfg Config) clio.UI {
 	return ux
 }
 
-func newSafeGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
+func newSafeGoPPUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	var handler partybus.Handler
 	var writeToStderr bool
 	var pkgCount int
@@ -226,9 +226,9 @@ func newSafeGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 
 	switch {
 	case cfg.Verbose > 0:
-		handler = gostd.NewVerboseHandler(
+		handler = gopp.NewVerboseHandler(
 			reportWriter,
-			gostd.VerbosePackageConfig{
+			gopp.VerbosePackageConfig{
 				PackageNameWidth:            maxPkgName,
 				Color:                       cfg.Color,
 				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
@@ -237,9 +237,9 @@ func newSafeGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 			},
 		)
 	default:
-		handler = gostd.NewDefaultHandler(
+		handler = gopp.NewDefaultHandler(
 			reportWriter,
-			gostd.DefaultPackageConfig{
+			gopp.DefaultPackageConfig{
 				PackageNameWidth:            maxPkgName,
 				Color:                       cfg.Color,
 				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),

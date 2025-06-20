@@ -1,4 +1,4 @@
-package gostd
+package gopp
 
 import (
 	"fmt"
@@ -43,7 +43,7 @@ func NewDefaultHandler(writer io.Writer, config DefaultPackageConfig) handler.Ha
 type DefaultPackage struct {
 	writer          io.Writer
 	config          DefaultPackageConfig
-	style           style.GoStd
+	style           style.Go
 	pkg             string
 	events          []gotest.Event
 	failedRefs      map[gotest.Reference]struct{}
@@ -55,7 +55,7 @@ func NewDefaultPackage(writer io.Writer, config DefaultPackageConfig, ref gotest
 	return &DefaultPackage{
 		writer:          writer,
 		config:          config,
-		style:           style.NewGoStd(config.Color),
+		style:           style.NewGo(config.Color),
 		pkg:             ref.Package,
 		failedRefs:      make(map[gotest.Reference]struct{}),
 		resultEvent:     make(map[gotest.Reference]gotest.Event),
@@ -251,7 +251,7 @@ func (n *DefaultPackage) format(e gotest.Event) string {
 	return e.Output
 }
 
-func formatPanic(in string, sty style.GoStd) string {
+func formatPanic(in string, sty style.Go) string {
 	lines := strings.Split(in, "\n")
 	for i, line := range lines {
 		prefix := " "
@@ -321,7 +321,7 @@ func isPanicFileLine(s string) bool {
 	return strings.HasPrefix(s, "\t"+string(os.PathSeparator))
 }
 
-func parseAndFormatPackageLine(s string, st style.GoStd, maxTestName int) string {
+func parseAndFormatPackageLine(s string, st style.Go, maxTestName int) string {
 	// preserve trailer
 	var trailer string
 	endIdx := strings.Index(s, "\n")
@@ -350,7 +350,7 @@ func parseAndFormatPackageLine(s string, st style.GoStd, maxTestName int) string
 	return FormatPackageLine(status, pkgName, 0, aux, trailer, st, true, maxTestName)
 }
 
-func FormatPackageLine(status, pkgName string, testsCompleted int, aux []string, trailer string, st style.GoStd, formatStatus bool, maxTestName int) string {
+func FormatPackageLine(status, pkgName string, testsCompleted int, aux []string, trailer string, st style.Go, formatStatus bool, maxTestName int) string {
 	if formatStatus {
 		switch {
 		case hasPassMarking(status):
@@ -393,7 +393,7 @@ func FormatPackageLine(status, pkgName string, testsCompleted int, aux []string,
 	return strings.Join(append([]string{status, pkgName}, aux...), "\t") + trailer
 }
 
-func formatLogLine(dir, s string, st style.GoStd, i ide.Context) string {
+func formatLogLine(dir, s string, st style.Go, i ide.Context) string {
 	// split into "file":"linenumber" and the rest
 	idx := strings.Index(s, ":")
 	if idx == -1 {
@@ -436,7 +436,7 @@ func splitWhitespace(s string) (prefix, content string) {
 	return s, ""
 }
 
-func formatFailedTest(s string, st style.GoStd) string {
+func formatFailedTest(s string, st style.Go) string {
 	// split into "-- FAIL:" and the rest
 	idx := strings.Index(s, ":")
 

@@ -2,7 +2,7 @@ package presenter
 
 import (
 	"fmt"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gostd"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gopp"
 	"io"
 	"strings"
 	"time"
@@ -31,14 +31,14 @@ type GoStdTestResultSummaryConfig struct {
 func (c GoStdTestResultSummaryConfig) New(run gotest.Run) Presenter {
 	return GoStdTestResultSummary{
 		config: c,
-		style:  style.NewGoStd(c.Color),
+		style:  style.NewGo(c.Color),
 		run:    run,
 	}
 }
 
 type GoStdTestResultSummary struct {
 	config GoStdTestResultSummaryConfig
-	style  style.GoStd
+	style  style.Go
 	run    gotest.Run
 }
 
@@ -79,15 +79,15 @@ func (s GoStdTestResultSummary) runningFooter() (string, error) { //nolint:funle
 		var line string
 		switch {
 		case s.config.ShowRunningPackages && ref.IsPackage():
-			line = gostd.FormatPackageLine(s.config.RunningState, ref.Package, 0, nil, "", s.style, false, s.config.PackageNameWidth)
+			line = gopp.FormatPackageLine(s.config.RunningState, ref.Package, 0, nil, "", s.style, false, s.config.PackageNameWidth)
 		case s.config.ShowRunningSubTests && ref.IsSubTest():
 			subtestBranch := "  └── "
 			if i+1 < len(runningRefs) && runningRefs[i+1].IsSubTest() {
 				subtestBranch = "  ├── "
 			}
-			line = gostd.FormatPackageLine("", s.style.Aux.Render(subtestBranch)+ref.SubTestName(true), 0, nil, "", s.style, false, s.config.PackageNameWidth)
+			line = gopp.FormatPackageLine("", s.style.Aux.Render(subtestBranch)+ref.SubTestName(true), 0, nil, "", s.style, false, s.config.PackageNameWidth)
 		case s.config.ShowRunningTests && !ref.IsSubTest() && !ref.IsPackage():
-			line = gostd.FormatPackageLine(s.config.RunningState, ref.String(true), 0, nil, "", s.style, false, s.config.PackageNameWidth)
+			line = gopp.FormatPackageLine(s.config.RunningState, ref.String(true), 0, nil, "", s.style, false, s.config.PackageNameWidth)
 		}
 		if line != "" {
 			lines = append(lines, line)

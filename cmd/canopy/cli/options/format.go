@@ -38,9 +38,9 @@ type Format struct {
 
 func DefaultTestFormat() Format {
 	return Format{
-		Outputs:          []string{"go"},
+		Outputs:          []string{"go++"},
 		AllowMultiple:    true,
-		AllowableFormats: []string{"go", "json", "log", "jest", "dot"},
+		AllowableFormats: []string{"go", "go++", "json", "log", "jest", "dot"},
 		FileDisallowed:   []string{"jest", "dot", "log"}, // TODO: log should not be on this list
 	}
 }
