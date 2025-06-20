@@ -26,7 +26,7 @@ type VerbosePackageConfig struct {
 	PackageNameWidth            int
 	IDE                         ide.Context
 	HidePackagesWithNoTestFiles bool
-	HideStartTestEvents         bool
+	HideExecutionTestEvents     bool
 }
 
 func NewVerboseHandler(writer io.Writer, config VerbosePackageConfig) handler.Handler {
@@ -102,7 +102,7 @@ func (n *VerbosePackage) OnGoTestEvent(e gotest.Event) error {
 				hasEqualMarker := strings.HasPrefix(trimmedOutput, "===")
 				hasDashMarker := strings.HasPrefix(trimmedOutput, "---")
 				if !hasEqualMarker && !hasDashMarker {
-					out := n.style.Aux.Render(fmt.Sprintf("%s  %s", "=== NAME", e.Reference.TestName(true)))
+					out := n.style.Aux.Render(fmt.Sprintf("%s  %s", "═══ NAME", e.Reference.TestName(true)))
 					_, err := fmt.Fprint(n.writer, out+"\n")
 					if err != nil {
 						return err
@@ -180,11 +180,11 @@ func (n *VerbosePackage) format(e gotest.Event) string {
 	if hasTestPassMarking(e.Output) {
 		return formatPassedTest(e.Output, n.style)
 	}
-	if hasTestStartMarking(e.Output) {
-		if n.config.HideStartTestEvents {
+	if hasTestStartMarking(e.Output) || hasContinueMarking(e.Output) || hasPauseMarking(e.Output) {
+		if n.config.HideExecutionTestEvents {
 			return ""
 		}
-		return formatTestStart(e.Output, n.style)
+		return formatTestExecutionMark(e.Output, n.style)
 	}
 	if isLogLine(e.Output) {
 		return formatLogLine(e.PackageDirPath, e.Output, n.style, n.config.IDE)
@@ -200,7 +200,7 @@ func hasTestStartMarking(output string) bool {
 	return strings.HasPrefix(output, "=== RUN")
 }
 
-func formatTestStart(s string, st style.GoStd) string {
+func formatTestExecutionMark(s string, st style.GoStd) string {
 	// preserve but partition the line ending(s)
 	lnIdx := strings.LastIndex(s, "\n")
 	var trailer string
@@ -253,7 +253,7 @@ func formatPassedTest(s string, st style.GoStd) string {
 
 	// apply styles to all sections
 
-	before = strings.Replace(before, "--- PASS:", "--- "+st.Success.Render("PASS")+":", 1)
+	before = strings.Replace(before, "--- PASS:", st.Aux.Render("─── ")+st.Success.Render("PASS")+" ", 1)
 
 	if aux != "" {
 		aux = st.Aux.Render(aux)

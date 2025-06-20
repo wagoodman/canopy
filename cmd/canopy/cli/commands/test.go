@@ -356,7 +356,7 @@ func getUIConfig(appearance options.Appearance, clioCfg clio.Config, format opti
 		Color:                   !appearance.NoColor,
 		Verbose:                 clioCfg.Log.Verbosity,
 		ShowPackagesWithNoTests: appearance.ShowPackagesWithNoTests,
-		ShowStartTestEvents:     appearance.ShowStartTestEvents,
+		ShowExecutionTestEvents: appearance.ShowStartTestEvents,
 		Writer:                  format.Writer,
 		IsTTY:                   format.IsTTY,
 	}

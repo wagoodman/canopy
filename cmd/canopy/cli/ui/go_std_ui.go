@@ -65,7 +65,7 @@ func newVerboseDynamicGoStdUI(testPkgs *golist.PackageCollection, cfg Config) cl
 			Color:                       cfg.Color,
 			IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
 			HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
-			HideStartTestEvents:         !cfg.ShowStartTestEvents,
+			HideExecutionTestEvents:     !cfg.ShowExecutionTestEvents,
 		},
 	)
 
@@ -233,7 +233,7 @@ func newSafeGoStdUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 				Color:                       cfg.Color,
 				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
 				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
-				HideStartTestEvents:         !cfg.ShowStartTestEvents,
+				HideExecutionTestEvents:     !cfg.ShowExecutionTestEvents,
 			},
 		)
 	default:

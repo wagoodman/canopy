@@ -85,7 +85,7 @@ func (s GoStdTestResultSummary) runningFooter() (string, error) { //nolint:funle
 			if i+1 < len(runningRefs) && runningRefs[i+1].IsSubTest() {
 				subtestBranch = "  ├── "
 			}
-			line = gostd.FormatPackageLine("", subtestBranch+ref.SubTestName(true), 0, nil, "", s.style, false, s.config.PackageNameWidth)
+			line = gostd.FormatPackageLine("", s.style.Aux.Render(subtestBranch)+ref.SubTestName(true), 0, nil, "", s.style, false, s.config.PackageNameWidth)
 		case s.config.ShowRunningTests && !ref.IsSubTest() && !ref.IsPackage():
 			line = gostd.FormatPackageLine(s.config.RunningState, ref.String(true), 0, nil, "", s.style, false, s.config.PackageNameWidth)
 		}

@@ -122,3 +122,25 @@ func TestAddFailingSubtest(t *testing.T) {
 		})
 	}
 }
+
+func TestParallel(t *testing.T) {
+
+	testCases := []struct {
+		name string
+		amt  time.Duration
+	}{
+		{"sleep a little", 1},
+		{"sleep just a little", 1},
+		{"sleep some more", 2},
+		{"sleep some more now", 2},
+		{"sleep even more now!", 3},
+		{"sleep a lot more", 4},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			time.Sleep(tt.amt * time.Second)
+		})
+	}
+}

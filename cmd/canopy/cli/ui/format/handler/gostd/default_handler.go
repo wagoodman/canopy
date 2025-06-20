@@ -183,6 +183,14 @@ func hasRunMarking(output string) bool {
 	return strings.HasPrefix(strings.TrimSpace(output), "=== RUN")
 }
 
+func hasContinueMarking(output string) bool {
+	return strings.HasPrefix(strings.TrimSpace(output), "=== CONT")
+}
+
+func hasPauseMarking(output string) bool {
+	return strings.HasPrefix(strings.TrimSpace(output), "=== PAUSE")
+}
+
 func hasFailedTestMarking(output string) bool {
 	return strings.HasPrefix(strings.TrimSpace(output), "--- FAIL:")
 }
@@ -457,7 +465,7 @@ func formatFailedTest(s string, st style.GoStd) string {
 
 	// apply styles to all sections
 
-	before = strings.Replace(before, "--- FAIL:", "--- "+st.Failed.Render("FAIL")+":", 1)
+	before = strings.Replace(before, "--- FAIL:", st.Aux.Render("─── ")+st.Failed.Render("FAIL")+" ", 1)
 
 	if aux != "" {
 		aux = st.Aux.Render(aux)
