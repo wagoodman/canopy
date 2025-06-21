@@ -97,7 +97,7 @@ func (m *Model) onSelect(cfg gotest.RunnerConfig, refs []gotest.Reference) error
 	for _, e := range events {
 		err := m.viewModel.OnGoTestEvent(e)
 		if err != nil {
-			if !errors.Is(err, gopp.ErrPackageComplete) {
+			if !errors.Is(err, handler.ErrPackageComplete) {
 				return err
 			}
 		}
@@ -128,9 +128,9 @@ func newViewModel(userArgs []string) viewModel {
 			},
 		)
 	} else {
-		hnd = gopp.NewDefaultHandler(
+		hnd = gopp.NewQuietHandler(
 			&sb,
-			gopp.DefaultPackageConfig{
+			gopp.QuietPackageConfig{
 				Color:            true,
 				PackageNameWidth: 50,
 				IDE:              ide.Select(&ide.OSEnvironmentGetter{}),
@@ -138,7 +138,7 @@ func newViewModel(userArgs []string) viewModel {
 		)
 	}
 
-	h := gopp.NewMultiPackageHandler(
+	h := handler.NewMultiPackageHandler(
 		func(_ gotest.Reference, _ io.Writer) handler.Handler {
 			return hnd
 		},

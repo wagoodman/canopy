@@ -23,10 +23,7 @@ import (
 	"github.com/anchore/clio"
 )
 
-func NewGoPPUI(testPkgs *golist.PackageCollection, json bool, cfg Config) clio.UI {
-	if json {
-		return newJSONGoPPUI(cfg)
-	}
+func NewGoPPUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	if cfg.IsTTY && cfg.Writer == nil {
 		if cfg.Verbose > 0 {
 			return newVerboseDynamicGoPPUI(testPkgs, cfg)
@@ -65,7 +62,7 @@ func newVerboseDynamicGoPPUI(testPkgs *golist.PackageCollection, cfg Config) cli
 			Color:                       cfg.Color,
 			IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
 			HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
-			HideExecutionTestEvents:     !cfg.ShowExecutionTestEvents,
+			HideExecutionTestEvents:     true,
 		},
 	)
 
@@ -120,7 +117,7 @@ func newDefaultDynamicGoPPUI(testPkgs *golist.PackageCollection, cfg Config) cli
 
 	spin := syncspinner.New()
 
-	pkgConfig := gopp.DefaultPackageConfig{
+	pkgConfig := gopp.QuietPackageConfig{
 		PackageNameWidth:            maxPkgName,
 		Color:                       cfg.Color,
 		IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
@@ -138,7 +135,7 @@ func newDefaultDynamicGoPPUI(testPkgs *golist.PackageCollection, cfg Config) cli
 				return gopp.FormatPackageLine(common.Spinner.View, ref.Package, len(completed), []string{elapsed.String()}, "", sty, false, maxPkgName)
 			},
 			func(writer io.Writer, ref gotest.Reference) goref.Reactor {
-				return gopp.NewDefaultPackage(writer, pkgConfig, ref)
+				return gopp.NewQuietPackage(writer, pkgConfig, ref)
 			},
 		)
 	}
@@ -182,25 +179,6 @@ func newDefaultDynamicGoPPUI(testPkgs *golist.PackageCollection, cfg Config) cli
 	return NewTeaUI(c)
 }
 
-func newJSONGoPPUI(cfg Config) clio.UI {
-	var handler partybus.Handler
-	var reportWriter io.WriteCloser
-	if cfg.Writer != nil {
-		reportWriter = cfg.Writer
-	} else {
-		reportWriter = os.Stdout
-	}
-
-	handler = gopp.NewJSONHandler(reportWriter)
-	ux := newSimpleUI().
-		withNotifications().
-		withReports().
-		withHandlers(handler).
-		withStdout(reportWriter)
-
-	return ux
-}
-
 func newSafeGoPPUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	var handler partybus.Handler
 	var writeToStderr bool
@@ -233,13 +211,13 @@ func newSafeGoPPUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 				Color:                       cfg.Color,
 				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
 				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
-				HideExecutionTestEvents:     !cfg.ShowExecutionTestEvents,
+				HideExecutionTestEvents:     true,
 			},
 		)
 	default:
-		handler = gopp.NewDefaultHandler(
+		handler = gopp.NewQuietHandler(
 			reportWriter,
-			gopp.DefaultPackageConfig{
+			gopp.QuietPackageConfig{
 				PackageNameWidth:            maxPkgName,
 				Color:                       cfg.Color,
 				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),

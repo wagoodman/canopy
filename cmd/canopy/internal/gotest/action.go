@@ -31,3 +31,12 @@ func ParseAction(s string) Action {
 	}
 	return UnknownAction
 }
+
+func (a Action) Completed() bool {
+	switch a {
+	case PassAction, FailAction, SkipAction:
+		return true
+	default:
+		return false
+	}
+}

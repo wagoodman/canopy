@@ -3,6 +3,7 @@ package gopp
 import (
 	"errors"
 	"fmt"
+	error2 "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"strings"
 	"testing"
 
@@ -26,7 +27,7 @@ func TestDefaultHandler(t *testing.T) {
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			sb := strings.Builder{}
-			cfg := DefaultPackageConfig{
+			cfg := QuietPackageConfig{
 				Color:            false,
 				PackageNameWidth: 150,
 			}
@@ -35,11 +36,11 @@ func TestDefaultHandler(t *testing.T) {
 				t.Run(fmt.Sprintf("hide-no-tests=%v", b), func(t *testing.T) {
 					cfg.HidePackagesWithNoTestFiles = b
 
-					subject := NewDefaultHandler(&sb, cfg)
+					subject := NewQuietHandler(&sb, cfg)
 					events := fixtureEvents(t, tt.fixture)
 					for e := range events {
 						err := subject.OnGoTestEvent(e)
-						if errors.Is(err, ErrPackageComplete) {
+						if errors.Is(err, error2.ErrPackageComplete) {
 							// this one is OK to ignore
 							continue
 						}
@@ -90,15 +91,15 @@ func TestDefaultPackage(t *testing.T) {
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			sb := strings.Builder{}
-			cfg := DefaultPackageConfig{
+			cfg := QuietPackageConfig{
 				Color:            false,
 				PackageNameWidth: 150,
 			}
-			subject := NewDefaultPackage(&sb, cfg, tt.ref)
+			subject := NewQuietPackage(&sb, cfg, tt.ref)
 			events := fixtureEvents(t, tt.fixture)
 			for e := range events {
 				err := subject.OnGoTestEvent(e)
-				if errors.Is(err, ErrPackageComplete) {
+				if errors.Is(err, error2.ErrPackageComplete) {
 					// this one is OK to ignore
 					continue
 				}

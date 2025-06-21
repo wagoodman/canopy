@@ -1,10 +1,9 @@
-package gopp
+package handler
 
 import (
 	"bytes"
 	"strings"
 
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
@@ -14,14 +13,14 @@ import (
 
 type multiPackageHandler struct {
 	order    []string
-	packages map[string]handler.Handler
+	packages map[string]Handler
 	factory  PackageHandlerFactory
 	writer   *bytes.Buffer
 }
 
-func NewMultiPackageHandler(factory PackageHandlerFactory) handler.Handler {
+func NewMultiPackageHandler(factory PackageHandlerFactory) Handler {
 	return &multiPackageHandler{
-		packages: make(map[string]handler.Handler),
+		packages: make(map[string]Handler),
 		factory:  factory,
 		writer:   &bytes.Buffer{},
 	}

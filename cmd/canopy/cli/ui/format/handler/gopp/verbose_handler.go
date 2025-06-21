@@ -30,7 +30,7 @@ type VerbosePackageConfig struct {
 }
 
 func NewVerboseHandler(writer io.Writer, config VerbosePackageConfig) handler.Handler {
-	return newPackageHandler(
+	return handler.NewPackageHandler(
 		func(ref gotest.Reference, writer io.Writer) handler.Handler {
 			return NewVerbosePackage(writer, config, ref)
 		}, writer)
@@ -64,7 +64,7 @@ func NewVerbosePackage(writer io.Writer, config VerbosePackageConfig, ref gotest
 	}
 }
 
-func (n *VerbosePackage) Handle(e partybus.Event) error {
+func (h *VerbosePackage) Handle(e partybus.Event) error {
 	switch e.Type {
 	case event.GoTestType:
 		goTestEvent, err := parser.ParseGoTestType(e)
@@ -73,50 +73,50 @@ func (n *VerbosePackage) Handle(e partybus.Event) error {
 			return nil
 		}
 
-		return n.OnGoTestEvent(goTestEvent)
+		return h.OnGoTestEvent(goTestEvent)
 	}
 	return nil
 }
 
-func (n *VerbosePackage) String() string {
-	return n.buffer.String()
+func (h *VerbosePackage) String() string {
+	return h.buffer.String()
 }
 
-func (n *VerbosePackage) OnGoTestEvent(e gotest.Event) error {
-	if e.Reference.Package != n.pkg {
+func (h *VerbosePackage) OnGoTestEvent(e gotest.Event) error {
+	if e.Reference.Package != h.pkg {
 		return nil
 	}
 
-	if e.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) && n.config.HidePackagesWithNoTestFiles {
+	if e.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) && h.config.HidePackagesWithNoTestFiles {
 		return nil
 	}
 
 	if hasPanicMarking(e.Output) {
-		n.panic[e.Reference] = true
+		h.panic[e.Reference] = true
 	}
 
 	if e.Action == gotest.OutputAction {
 		if !e.Reference.IsPackage() {
 			trimmedOutput := strings.TrimSpace(e.Output)
-			if n.lastOutputRef == nil || *n.lastOutputRef != e.Reference {
+			if h.lastOutputRef == nil || *h.lastOutputRef != e.Reference {
 				hasEqualMarker := strings.HasPrefix(trimmedOutput, "===")
 				hasDashMarker := strings.HasPrefix(trimmedOutput, "---")
 				if !hasEqualMarker && !hasDashMarker {
-					out := n.style.Aux.Render(fmt.Sprintf("%s  %s", "═══ NAME", e.Reference.TestName(true)))
-					_, err := fmt.Fprint(n.writer, out+"\n")
+					out := h.style.Aux.Render(fmt.Sprintf("%s  %s", "═══ NAME", e.Reference.TestName(true)))
+					_, err := fmt.Fprint(h.writer, out+"\n")
 					if err != nil {
 						return err
 					}
 				}
-				n.lastOutputRef = &e.Reference
+				h.lastOutputRef = &e.Reference
 			}
 		}
 
-		var writer io.Writer = n.buffer
-		if !n.funcRefConcluded(e.Reference) {
-			writer = n.writer
+		var writer io.Writer = h.buffer
+		if !h.funcRefConcluded(e.Reference) {
+			writer = h.writer
 		}
-		_, err := fmt.Fprint(writer, n.renderOutput(e))
+		_, err := fmt.Fprint(writer, h.renderOutput(e))
 
 		return err
 	}
@@ -129,65 +129,65 @@ func (n *VerbosePackage) OnGoTestEvent(e gotest.Event) error {
 	case gotest.PassAction, gotest.SkipAction, gotest.FailAction:
 		funcRef := e.Reference.FuncRef()
 		if funcRef != nil {
-			n.funcConcluded[*funcRef] = struct{}{}
+			h.funcConcluded[*funcRef] = struct{}{}
 		}
-		_, err := fmt.Fprint(n.writer, n.buffer.String())
+		_, err := fmt.Fprint(h.writer, h.buffer.String())
 		if err != nil {
 			return err
 		}
-		return ErrPackageComplete
+		return handler.ErrPackageComplete
 	}
 
 	return nil
 }
 
-func (n *VerbosePackage) funcRefConcluded(ref gotest.Reference) bool {
+func (h *VerbosePackage) funcRefConcluded(ref gotest.Reference) bool {
 	funcRef := ref.FuncRef()
 	if funcRef != nil {
-		if _, exists := n.funcConcluded[*funcRef]; exists {
+		if _, exists := h.funcConcluded[*funcRef]; exists {
 			return true
 		}
 	}
 	return false
 }
 
-func (n *VerbosePackage) renderOutput(e gotest.Event) string {
+func (h *VerbosePackage) renderOutput(e gotest.Event) string {
 	if e.Reference.IsPackage() {
-		return n.formatPackage(e)
+		return h.formatPackage(e)
 	}
-	return n.format(e)
+	return h.format(e)
 }
 
-func (n *VerbosePackage) formatPackage(e gotest.Event) string {
+func (h *VerbosePackage) formatPackage(e gotest.Event) string {
 	if hasFailedPackageMarking(e.Output) || hasPassedPackageMarking(e.Output) || hasUnknownPackageMarking(e.Output) || hasPassMarking(e.Output) {
-		return parseAndFormatPackageLine(e.Output, n.style, n.config.PackageNameWidth)
+		return parseAndFormatPackageLine(e.Output, h.style, h.config.PackageNameWidth)
 	}
 	if hasPackageCoverageMarking(e.Output) {
 		// withhold this until you are showing the final package output
-		n.packageCoverage[e.Reference] = e.Output
+		h.packageCoverage[e.Reference] = e.Output
 		return ""
 	}
 	return e.Output
 }
 
-func (n *VerbosePackage) format(e gotest.Event) string {
-	if n.panic[e.Reference] {
-		return formatPanic(e.Output, n.style)
+func (h *VerbosePackage) format(e gotest.Event) string {
+	if h.panic[e.Reference] {
+		return formatPanic(e.Output, h.style)
 	}
 	if hasFailedTestMarking(e.Output) {
-		return formatFailedTest(e.Output, n.style)
+		return formatFailedTest(e.Output, h.style)
 	}
 	if hasTestPassMarking(e.Output) {
-		return formatPassedTest(e.Output, n.style)
+		return formatPassedTest(e.Output, h.style)
 	}
 	if hasTestStartMarking(e.Output) || hasContinueMarking(e.Output) || hasPauseMarking(e.Output) {
-		if n.config.HideExecutionTestEvents {
+		if h.config.HideExecutionTestEvents {
 			return ""
 		}
-		return formatTestExecutionMark(e.Output, n.style)
+		return formatTestExecutionMark(e.Output, h.style)
 	}
 	if isLogLine(e.Output) {
-		return formatLogLine(e.PackageDirPath, e.Output, n.style, n.config.IDE)
+		return formatLogLine(e.PackageDirPath, e.Output, h.style, h.config.IDE)
 	}
 	return e.Output
 }

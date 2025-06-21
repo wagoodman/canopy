@@ -1,4 +1,4 @@
-package gopp
+package json
 
 import (
 	"fmt"
@@ -10,17 +10,17 @@ import (
 	"github.com/wagoodman/go-partybus"
 )
 
-type jsonHandler struct {
+type handler struct {
 	writer io.Writer
 }
 
-func NewJSONHandler(writer io.Writer) partybus.Handler {
-	return jsonHandler{
+func NewHandler(writer io.Writer) partybus.Handler {
+	return handler{
 		writer: writer,
 	}
 }
 
-func (n jsonHandler) Handle(e partybus.Event) error {
+func (n handler) Handle(e partybus.Event) error {
 	switch e.Type {
 	case event.GoTestType:
 		goTestEvent, err := parser.ParseGoTestType(e)

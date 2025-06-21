@@ -21,28 +21,28 @@ import (
 )
 
 var (
-	_ handler.Handler  = (*DefaultPackage)(nil)
-	_ partybus.Handler = (*DefaultPackage)(nil)
-	_ fmt.Stringer     = (*DefaultPackage)(nil)
+	_ handler.Handler  = (*QuietPackage)(nil)
+	_ partybus.Handler = (*QuietPackage)(nil)
+	_ fmt.Stringer     = (*QuietPackage)(nil)
 )
 
-type DefaultPackageConfig struct {
+type QuietPackageConfig struct {
 	Color                       bool
 	PackageNameWidth            int
 	IDE                         ide.Context
 	HidePackagesWithNoTestFiles bool
 }
 
-func NewDefaultHandler(writer io.Writer, config DefaultPackageConfig) handler.Handler {
-	return newPackageHandler(
+func NewQuietHandler(writer io.Writer, config QuietPackageConfig) handler.Handler {
+	return handler.NewPackageHandler(
 		func(ref gotest.Reference, writer io.Writer) handler.Handler {
-			return NewDefaultPackage(writer, config, ref)
+			return NewQuietPackage(writer, config, ref)
 		}, writer)
 }
 
-type DefaultPackage struct {
+type QuietPackage struct {
 	writer          io.Writer
-	config          DefaultPackageConfig
+	config          QuietPackageConfig
 	style           style.Go
 	pkg             string
 	events          []gotest.Event
@@ -51,8 +51,8 @@ type DefaultPackage struct {
 	packageCoverage map[gotest.Reference]string
 }
 
-func NewDefaultPackage(writer io.Writer, config DefaultPackageConfig, ref gotest.Reference) *DefaultPackage {
-	return &DefaultPackage{
+func NewQuietPackage(writer io.Writer, config QuietPackageConfig, ref gotest.Reference) *QuietPackage {
+	return &QuietPackage{
 		writer:          writer,
 		config:          config,
 		style:           style.NewGo(config.Color),
@@ -63,7 +63,7 @@ func NewDefaultPackage(writer io.Writer, config DefaultPackageConfig, ref gotest
 	}
 }
 
-func (n *DefaultPackage) Handle(e partybus.Event) error {
+func (h *QuietPackage) Handle(e partybus.Event) error {
 	switch e.Type {
 	case event.GoTestType:
 		goTestEvent, err := parser.ParseGoTestType(e)
@@ -72,47 +72,47 @@ func (n *DefaultPackage) Handle(e partybus.Event) error {
 			return nil
 		}
 
-		return n.OnGoTestEvent(goTestEvent)
+		return h.OnGoTestEvent(goTestEvent)
 	}
 	return nil
 }
 
-func (n *DefaultPackage) OnGoTestEvent(e gotest.Event) error {
-	if e.Reference.Package != n.pkg {
+func (h *QuietPackage) OnGoTestEvent(e gotest.Event) error {
+	if e.Reference.Package != h.pkg {
 		return nil
 	}
 
 	isPkg := e.Reference.IsPackage()
 
 	if hasFailedTestMarking(e.Output) {
-		n.resultEvent[e.Reference] = e
+		h.resultEvent[e.Reference] = e
 	} else {
-		n.events = append(n.events, e)
+		h.events = append(h.events, e)
 	}
 
 	switch e.Action {
 	case gotest.FailAction:
-		n.failedRefs[e.Reference] = struct{}{}
+		h.failedRefs[e.Reference] = struct{}{}
 		fallthrough
 	case gotest.PassAction, gotest.SkipAction:
 		if isPkg {
-			n.render(n.writer)
-			return ErrPackageComplete
+			h.render(h.writer)
+			return handler.ErrPackageComplete
 		}
 	}
 	return nil
 }
 
-func (n *DefaultPackage) String() string {
+func (h *QuietPackage) String() string {
 	sb := strings.Builder{}
-	n.render(&sb)
+	h.render(&sb)
 	return sb.String()
 }
 
-func (n *DefaultPackage) render(writer io.Writer) { //nolint: gocognit
+func (h *QuietPackage) render(writer io.Writer) { //nolint: gocognit
 	panicRefs := make(map[gotest.Reference]bool)
-	for _, e := range n.events {
-		if !e.Reference.IsPackage() && !n.isFailedReference(e.Reference) {
+	for _, e := range h.events {
+		if !e.Reference.IsPackage() && !h.isFailedReference(e.Reference) {
 			continue
 		}
 
@@ -123,7 +123,7 @@ func (n *DefaultPackage) render(writer io.Writer) { //nolint: gocognit
 		switch e.Action {
 		case gotest.RunAction:
 			// replace with the eventual result
-			resultEvent, ok := n.resultEvent[e.Reference]
+			resultEvent, ok := h.resultEvent[e.Reference]
 			if !ok {
 				// TODO, not great
 				log.Warnf("no result found for test: %s", e.Reference)
@@ -133,9 +133,9 @@ func (n *DefaultPackage) render(writer io.Writer) { //nolint: gocognit
 			if strings.TrimSpace(resultEvent.Output) == "" {
 				continue
 			}
-			fmt.Fprint(writer, n.renderOutput(resultEvent, panicRefs[e.Reference]))
+			fmt.Fprint(writer, h.renderOutput(resultEvent, panicRefs[e.Reference]))
 		default:
-			if e.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) && n.config.HidePackagesWithNoTestFiles {
+			if e.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) && h.config.HidePackagesWithNoTestFiles {
 				continue
 			}
 			if hasRunMarking(e.Output) || hasPassMarking(e.Output) {
@@ -150,7 +150,7 @@ func (n *DefaultPackage) render(writer io.Writer) { //nolint: gocognit
 				continue
 			}
 
-			out := n.renderOutput(e, panicRefs[e.Reference])
+			out := h.renderOutput(e, panicRefs[e.Reference])
 			if out != "" {
 				fmt.Fprint(writer, out)
 			}
@@ -158,8 +158,8 @@ func (n *DefaultPackage) render(writer io.Writer) { //nolint: gocognit
 	}
 }
 
-func (n *DefaultPackage) isFailedReference(ref gotest.Reference) bool {
-	_, ok := n.failedRefs[ref]
+func (h *QuietPackage) isFailedReference(ref gotest.Reference) bool {
+	_, ok := h.failedRefs[ref]
 	return ok
 }
 
@@ -218,35 +218,35 @@ func isLogLine(output string) bool {
 	return logLinePattern.MatchString(output)
 }
 
-func (n *DefaultPackage) renderOutput(e gotest.Event, isPanic bool) string {
+func (h *QuietPackage) renderOutput(e gotest.Event, isPanic bool) string {
 	if e.Reference.IsPackage() {
-		return n.formatPackage(e)
+		return h.formatPackage(e)
 	}
 
 	var out string
 	if isPanic {
-		out = formatPanic(e.Output, n.style)
+		out = formatPanic(e.Output, h.style)
 	} else {
-		out = n.format(e)
+		out = h.format(e)
 	}
 
 	// indent
 	return strings.Repeat("    ", strings.Count(e.Reference.TestName(false), "/")) + out
 }
 
-func (n *DefaultPackage) formatPackage(e gotest.Event) string {
+func (h *QuietPackage) formatPackage(e gotest.Event) string {
 	if hasFailedPackageMarking(e.Output) || hasPassedPackageMarking(e.Output) || hasUnknownPackageMarking(e.Output) {
-		return parseAndFormatPackageLine(e.Output, n.style, n.config.PackageNameWidth)
+		return parseAndFormatPackageLine(e.Output, h.style, h.config.PackageNameWidth)
 	}
 	return e.Output
 }
 
-func (n *DefaultPackage) format(e gotest.Event) string {
+func (h *QuietPackage) format(e gotest.Event) string {
 	if hasFailedTestMarking(e.Output) {
-		return formatFailedTest(e.Output, n.style)
+		return formatFailedTest(e.Output, h.style)
 	}
 	if isLogLine(e.Output) {
-		return formatLogLine(e.PackageDirPath, e.Output, n.style, n.config.IDE)
+		return formatLogLine(e.PackageDirPath, e.Output, h.style, h.config.IDE)
 	}
 	return e.Output
 }

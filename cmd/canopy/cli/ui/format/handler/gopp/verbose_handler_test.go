@@ -3,6 +3,7 @@ package gopp
 import (
 	"errors"
 	"fmt"
+	error2 "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,7 +42,7 @@ func TestVerboseHandler(t *testing.T) {
 					events := fixtureEvents(t, tt.fixture)
 					for e := range events {
 						err := subject.OnGoTestEvent(e)
-						if errors.Is(err, ErrPackageComplete) {
+						if errors.Is(err, error2.ErrPackageComplete) {
 							// this one is OK to ignore
 							continue
 						}
@@ -100,7 +101,7 @@ func TestVerbosePackage(t *testing.T) {
 			events := fixtureEvents(t, tt.fixture)
 			for e := range events {
 				err := subject.OnGoTestEvent(e)
-				if errors.Is(err, ErrPackageComplete) {
+				if errors.Is(err, error2.ErrPackageComplete) {
 					// this one is OK to ignore
 					continue
 				}
