@@ -61,6 +61,7 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	//} else {
 	handler = gostd.NewHandler(
 		reportWriter,
+		cfg.Verbose > 0,
 		gostd.PackageConfig{
 			PackageNameWidth:            maxPkgName,
 			Color:                       cfg.Color,
@@ -138,6 +139,7 @@ func newSafeGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	//} else {
 	handler = gostd.NewHandler(
 		reportWriter,
+		cfg.Verbose > 0,
 		gostd.PackageConfig{
 			PackageNameWidth:            maxPkgName,
 			Color:                       cfg.Color,

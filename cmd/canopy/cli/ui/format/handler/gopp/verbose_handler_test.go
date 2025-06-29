@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	error2 "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"os"
 	"path/filepath"
 	"strings"
@@ -138,7 +139,7 @@ func TestHasTestPassMarking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.output, func(t *testing.T) {
-			result := hasTestPassMarking(tt.output)
+			result := output.HasTestPassMarking(tt.output)
 			assert.Equal(t, tt.expected, result, "Output: %q", tt.output)
 		})
 	}
@@ -159,7 +160,7 @@ func TestHasTestStartMarking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.output, func(t *testing.T) {
-			result := hasTestStartMarking(tt.output)
+			result := output.HasTestStartMarking(tt.output)
 			assert.Equal(t, tt.expected, result, "Output: %q", tt.output)
 		})
 	}

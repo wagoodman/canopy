@@ -1,0 +1,69 @@
+package output
+
+import (
+	"regexp"
+	"strings"
+)
+
+var (
+	logLinePattern = regexp.MustCompile(`^\s*\S+.go:\d+:`)
+	timePattern    = regexp.MustCompile(`^\d+\.?\d*\S+$`)
+)
+
+func IsLogLine(output string) bool {
+	// match regex for a line like this:
+	//    palindrome_test.go:51: th
+	return logLinePattern.MatchString(output)
+}
+
+func HasTestPassMarking(output string) bool {
+	return strings.HasPrefix(strings.TrimSpace(output), "--- PASS:")
+}
+
+func HasTestStartMarking(output string) bool {
+	return strings.HasPrefix(output, "=== RUN")
+}
+
+func HasPackageCoverageMarking(output string) bool {
+	return strings.HasPrefix(strings.TrimSpace(output), "coverage:")
+}
+
+func HasPassedPackageMarking(output string) bool {
+	return strings.HasPrefix(output, "ok")
+}
+
+func HasUnknownPackageMarking(output string) bool {
+	return strings.HasPrefix(output, "?") || strings.HasPrefix(output, "\t")
+}
+
+func HasPassMarking(output string) bool {
+	return strings.HasPrefix(strings.TrimSpace(output), "PASS")
+}
+
+func HasRunMarking(output string) bool {
+	return strings.HasPrefix(strings.TrimSpace(output), "=== RUN")
+}
+
+func HasContinueMarking(output string) bool {
+	return strings.HasPrefix(strings.TrimSpace(output), "=== CONT")
+}
+
+func HasPauseMarking(output string) bool {
+	return strings.HasPrefix(strings.TrimSpace(output), "=== PAUSE")
+}
+
+func HasFailedTestMarking(output string) bool {
+	return strings.HasPrefix(strings.TrimSpace(output), "--- FAIL:")
+}
+
+func HasFailedPackageMarking(output string) bool {
+	return strings.HasPrefix(output, "FAIL")
+}
+
+func HasPanicMarking(output string) bool {
+	return strings.HasPrefix(output, "panic:")
+}
+
+func HasTimeMarker(output string) bool {
+	return timePattern.MatchString(strings.TrimSpace(output))
+}

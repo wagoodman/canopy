@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	error2 "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"strings"
 	"testing"
 
@@ -129,7 +130,7 @@ func TestHasPackageCoverageMarking(t *testing.T) {
 	for _, tt := range tests {
 
 		t.Run(tt.output, func(t *testing.T) {
-			result := hasPackageCoverageMarking(tt.output)
+			result := output.HasPackageCoverageMarking(tt.output)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -148,7 +149,7 @@ func TestHasPassedPackageMarking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.output, func(t *testing.T) {
-			result := hasPassedPackageMarking(tt.output)
+			result := output.HasPassedPackageMarking(tt.output)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -167,7 +168,7 @@ func TestHasUnknownPackageMarking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.output, func(t *testing.T) {
-			result := hasUnknownPackageMarking(tt.output)
+			result := output.HasUnknownPackageMarking(tt.output)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -187,7 +188,7 @@ func TestHasPassMarking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.output, func(t *testing.T) {
-			result := hasPassMarking(tt.output)
+			result := output.HasPassMarking(tt.output)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -207,7 +208,7 @@ func TestHasRunMarking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.output, func(t *testing.T) {
-			result := hasRunMarking(tt.output)
+			result := output.HasRunMarking(tt.output)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -227,7 +228,7 @@ func TestHasFailedTestMarking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.output, func(t *testing.T) {
-			result := hasFailedTestMarking(tt.output)
+			result := output.HasFailedTestMarking(tt.output)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -246,7 +247,7 @@ func TestHasFailedPackageMarking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.output, func(t *testing.T) {
-			result := hasFailedPackageMarking(tt.output)
+			result := output.HasFailedPackageMarking(tt.output)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -267,7 +268,7 @@ func TestIsLogLine(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.output, func(t *testing.T) {
-			result := isLogLine(tt.output)
+			result := output.IsLogLine(tt.output)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

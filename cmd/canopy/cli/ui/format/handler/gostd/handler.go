@@ -6,6 +6,7 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
@@ -22,13 +23,14 @@ var (
 )
 
 type testResult struct {
-	Reference gotest.Reference
-	Action    gotest.Action
-	Start     time.Time
-	End       *time.Time
-	Output    []string
-	Children  []*testResult
-	Parent    *testResult
+	Reference        gotest.Reference
+	Action           gotest.Action
+	Start            time.Time
+	End              *time.Time
+	InfoOutputEvents []gotest.Event // '===' output lines for this test
+	OutputEvents     []gotest.Event
+	Children         []*testResult
+	Parent           *testResult
 }
 
 type packageState struct {
@@ -50,14 +52,18 @@ type PackageConfig struct {
 
 type testHandler struct {
 	writer       io.Writer
+	verbose      bool
 	packages     map[string]*packageState
 	packageOrder []string
+	panic        map[gotest.Reference]bool
 }
 
-func NewHandler(writer io.Writer, config PackageConfig) handler.Handler {
+func NewHandler(writer io.Writer, verbose bool, config PackageConfig) handler.Handler {
 	return &testHandler{
 		writer:   writer,
+		verbose:  verbose,
 		packages: make(map[string]*packageState),
+		panic:    make(map[gotest.Reference]bool),
 	}
 }
 
@@ -75,11 +81,15 @@ func (h *testHandler) Handle(e partybus.Event) error {
 	return nil
 }
 
-func (h *testHandler) OnGoTestEvent(event gotest.Event) error {
-	packageName := event.Reference.Package
+func (h *testHandler) OnGoTestEvent(e gotest.Event) error {
+	packageName := e.Reference.Package
 	pkg := h.packages[packageName]
 
-	switch event.Action {
+	if output.HasPanicMarking(e.Output) {
+		h.panic[e.Reference] = true
+	}
+
+	switch e.Action {
 	case gotest.StartAction:
 		if _, exists := h.packages[packageName]; !exists {
 			h.packages[packageName] = &packageState{
@@ -91,20 +101,18 @@ func (h *testHandler) OnGoTestEvent(event gotest.Event) error {
 		}
 
 	case gotest.RunAction:
-
-		if event.Reference.FuncName != "" {
+		if e.Reference.FuncName != "" {
 			test := &testResult{
-				Reference: event.Reference,
-				Output:    []string{},
-				Start:     event.Time,
+				Reference: e.Reference,
+				Start:     e.Time,
 			}
-			pkg.Tests[event.Reference] = test
+			pkg.Tests[e.Reference] = test
 
 			// determine parent-child relationships
-			if !event.Reference.IsSubTest() {
+			if !e.Reference.IsSubTest() {
 				pkg.TopLevel = append(pkg.TopLevel, test)
 			} else {
-				parentRef := event.Reference.ParentRef()
+				parentRef := e.Reference.ParentRef()
 				if parentRef != nil {
 					if parent, exists := pkg.Tests[*parentRef]; exists {
 						test.Parent = parent
@@ -115,28 +123,33 @@ func (h *testHandler) OnGoTestEvent(event gotest.Event) error {
 		}
 
 	case gotest.OutputAction:
-		if event.Reference.FuncName != "" {
-			if test, exists := pkg.Tests[event.Reference]; exists {
-				// only store non-RUN output lines
-				if !strings.Contains(event.Output, "=== RUN") {
-					test.Output = append(test.Output, event.Output)
+		if e.Reference.FuncName != "" {
+			if test, exists := pkg.Tests[e.Reference]; exists {
+				if strings.HasPrefix(e.Output, "=== ") {
+					// add === event info to the test that is the function reference
+					funTest := findTestFunction(test)
+					if funTest != nil {
+						funTest.InfoOutputEvents = append(funTest.InfoOutputEvents, e)
+					}
+				} else {
+					test.OutputEvents = append(test.OutputEvents, e)
 				}
 			}
 		} else {
 			// package-level output (like FAIL line)
-			pkg.FinalLines = append(pkg.FinalLines, event.Output)
+			pkg.FinalLines = append(pkg.FinalLines, e.Output)
 		}
 
 	case gotest.PassAction, gotest.FailAction, gotest.SkipAction:
 
-		if event.Reference.FuncName != "" {
-			if test, exists := pkg.Tests[event.Reference]; exists {
-				test.Action = event.Action
-				test.End = &event.Time
+		if e.Reference.FuncName != "" {
+			if test, exists := pkg.Tests[e.Reference]; exists {
+				test.Action = e.Action
+				test.End = &e.Time
 			}
 		} else {
 			// package completed
-			pkg.Action = event.Action
+			pkg.Action = e.Action
 
 			// try to output completed packages in start order
 			h.render()
@@ -146,35 +159,56 @@ func (h *testHandler) OnGoTestEvent(event gotest.Event) error {
 	return nil
 }
 
+func findTestFunction(cur *testResult) *testResult {
+	if cur.Reference.IsPackage() {
+		return nil
+	}
+	if !cur.Reference.IsSubTest() {
+		return cur
+	}
+
+	var last *testResult
+	for cur != nil {
+		if !cur.Reference.IsSubTest() {
+			return cur
+		}
+		if cur.Parent == nil {
+			return last
+		}
+		last = cur
+		cur = cur.Parent
+	}
+	return last
+}
+
 func (h *testHandler) render() {
-	// Find the first uncompleted package in start order
 	for len(h.packageOrder) > 0 {
 		pkgName := h.packageOrder[0]
 		pkg := h.packages[pkgName]
 
 		if !pkg.Action.Completed() {
-			// This package isn't done yet, so we can't output anything after it
+			// this package isn't done yet, so we can't output anything after it
 			break
 		}
 
-		// Output this package
-		h.outputPackageQuiet(pkg)
+		if h.verbose {
+			h.outputPackageVerbose(pkg)
+		} else {
+			h.outputPackageQuiet(pkg)
+		}
 
-		// Remove from the front of the slice to mark as output
 		h.packageOrder = h.packageOrder[1:]
 		delete(h.packages, pkgName)
 	}
 }
 
 func (h *testHandler) outputPackageQuiet(pkg *packageState) {
-	// Only output failed tests and their hierarchy
 	for _, test := range pkg.TopLevel {
 		if h.hasFailure(test) {
 			h.outputTestQuiet(test, 0)
 		}
 	}
 
-	// Output package final lines
 	for _, line := range pkg.FinalLines {
 		fmt.Fprint(h.writer, line)
 	}
@@ -195,7 +229,7 @@ func (h *testHandler) hasFailure(test *testResult) bool {
 func (h *testHandler) outputTestQuiet(test *testResult, indent int) {
 	indentStr := strings.Repeat("    ", indent)
 
-	// Only show failed tests
+	// only show failed tests
 	if test.Action == gotest.FailAction || h.hasFailedChildren(test) {
 		if test.Action != gotest.UnknownAction {
 			status := "PASS"
@@ -207,16 +241,16 @@ func (h *testHandler) outputTestQuiet(test *testResult, indent int) {
 			fmt.Fprintf(h.writer, "%s--- %s: %s (%s)\n", indentStr, status, test.Reference.TestName(true), test.End.Sub(test.Start).Truncate(time.Millisecond))
 		}
 
-		// Output logs only for failed tests
+		// output logs only for failed tests
 		if test.Action == gotest.FailAction {
-			for _, output := range test.Output {
-				if strings.TrimSpace(output) != "" {
-					fmt.Fprintf(h.writer, "%s%s", indentStr, output)
+			for _, e := range test.OutputEvents {
+				if strings.TrimSpace(e.Output) != "" {
+					fmt.Fprintf(h.writer, "%s%s", indentStr, e.Output)
 				}
 			}
 		}
 
-		// Output failed children
+		// output failed children
 		for _, child := range test.Children {
 			if child.Action == gotest.FailAction || h.hasFailedChildren(child) {
 				h.outputTestQuiet(child, indent+1)
@@ -234,8 +268,40 @@ func (h *testHandler) hasFailedChildren(test *testResult) bool {
 	return false
 }
 
+func (h *testHandler) outputPackageVerbose(pkg *packageState) {
+	// output top-level tests in order
+	for _, test := range pkg.TopLevel {
+		h.outputTestVerbose(test, 0)
+	}
+
+	// output package final lines
+	for _, line := range pkg.FinalLines {
+		fmt.Fprint(h.writer, line)
+	}
+}
+
+func (h *testHandler) outputTestVerbose(test *testResult, indent int) {
+
+	for _, infoOutputEvent := range test.InfoOutputEvents {
+		fmt.Fprintf(h.writer, "%s", infoOutputEvent.Output)
+	}
+
+	indentStr := strings.Repeat("    ", indent)
+
+	// output test's own output (logs, errors)
+	for _, e := range test.OutputEvents {
+		if strings.TrimSpace(e.Output) != "" {
+			fmt.Fprintf(h.writer, "%s%s", indentStr, e.Output)
+		}
+	}
+
+	// output children recursively
+	for _, child := range test.Children {
+		h.outputTestVerbose(child, indent+1)
+	}
+}
+
 func (h *testHandler) String() string {
-	// Return any buffered content from incomplete packages
 	var pkgs []string
 	for pkg := range h.packages {
 		pkgs = append(pkgs, pkg)

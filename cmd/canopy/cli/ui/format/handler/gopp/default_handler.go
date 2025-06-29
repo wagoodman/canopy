@@ -2,6 +2,7 @@ package gopp
 
 import (
 	"fmt"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"io"
 	"os"
 	"path/filepath"
@@ -84,7 +85,7 @@ func (h *QuietPackage) OnGoTestEvent(e gotest.Event) error {
 
 	isPkg := e.Reference.IsPackage()
 
-	if hasFailedTestMarking(e.Output) {
+	if output.HasFailedTestMarking(e.Output) {
 		h.resultEvent[e.Reference] = e
 	} else {
 		h.events = append(h.events, e)
@@ -116,7 +117,7 @@ func (h *QuietPackage) render(writer io.Writer) { //nolint: gocognit
 			continue
 		}
 
-		if hasPanicMarking(e.Output) {
+		if output.HasPanicMarking(e.Output) {
 			panicRefs[e.Reference] = true
 		}
 
@@ -138,11 +139,11 @@ func (h *QuietPackage) render(writer io.Writer) { //nolint: gocognit
 			if e.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) && h.config.HidePackagesWithNoTestFiles {
 				continue
 			}
-			if hasRunMarking(e.Output) || hasPassMarking(e.Output) {
+			if output.HasRunMarking(e.Output) || output.HasPassMarking(e.Output) {
 				// skip the run line
 				continue
 			}
-			if hasPackageCoverageMarking(e.Output) {
+			if output.HasPackageCoverageMarking(e.Output) {
 				// skip "coverage:" lines
 				continue
 			}
@@ -163,61 +164,6 @@ func (h *QuietPackage) isFailedReference(ref gotest.Reference) bool {
 	return ok
 }
 
-func hasPackageCoverageMarking(output string) bool {
-	return strings.HasPrefix(strings.TrimSpace(output), "coverage:")
-}
-
-func hasPassedPackageMarking(output string) bool {
-	return strings.HasPrefix(output, "ok")
-}
-
-func hasUnknownPackageMarking(output string) bool {
-	return strings.HasPrefix(output, "?") || strings.HasPrefix(output, "\t")
-}
-
-func hasPassMarking(output string) bool {
-	return strings.HasPrefix(strings.TrimSpace(output), "PASS")
-}
-
-func hasRunMarking(output string) bool {
-	return strings.HasPrefix(strings.TrimSpace(output), "=== RUN")
-}
-
-func hasContinueMarking(output string) bool {
-	return strings.HasPrefix(strings.TrimSpace(output), "=== CONT")
-}
-
-func hasPauseMarking(output string) bool {
-	return strings.HasPrefix(strings.TrimSpace(output), "=== PAUSE")
-}
-
-func hasFailedTestMarking(output string) bool {
-	return strings.HasPrefix(strings.TrimSpace(output), "--- FAIL:")
-}
-
-func hasFailedPackageMarking(output string) bool {
-	return strings.HasPrefix(output, "FAIL")
-}
-
-func hasPanicMarking(output string) bool {
-	return strings.HasPrefix(output, "panic:")
-}
-
-func hasTimeMarker(output string) bool {
-	return timePattern.MatchString(strings.TrimSpace(output))
-}
-
-var (
-	logLinePattern = regexp.MustCompile(`^\s*\S+.go:\d+:`)
-	timePattern    = regexp.MustCompile(`^\d+\.?\d*\S+$`)
-)
-
-func isLogLine(output string) bool {
-	// match regex for a line like this:
-	//    palindrome_test.go:51: th
-	return logLinePattern.MatchString(output)
-}
-
 func (h *QuietPackage) renderOutput(e gotest.Event, isPanic bool) string {
 	if e.Reference.IsPackage() {
 		return h.formatPackage(e)
@@ -235,17 +181,17 @@ func (h *QuietPackage) renderOutput(e gotest.Event, isPanic bool) string {
 }
 
 func (h *QuietPackage) formatPackage(e gotest.Event) string {
-	if hasFailedPackageMarking(e.Output) || hasPassedPackageMarking(e.Output) || hasUnknownPackageMarking(e.Output) {
+	if output.HasFailedPackageMarking(e.Output) || output.HasPassedPackageMarking(e.Output) || output.HasUnknownPackageMarking(e.Output) {
 		return parseAndFormatPackageLine(e.Output, h.style, h.config.PackageNameWidth)
 	}
 	return e.Output
 }
 
 func (h *QuietPackage) format(e gotest.Event) string {
-	if hasFailedTestMarking(e.Output) {
+	if output.HasFailedTestMarking(e.Output) {
 		return formatFailedTest(e.Output, h.style)
 	}
-	if isLogLine(e.Output) {
+	if output.IsLogLine(e.Output) {
 		return formatLogLine(e.PackageDirPath, e.Output, h.style, h.config.IDE)
 	}
 	return e.Output
@@ -256,7 +202,7 @@ func formatPanic(in string, sty style.Go) string {
 	for i, line := range lines {
 		prefix := " "
 		switch {
-		case hasPanicMarking(line):
+		case output.HasPanicMarking(line):
 
 			// split at the first space
 			spaceIdx := strings.Index(line, " ")
@@ -353,13 +299,13 @@ func parseAndFormatPackageLine(s string, st style.Go, maxTestName int) string {
 func FormatPackageLine(status, pkgName string, testsCompleted int, aux []string, trailer string, st style.Go, formatStatus bool, maxTestName int) string {
 	if formatStatus {
 		switch {
-		case hasPassMarking(status):
+		case output.HasPassMarking(status):
 			status = st.Success.Render(status)
-		case hasPassedPackageMarking(status):
+		case output.HasPassedPackageMarking(status):
 			status = st.Success.Render(status)
-		case hasUnknownPackageMarking(status):
+		case output.HasUnknownPackageMarking(status):
 			status = st.Aux.Render(status)
-		case hasFailedPackageMarking(status):
+		case output.HasFailedPackageMarking(status):
 			status = st.Failed.Render(status)
 		}
 	} else if testsCompleted > 0 {
@@ -374,13 +320,13 @@ func FormatPackageLine(status, pkgName string, testsCompleted int, aux []string,
 
 	for i, a := range aux {
 		switch {
-		case hasTimeMarker(a):
+		case output.HasTimeMarker(a):
 			break
 
 		case strings.ContainsAny(a, "(["):
 			// already formatted
 			break
-		case hasPackageCoverageMarking(a):
+		case output.HasPackageCoverageMarking(a):
 			a = strings.ReplaceAll(strings.ReplaceAll(a, "coverage: ", "[")+"]", "of statements", "coverage")
 
 		default:

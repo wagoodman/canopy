@@ -2,6 +2,7 @@ package gopp
 
 import (
 	"fmt"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"io"
 	"strings"
 
@@ -91,7 +92,7 @@ func (h *VerbosePackage) OnGoTestEvent(e gotest.Event) error {
 		return nil
 	}
 
-	if hasPanicMarking(e.Output) {
+	if output.HasPanicMarking(e.Output) {
 		h.panic[e.Reference] = true
 	}
 
@@ -159,10 +160,10 @@ func (h *VerbosePackage) renderOutput(e gotest.Event) string {
 }
 
 func (h *VerbosePackage) formatPackage(e gotest.Event) string {
-	if hasFailedPackageMarking(e.Output) || hasPassedPackageMarking(e.Output) || hasUnknownPackageMarking(e.Output) || hasPassMarking(e.Output) {
+	if output.HasFailedPackageMarking(e.Output) || output.HasPassedPackageMarking(e.Output) || output.HasUnknownPackageMarking(e.Output) || output.HasPassMarking(e.Output) {
 		return parseAndFormatPackageLine(e.Output, h.style, h.config.PackageNameWidth)
 	}
-	if hasPackageCoverageMarking(e.Output) {
+	if output.HasPackageCoverageMarking(e.Output) {
 		// withhold this until you are showing the final package output
 		h.packageCoverage[e.Reference] = e.Output
 		return ""
@@ -174,30 +175,22 @@ func (h *VerbosePackage) format(e gotest.Event) string {
 	if h.panic[e.Reference] {
 		return formatPanic(e.Output, h.style)
 	}
-	if hasFailedTestMarking(e.Output) {
+	if output.HasFailedTestMarking(e.Output) {
 		return formatFailedTest(e.Output, h.style)
 	}
-	if hasTestPassMarking(e.Output) {
+	if output.HasTestPassMarking(e.Output) {
 		return formatPassedTest(e.Output, h.style)
 	}
-	if hasTestStartMarking(e.Output) || hasContinueMarking(e.Output) || hasPauseMarking(e.Output) {
+	if output.HasTestStartMarking(e.Output) || output.HasContinueMarking(e.Output) || output.HasPauseMarking(e.Output) {
 		if h.config.HideExecutionTestEvents {
 			return ""
 		}
 		return formatTestExecutionMark(e.Output, h.style)
 	}
-	if isLogLine(e.Output) {
+	if output.IsLogLine(e.Output) {
 		return formatLogLine(e.PackageDirPath, e.Output, h.style, h.config.IDE)
 	}
 	return e.Output
-}
-
-func hasTestPassMarking(output string) bool {
-	return strings.HasPrefix(strings.TrimSpace(output), "--- PASS:")
-}
-
-func hasTestStartMarking(output string) bool {
-	return strings.HasPrefix(output, "=== RUN")
 }
 
 func formatTestExecutionMark(s string, st style.Go) string {
