@@ -16,13 +16,13 @@ func TestGoStdTestResultSummary_Present(t *testing.T) {
 	cases := []struct {
 		name      string
 		fixture   string
-		presenter GoStdTestResultSummary
+		presenter GoPPTestResultSummary
 	}{
 		{
 			name:    "failing package",
 			fixture: "mixed-verbose.json",
-			presenter: GoStdTestResultSummary{
-				config: GoStdTestResultSummaryConfig{
+			presenter: GoPPTestResultSummary{
+				config: GoPPTestResultSummaryConfig{
 					Color:            false,
 					WriteToStderr:    true,
 					PackageNameWidth: 100,
@@ -34,8 +34,8 @@ func TestGoStdTestResultSummary_Present(t *testing.T) {
 		{
 			name:    "passing package",
 			fixture: "mixed-verbose.json",
-			presenter: GoStdTestResultSummary{
-				config: GoStdTestResultSummaryConfig{
+			presenter: GoPPTestResultSummary{
+				config: GoPPTestResultSummaryConfig{
 					Color:            false,
 					WriteToStderr:    true,
 					PackageNameWidth: 100,
@@ -47,8 +47,8 @@ func TestGoStdTestResultSummary_Present(t *testing.T) {
 		{
 			name:    "panic package",
 			fixture: "panic-verbose.json",
-			presenter: GoStdTestResultSummary{
-				config: GoStdTestResultSummaryConfig{
+			presenter: GoPPTestResultSummary{
+				config: GoPPTestResultSummaryConfig{
 					Color:            false,
 					WriteToStderr:    true,
 					PackageNameWidth: 100,

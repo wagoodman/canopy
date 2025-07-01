@@ -2,7 +2,6 @@ package ui
 
 import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/adapter"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gostd"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/gosummary"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/syncspinner"
@@ -10,7 +9,6 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
-	"github.com/wagoodman/go-partybus"
 	"io"
 	"os"
 
@@ -46,20 +44,7 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	reportReader, reportWriter := readerWriterPair()
 	notificationReader, notificationWriter := readerWriterPair()
 
-	var handler handler.Handler
-	//if cfg.Verbose > 0 {
-	//	handler = gostd.NewVerboseHandler(
-	//		reportWriter,
-	//		gostd.VerbosePackageConfig{
-	//			PackageNameWidth:            maxPkgName,
-	//			Color:                       cfg.Color,
-	//			IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
-	//			HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
-	//			HideExecutionTestEvents:     false,
-	//		},
-	//	)
-	//} else {
-	handler = gostd.NewHandler(
+	h := gostd.NewHandler(
 		reportWriter,
 		cfg.Verbose > 0,
 		gostd.PackageConfig{
@@ -69,17 +54,16 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 			HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
 		},
 	)
-	//}
 
 	ux := newSimpleUI().
 		withNotifications().
 		withReports().
-		withHandlers(handler).
+		withHandlers(h).
 		withStdout(reportWriter).
 		withStderr(notificationWriter)
 
 	summaryHandler := gosummary.NewFactory(
-		presenter.GoStdTestResultSummaryConfig{
+		presenter.GoPPTestResultSummaryConfig{
 			Color:            cfg.Color,
 			PackageNameWidth: maxPkgName,
 			PackageCount:     pkgCount,
@@ -124,20 +108,7 @@ func newSafeGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	}
 	notificationWriter := os.Stderr
 
-	var handler partybus.Handler
-	//if cfg.Verbose > 0 {
-	//	handler = gostd.NewVerboseHandler(
-	//		reportWriter,
-	//		gostd.VerbosePackageConfig{
-	//			PackageNameWidth:            maxPkgName,
-	//			Color:                       cfg.Color,
-	//			IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
-	//			HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
-	//			HideExecutionTestEvents:     false,
-	//		},
-	//	)
-	//} else {
-	handler = gostd.NewHandler(
+	h := gostd.NewHandler(
 		reportWriter,
 		cfg.Verbose > 0,
 		gostd.PackageConfig{
@@ -147,16 +118,15 @@ func newSafeGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 			HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
 		},
 	)
-	//}
 
 	ux := newSimpleUI().
 		withNotifications().
 		withReports().
-		withHandlers(handler).
+		withHandlers(h).
 		withStdout(reportWriter).
 		withStderr(notificationWriter).
 		withHandledPresenters(
-			adapter.NewTestRun(presenter.GoStdTestResultSummaryConfig{
+			adapter.NewTestRun(presenter.GoPPTestResultSummaryConfig{
 				WriteToStderr:    writeToStderr,
 				PackageNameWidth: maxPkgName,
 				PackageCount:     pkgCount,

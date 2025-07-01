@@ -17,7 +17,7 @@ type NotificationEvent struct {
 }
 
 func NewNotificationEvent(e partybus.Event) Presenter {
-	return &NotificationEvent{event: e}
+	return NotificationEvent{event: e}
 }
 
 func (p NotificationEvent) Present(_, stderr io.Writer) error {

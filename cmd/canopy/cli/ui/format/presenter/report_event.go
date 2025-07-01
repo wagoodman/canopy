@@ -16,7 +16,7 @@ type ReportEvent struct {
 }
 
 func NewReportEvent(e partybus.Event) Presenter {
-	return &ReportEvent{event: e}
+	return ReportEvent{event: e}
 }
 
 func (p ReportEvent) Present(stdout, _ io.Writer) error {

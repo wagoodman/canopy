@@ -22,12 +22,12 @@ var (
 )
 
 type Factory struct {
-	config presenter.GoStdTestResultSummaryConfig
+	config presenter.GoPPTestResultSummaryConfig
 	seen   map[uuid.UUID]struct{}
 	common state.Common
 }
 
-func NewFactory(cfg presenter.GoStdTestResultSummaryConfig, common state.Common) *Factory {
+func NewFactory(cfg presenter.GoPPTestResultSummaryConfig, common state.Common) *Factory {
 	return &Factory{
 		config: cfg,
 		seen:   make(map[uuid.UUID]struct{}),
@@ -61,13 +61,13 @@ func (j Factory) Handle(e partybus.Event) ([]tea.Model, tea.Cmd) {
 }
 
 type Model struct {
-	config  presenter.GoStdTestResultSummaryConfig
+	config  presenter.GoPPTestResultSummaryConfig
 	started bool
 	run     gotest.Run
 	common  state.Common
 }
 
-func NewModel(config presenter.GoStdTestResultSummaryConfig, common state.Common, runID uuid.UUID, runCfg gotest.RunnerConfig) *Model {
+func NewModel(config presenter.GoPPTestResultSummaryConfig, common state.Common, runID uuid.UUID, runCfg gotest.RunnerConfig) *Model {
 	run := gotest.NewRun(gotest.RunnerConfig{}) // we only need the cumulative state, not the run config
 	run.Result = *gotest.NewResult(gotest.ResultConfig{
 		TrackFailingOutput: true,

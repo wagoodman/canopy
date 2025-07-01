@@ -3,6 +3,8 @@ package gostd
 import (
 	"fmt"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
@@ -56,14 +58,31 @@ type testHandler struct {
 	packages     map[string]*packageState
 	packageOrder []string
 	panic        map[gotest.Reference]bool
+	formatter    func(gotest.Event, bool) fmt.Stringer
 }
 
 func NewHandler(writer io.Writer, verbose bool, config PackageConfig) handler.Handler {
+	var f func(gotest.Event, bool) fmt.Stringer
+	if verbose {
+		f = presenter.NewGoPPVerboseEventFactory(
+			style.NewGo(config.Color),
+			config.IDE,
+			config.HidePackagesWithNoTestFiles,
+			config.PackageNameWidth,
+		).NewEvent
+	} else {
+		f = presenter.NewGoPPQuietEventFactory(
+			style.NewGo(config.Color),
+			config.IDE,
+			config.PackageNameWidth,
+		).NewEvent
+	}
 	return &testHandler{
-		writer:   writer,
-		verbose:  verbose,
-		packages: make(map[string]*packageState),
-		panic:    make(map[gotest.Reference]bool),
+		writer:    writer,
+		verbose:   verbose,
+		packages:  make(map[string]*packageState),
+		panic:     make(map[gotest.Reference]bool),
+		formatter: f,
 	}
 }
 

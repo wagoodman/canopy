@@ -2,7 +2,6 @@ package presenter
 
 import (
 	"fmt"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gopp"
 	"io"
 	"strings"
 	"time"
@@ -14,7 +13,7 @@ import (
 
 var _ Presenter = (*JestTestResultSummary)(nil)
 
-type GoStdTestResultSummaryConfig struct {
+type GoPPTestResultSummaryConfig struct {
 	Color            bool
 	WriteToStderr    bool
 	PackageNameWidth int
@@ -28,21 +27,21 @@ type GoStdTestResultSummaryConfig struct {
 	ShowRunningSubTests bool
 }
 
-func (c GoStdTestResultSummaryConfig) New(run gotest.Run) Presenter {
-	return GoStdTestResultSummary{
+func (c GoPPTestResultSummaryConfig) New(run gotest.Run) Presenter {
+	return GoPPTestResultSummary{
 		config: c,
 		style:  style.NewGo(c.Color),
 		run:    run,
 	}
 }
 
-type GoStdTestResultSummary struct {
-	config GoStdTestResultSummaryConfig
+type GoPPTestResultSummary struct {
+	config GoPPTestResultSummaryConfig
 	style  style.Go
 	run    gotest.Run
 }
 
-func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error { //nolint:funlen
+func (s GoPPTestResultSummary) Present(stdout, stderr io.Writer) error { //nolint:funlen
 	var w = stdout
 	if s.config.WriteToStderr {
 		w = stderr
@@ -70,7 +69,7 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error { //noli
 	return nil
 }
 
-func (s GoStdTestResultSummary) runningFooter() (string, error) { //nolint:funlen
+func (s GoPPTestResultSummary) runningFooter() (string, error) { //nolint:funlen
 	runningRefs := s.run.Result.ReferencesByAction(gotest.RunAction)
 
 	var lines []string
@@ -79,15 +78,42 @@ func (s GoStdTestResultSummary) runningFooter() (string, error) { //nolint:funle
 		var line string
 		switch {
 		case s.config.ShowRunningPackages && ref.IsPackage():
-			line = gopp.FormatPackageLine(s.config.RunningState, ref.Package, 0, nil, "", s.style, false, s.config.PackageNameWidth)
+			line = Package{
+				Status:         s.config.RunningState,
+				Name:           ref.Package,
+				TestsCompleted: 0,
+				Aux:            nil,
+				Trailer:        "",
+				Style:          s.style,
+				FormatStatus:   false,
+				MaxTestName:    s.config.PackageNameWidth,
+			}.String()
 		case s.config.ShowRunningSubTests && ref.IsSubTest():
 			subtestBranch := "  └── "
 			if i+1 < len(runningRefs) && runningRefs[i+1].IsSubTest() {
 				subtestBranch = "  ├── "
 			}
-			line = gopp.FormatPackageLine("", s.style.Aux.Render(subtestBranch)+ref.SubTestName(true), 0, nil, "", s.style, false, s.config.PackageNameWidth)
+			line = Package{
+				Status:         "",
+				Name:           s.style.Aux.Render(subtestBranch) + ref.SubTestName(true),
+				TestsCompleted: 0,
+				Aux:            nil,
+				Trailer:        "",
+				Style:          s.style,
+				FormatStatus:   false,
+				MaxTestName:    s.config.PackageNameWidth,
+			}.String()
 		case s.config.ShowRunningTests && !ref.IsSubTest() && !ref.IsPackage():
-			line = gopp.FormatPackageLine(s.config.RunningState, ref.String(true), 0, nil, "", s.style, false, s.config.PackageNameWidth)
+			line = Package{
+				Status:         s.config.RunningState,
+				Name:           ref.String(true),
+				TestsCompleted: 0,
+				Aux:            nil,
+				Trailer:        "",
+				Style:          s.style,
+				FormatStatus:   false,
+				MaxTestName:    s.config.PackageNameWidth,
+			}.String()
 		}
 		if line != "" {
 			lines = append(lines, line)
@@ -101,7 +127,7 @@ func (s GoStdTestResultSummary) runningFooter() (string, error) { //nolint:funle
 	return strings.Join(lines, "\n") + "\n", nil
 }
 
-func (s GoStdTestResultSummary) summaryFooter() (string, error) { //nolint:funlen
+func (s GoPPTestResultSummary) summaryFooter() (string, error) { //nolint:funlen
 
 	passed, isRunning := s.run.Result.Passed()
 

@@ -1,13 +1,15 @@
 package output
 
 import (
+	"os"
 	"regexp"
 	"strings"
 )
 
 var (
-	logLinePattern = regexp.MustCompile(`^\s*\S+.go:\d+:`)
-	timePattern    = regexp.MustCompile(`^\d+\.?\d*\S+$`)
+	logLinePattern        = regexp.MustCompile(`^\s*\S+.go:\d+:`)
+	timePattern           = regexp.MustCompile(`^\d+\.?\d*\S+$`)
+	panicGoroutinePattern = regexp.MustCompile(`^goroutine \d+`)
 )
 
 func IsLogLine(output string) bool {
@@ -66,4 +68,16 @@ func HasPanicMarking(output string) bool {
 
 func HasTimeMarker(output string) bool {
 	return timePattern.MatchString(strings.TrimSpace(output))
+}
+
+func IsPanicGoRoutineLine(s string) bool {
+	return panicGoroutinePattern.MatchString(s)
+}
+
+func IsPanicFuncLine(s string) bool {
+	return !strings.HasPrefix(s, "\t") && strings.Contains(s, "(") && strings.Contains(s, ")")
+}
+
+func IsPanicFileLine(s string) bool {
+	return strings.HasPrefix(s, "\t"+string(os.PathSeparator))
 }

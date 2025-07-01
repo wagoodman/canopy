@@ -74,7 +74,7 @@ func newVerboseDynamicGoPPUI(testPkgs *golist.PackageCollection, cfg Config) cli
 		withStderr(notificationWriter)
 
 	summaryHandler := gosummary.NewFactory(
-		presenter.GoStdTestResultSummaryConfig{
+		presenter.GoPPTestResultSummaryConfig{
 			Color:            cfg.Color,
 			PackageNameWidth: maxPkgName,
 			PackageCount:     pkgCount,
@@ -132,7 +132,16 @@ func newDefaultDynamicGoPPUI(testPkgs *golist.PackageCollection, cfg Config) cli
 			common,
 			func(ref gotest.Reference, common state.Common, completed map[gotest.Reference]struct{}, elapsed time.Duration) string {
 				// show the package name, the number of completed tests, the elapsed time + the spinner
-				return gopp.FormatPackageLine(common.Spinner.View, ref.Package, len(completed), []string{elapsed.String()}, "", sty, false, maxPkgName)
+				return presenter.Package{
+					Status:         common.Spinner.View,
+					Name:           ref.Package,
+					TestsCompleted: len(completed),
+					Aux:            []string{elapsed.String()},
+					Trailer:        "",
+					Style:          sty,
+					FormatStatus:   false,
+					MaxTestName:    maxPkgName,
+				}.String()
 			},
 			func(writer io.Writer, ref gotest.Reference) goref.Reactor {
 				return gopp.NewQuietPackage(writer, pkgConfig, ref)
@@ -153,7 +162,7 @@ func newDefaultDynamicGoPPUI(testPkgs *golist.PackageCollection, cfg Config) cli
 	)
 
 	summaryHandler := gosummary.NewFactory(
-		presenter.GoStdTestResultSummaryConfig{
+		presenter.GoPPTestResultSummaryConfig{
 			Color:            cfg.Color,
 			PackageNameWidth: maxPkgName,
 			PackageCount:     pkgCount,
@@ -233,7 +242,7 @@ func newSafeGoPPUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 		withStdout(reportWriter).
 		withStderr(notificationWriter).
 		withHandledPresenters(
-			adapter.NewTestRun(presenter.GoStdTestResultSummaryConfig{
+			adapter.NewTestRun(presenter.GoPPTestResultSummaryConfig{
 				WriteToStderr:    writeToStderr,
 				PackageNameWidth: maxPkgName,
 				PackageCount:     pkgCount,
