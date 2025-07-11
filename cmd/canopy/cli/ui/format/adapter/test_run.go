@@ -31,11 +31,11 @@ func (t TestRun) Present(stdout, stderr io.Writer) error {
 		return fmt.Errorf("no test run to present")
 	}
 
-	if t.TestRun.Run == nil {
+	if t.Run == nil {
 		return nil
 	}
 
-	pres := t.factory(*t.TestRun.Run)
+	pres := t.factory(*t.Run)
 
 	if pres == nil {
 		return nil

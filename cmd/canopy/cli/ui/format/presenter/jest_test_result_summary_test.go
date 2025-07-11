@@ -19,9 +19,10 @@ func TestJestTestResultSummary_Present(t *testing.T) {
 			fixture: "mixed-verbose.json",
 			presenter: JestTestResultSummary{
 				config: JestTestResultSummaryConfig{
-					Color:         false,
-					WriteToStderr: true,
-					ShowElapsed:   true,
+					Color:              false,
+					WriteToStderr:      true,
+					ShowElapsed:        true,
+					DurationFromEvents: true,
 				},
 				style: newJestStyle(false),
 			},
@@ -31,9 +32,10 @@ func TestJestTestResultSummary_Present(t *testing.T) {
 			fixture: "mixed-verbose.json",
 			presenter: JestTestResultSummary{
 				config: JestTestResultSummaryConfig{
-					Color:         false,
-					WriteToStderr: true,
-					ShowElapsed:   true,
+					Color:              false,
+					WriteToStderr:      true,
+					ShowElapsed:        true,
+					DurationFromEvents: true,
 				},
 				style: newJestStyle(false),
 			},
@@ -43,9 +45,10 @@ func TestJestTestResultSummary_Present(t *testing.T) {
 			fixture: "panic-verbose.json",
 			presenter: JestTestResultSummary{
 				config: JestTestResultSummaryConfig{
-					Color:         false,
-					WriteToStderr: true,
-					ShowElapsed:   true,
+					Color:              false,
+					WriteToStderr:      true,
+					ShowElapsed:        true,
+					DurationFromEvents: true,
 				},
 				style: newJestStyle(false),
 			},

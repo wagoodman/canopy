@@ -59,7 +59,7 @@ type GoPPTestResultSummary struct {
 	run    gotest.Run
 }
 
-func (s GoPPTestResultSummary) Present(stdout, stderr io.Writer) error { //nolint:funlen
+func (s GoPPTestResultSummary) Present(stdout, stderr io.Writer) error {
 	var w = stdout
 	if s.config.WriteToStderr {
 		w = stderr
@@ -67,18 +67,10 @@ func (s GoPPTestResultSummary) Present(stdout, stderr io.Writer) error { //nolin
 
 	var runningFooter string
 	if s.config.ShowRunningPackages || s.config.ShowRunningTests {
-		var err error
-		runningFooter, err = s.runningFooter()
-		if err != nil {
-			return fmt.Errorf("failed to create running footer: %w", err)
-		}
-
+		runningFooter = s.runningFooter()
 	}
 
-	footer, err := s.summaryFooter()
-	if err != nil {
-		return fmt.Errorf("failed to create summary footer: %w", err)
-	}
+	footer := s.summaryFooter()
 
 	if _, err := fmt.Fprintln(w, runningFooter+footer); err != nil {
 		return fmt.Errorf("failed to write summary footer: %w", err)
@@ -87,12 +79,11 @@ func (s GoPPTestResultSummary) Present(stdout, stderr io.Writer) error { //nolin
 	return nil
 }
 
-func (s GoPPTestResultSummary) runningFooter() (string, error) { //nolint:funlen
+func (s GoPPTestResultSummary) runningFooter() string {
 	runningRefs := s.run.Result.ReferencesByAction(gotest.RunAction)
 
 	var lines []string
 	for i, ref := range runningRefs {
-
 		var line string
 		switch {
 		case s.config.ShowRunningPackages && ref.IsPackage():
@@ -139,14 +130,13 @@ func (s GoPPTestResultSummary) runningFooter() (string, error) { //nolint:funlen
 	}
 
 	if len(lines) == 0 {
-		return "", nil
+		return ""
 	}
 
-	return strings.Join(lines, "\n") + "\n", nil
+	return strings.Join(lines, "\n") + "\n"
 }
 
-func (s GoPPTestResultSummary) summaryFooter() (string, error) { //nolint:funlen
-
+func (s GoPPTestResultSummary) summaryFooter() string {
 	passed, isRunning := s.run.Result.Passed()
 
 	var result string
@@ -216,5 +206,5 @@ func (s GoPPTestResultSummary) summaryFooter() (string, error) { //nolint:funlen
 		result += "\t" + s.style.Aux.Render(fmt.Sprintf("[%0.1f%% coverage]", coverage))
 	}
 
-	return result, nil
+	return result
 }

@@ -102,7 +102,7 @@ func readerWriterPair() (io.Reader, io.WriteCloser) {
 	return r, w
 }
 
-func newDefaultDynamicGoPPUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
+func newDefaultDynamicGoPPUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI { //nolint:funlen
 	var pkgCount int
 	maxPkgName := 30
 	if testPkgs != nil {

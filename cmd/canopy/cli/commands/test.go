@@ -123,12 +123,12 @@ func Test(app clio.Application) *cobra.Command {
 			opts.Test.Runtime.Packages = testPkgs
 
 			// set the UI dynamically
-			logTestFailuresAsErrors, err = setupUIs(app, opts.Test.Format.Writers, opts.Test.Appearance, testPkgs)
+			logTestFailuresAsErrors, err = setupUIs(app, opts.Test.Writers, opts.Test.Appearance, testPkgs)
 			return err
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			defer func() {
-				if err := opts.Test.Format.Writers.Close(); err != nil {
+				if err := opts.Test.Writers.Close(); err != nil {
 					runErr = multierror.Append(runErr, err)
 					log.WithFields("error", err).Error("unable to close format writers")
 				}
@@ -186,8 +186,8 @@ func runTest(ctx context.Context, app clio.Application, coreCfg testCoreConfig, 
 
 	s, err := test.NewManager(
 		test.Config{
-			DBRoot:    coreCfg.Store.Root,
-			Ephemeral: coreCfg.Store.Ephemeral,
+			DBRoot:    coreCfg.Root,
+			Ephemeral: coreCfg.Ephemeral,
 		},
 	)
 	if err != nil {

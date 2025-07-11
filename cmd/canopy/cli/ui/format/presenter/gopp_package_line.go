@@ -29,7 +29,6 @@ func (p Package) Present(stdout, _ io.Writer) error {
 
 // func FormatPackageLine(status, pkgName string, testsCompleted int, aux []string, trailer string, st style.Go, formatStatus bool, maxTestName int) string {
 func (p Package) String() string {
-
 	var status = p.Status
 	var aux = p.Aux
 	if p.FormatStatus {

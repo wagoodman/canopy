@@ -84,7 +84,7 @@ func (o *Format) PostLoad() error {
 		case 1:
 			// write to stdout
 			o.Writers = append(o.Writers, FormatWriter{
-				IsTTY:     isATTY(int(os.Stdout.Fd())), //nolint: gosec
+				IsTTY:     isATTY(int(os.Stdout.Fd())),
 				Name:      strings.ToLower(output),
 				PrimaryUI: true,
 			})

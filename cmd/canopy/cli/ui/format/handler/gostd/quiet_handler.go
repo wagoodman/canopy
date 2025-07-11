@@ -124,11 +124,30 @@ func (h *quietHandler) outputPackage(pkgRef gotest.Reference, include func(gotes
 			h.outputTest(testRef, include, render)
 		}
 	}
+	// output package conclusions
+	outputEvents := h.result.ReferenceEvents(pkgRef)
+	for _, e := range outputEvents {
+		fmtr := h.formatter(e, h.panic[e.Reference])
+		if strings.TrimSpace(e.Output) != "" {
+			fmt.Fprint(h.writer, fmtr.String())
+		}
+	}
 
-	// TODO: ...
-	//for _, line := range pkg.FinalLines {
-	//	fmt.Fprint(h.writer, line)
-	//}
+	// print final "FAIL" or "PASS" line for the package
+	e := h.result.ReferenceConclusion(pkgRef)
+	if e != nil {
+		switch e.Action {
+		case gotest.PassAction:
+			e.Output = "PASS"
+		case gotest.FailAction:
+			e.Output = "FAIL"
+		case gotest.SkipAction:
+			e.Output = "SKIP"
+		}
+		e.Action = gotest.OutputAction
+		fmtr := h.formatter(*e, h.panic[e.Reference])
+		fmt.Fprint(h.writer, fmtr.String())
+	}
 }
 
 func (h *quietHandler) outputTest(testRef gotest.Reference, include func(gotest.Reference) bool, render func(gotest.Event) bool) {

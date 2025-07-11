@@ -79,11 +79,25 @@ func (h *verboseHandler) OnGoTestEvent(e gotest.Event) error {
 	}
 
 	switch e.Action {
-
 	// TODO: realtime output of test output... finally output the test conclusions
 
 	case gotest.PassAction, gotest.FailAction, gotest.SkipAction:
-		if !e.Reference.IsPackage() && !e.Reference.IsSubTest() {
+		switch {
+		case e.Reference.IsPackage():
+			// print final "FAIL" or "PASS" line for the package
+			switch e.Action {
+			case gotest.PassAction:
+				e.Output = "PASS"
+			case gotest.FailAction:
+				e.Output = "FAIL"
+			case gotest.SkipAction:
+				e.Output = "SKIP"
+			}
+			e.Action = gotest.OutputAction
+			fmtr := h.formatter(e, h.panic[e.Reference])
+			fmt.Fprint(h.writer, fmtr.String())
+
+		case !e.Reference.IsSubTest():
 			h.outputTest(
 				e.Reference,
 				true,
@@ -137,15 +151,6 @@ func filterEvents(events []gotest.Event, include func(gotest.Event) bool) []gote
 		}
 	}
 	return filtered
-}
-
-func (h *verboseHandler) hasFailedChildren(testRef gotest.Reference) bool {
-	for _, childRef := range h.result.Children(testRef) {
-		if h.result.ReferenceConclusiveAction(childRef) == gotest.FailAction || h.hasFailedChildren(childRef) {
-			return true
-		}
-	}
-	return false
 }
 
 func (h *verboseHandler) String() string {

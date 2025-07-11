@@ -88,7 +88,7 @@ func (s *Manager) CurrentSession() (*SessionInfo, error) {
 		return nil, nil
 	}
 
-	sessionInfo, err := s.session.info()
+	sessionInfo, err := s.info()
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 		}
 	}
 
-	runModel, err = s.session.newRun(cfg.Runner)
+	runModel, err = s.newRun(cfg.Runner)
 	if err != nil {
 		done := make(chan error)
 		go func() {
@@ -229,7 +229,7 @@ func (s *Manager) Close() error {
 		}
 	}
 	if s.session != nil {
-		return s.session.end()
+		return s.end()
 	}
 	return nil
 }

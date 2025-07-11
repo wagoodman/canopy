@@ -13,7 +13,7 @@ type Result struct {
 	config ResultConfig
 
 	references *orderedset.OrderedSet[Reference]
-	//packages   *orderedset.OrderedSet[Reference]
+	// packages   *orderedset.OrderedSet[Reference]
 	children map[Reference]*orderedset.OrderedSet[Reference]
 	// testEventsByReference *orderedmap.OrderedMap[Reference, []Event]   // all action types except "output"
 	testEventsByReference  map[Reference][]Event                        // all action types // TODO rethink this
@@ -109,7 +109,7 @@ func (r *Result) Update(e Event) {
 		if _, ok := r.children[parent]; !ok {
 			r.children[parent] = orderedset.New[Reference]()
 		}
-		//if !e.Reference.IsPackage() {
+		// if !e.Reference.IsPackage() {
 		r.children[parent].Add(e.Reference)
 		//}
 	}
@@ -136,7 +136,7 @@ func (r *Result) Update(e Event) {
 	r.testEventsByReference[e.Reference] = append(r.testEventsByReference[e.Reference], e)
 
 	r.references.Add(e.Reference)
-	//if e.Reference.IsPackage() {
+	// if e.Reference.IsPackage() {
 	//	r.packages.Add(e.Reference)
 	//}
 
@@ -172,7 +172,7 @@ func (r Result) References() []Reference {
 	return r.references.Values()
 }
 
-//func (r Result) Packages() []Reference {
+// func (r Result) Packages() []Reference {
 //	r.lock.RLock()
 //	defer r.lock.RUnlock()
 //

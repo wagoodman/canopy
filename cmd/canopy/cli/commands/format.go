@@ -111,7 +111,7 @@ func Format(app clio.Application) *cobra.Command {
 				log.Debug("reading test json from stdin")
 			}
 			var err error
-			logTestFailuresAsErrors, err = setupUIs(app, opts.Test.Format.Writers, opts.Test.Appearance, nil)
+			logTestFailuresAsErrors, err = setupUIs(app, opts.Test.Writers, opts.Test.Appearance, nil)
 			return err
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -141,8 +141,8 @@ func runFormat(ctx context.Context, app clio.Application, coreCfg formatCoreConf
 
 	s, err := test.NewManager(
 		test.Config{
-			DBRoot:    coreCfg.Store.Root,
-			Ephemeral: coreCfg.Store.Ephemeral,
+			DBRoot:    coreCfg.Root,
+			Ephemeral: coreCfg.Ephemeral,
 		},
 	)
 	if err != nil {

@@ -70,7 +70,7 @@ func dbPath(root string) string {
 }
 
 func (s dbStore) GetSessionInfo(id uuid.UUID) (*SessionInfo, error) {
-	se, err := s.Store.GetTestSession(id)
+	se, err := s.GetTestSession(id)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (s dbStore) GetSessionInfo(id uuid.UUID) (*SessionInfo, error) {
 }
 
 func (s dbStore) getSession(uuid uuid.UUID) (*session, error) {
-	ts, err := s.Store.GetTestSession(uuid)
+	ts, err := s.GetTestSession(uuid)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func (s dbStore) getSession(uuid uuid.UUID) (*session, error) {
 }
 
 func (s dbStore) newSession() (*session, error) {
-	id, err := s.Store.StartTestSession()
+	id, err := s.StartTestSession()
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (s dbStore) newSession() (*session, error) {
 }
 
 func (s dbStore) ListSessions() ([]SessionInfo, error) {
-	sessions, err := s.Store.GetTestSessions()
+	sessions, err := s.GetTestSessions()
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +138,7 @@ func (s dbStore) ListSessions() ([]SessionInfo, error) {
 }
 
 func (s dbStore) GetRunInfo(runID uuid.UUID) (RunInfo, error) {
-	tr, err := s.Store.GetTestRun(runID)
+	tr, err := s.GetTestRun(runID)
 	if err != nil {
 		return RunInfo{}, err
 	}

@@ -24,7 +24,7 @@ func NewGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	return newSafeGoUI(testPkgs, cfg)
 }
 
-func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
+func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI { //nolint:funlen
 	var pkgCount int
 	maxPkgName := 30
 	if testPkgs != nil {

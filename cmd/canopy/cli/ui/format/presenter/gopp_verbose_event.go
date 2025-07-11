@@ -73,7 +73,7 @@ func (p GoPPVerboseEvent) formatPackage(e gotest.Event) string {
 	}
 	if output.HasPackageCoverageMarking(e.Output) {
 		// withhold this until you are showing the final package output
-		//p.packageCoverage[e.Reference] = e.Output
+		// p.packageCoverage[e.Reference] = e.Output
 		return ""
 	}
 	return e.Output

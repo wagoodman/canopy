@@ -117,7 +117,7 @@ func (h *QuietPackage) String() string {
 	return sb.String()
 }
 
-func (h *QuietPackage) render(writer io.Writer) { //nolint: gocognit
+func (h *QuietPackage) render(writer io.Writer) {
 	for _, e := range h.events {
 		if !e.Reference.IsPackage() && !h.isFailedReference(e.Reference) {
 			continue

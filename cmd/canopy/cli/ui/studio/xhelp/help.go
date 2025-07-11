@@ -58,18 +58,18 @@ func (i *Item) Press() {
 func (i *Item) setHelp() {
 	k := i.Binding.Help().Key
 	if k == "" {
-		keys := i.Binding.Keys()
+		keys := i.Keys()
 		if len(keys) > 0 {
 			k = keys[0]
 		}
 	}
 	if i.toggle.engaged {
 		if i.toggle.engagedDesc != "" {
-			i.Binding.SetHelp(k, i.toggle.engagedDesc)
+			i.SetHelp(k, i.toggle.engagedDesc)
 		}
 	} else {
 		if i.toggle.disengagedDesc != "" {
-			i.Binding.SetHelp(k, i.toggle.disengagedDesc)
+			i.SetHelp(k, i.toggle.disengagedDesc)
 		}
 	}
 }
@@ -299,7 +299,7 @@ func (m Model) ShortHelpView(bindings []Item) string {
 
 // FullHelpView renders help columns from a slice of key binding slices. Each
 // top level slice entry renders into a column.
-func (m Model) FullHelpView(groups [][]Item) string { //nolint:funlen
+func (m Model) FullHelpView(groups [][]Item) string {
 	if len(groups) == 0 {
 		return ""
 	}

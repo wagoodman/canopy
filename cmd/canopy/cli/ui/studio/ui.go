@@ -107,7 +107,7 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(m.selection.Init(), m.controller.switchToLatestStoredTestRun(m.config))
 }
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint: funlen
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// if x, ok := msg.(partybus.Event); ok {
 	//	eventStr := fmt.Sprintf("%#v", x)
 	//	if len(eventStr) > 100 {
@@ -198,11 +198,11 @@ func (m *Model) respondToGlobalKeybindings(msg tea.Msg) tea.Cmd {
 		// case key.Matches(msg, defaultKeys.Help):
 		//	m.help.ShowAll = !m.help.ShowAll
 
-		case key.Matches(x, m.keyMap.Quit.Binding):
+		case key.Matches(x, m.Quit.Binding):
 			m.running.Done()
 			return tea.Quit
 
-		case key.Matches(x, m.keyMap.Help.Binding):
+		case key.Matches(x, m.Help.Binding):
 			m.help.ShowAll = !m.help.ShowAll
 			return func() tea.Msg {
 				// trigger a resizing
@@ -247,13 +247,13 @@ func (m Model) dispatchView(dispatch model.Dispatch) string {
 
 		refPaneView = rightBrd.Render(refPaneView)
 	}
-	//else {
+	// else {
 	//	// pad the right side of the reference pane with one space
 	//	rightBrd := lipgloss.NewStyle().
 	//		Border(lipgloss.HiddenBorder(), false, true, false, false)
 	//
 	//	refPaneView = rightBrd.Render(refPaneView)
-	//}refPaneView
+	// }refPaneView
 
 	return lipgloss.JoinHorizontal(
 		lipgloss.Top,
