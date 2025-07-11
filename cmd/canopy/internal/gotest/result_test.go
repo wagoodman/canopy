@@ -30,7 +30,7 @@ func TestNewResult(t *testing.T) {
 	assert.NotNil(t, result.testOutputByReference)
 	assert.NotNil(t, result.referencesByAction)
 	assert.NotNil(t, result.testReferencesByAction)
-	assert.NotNil(t, result.conclusion)
+	assert.NotNil(t, result.conclusionEvent)
 }
 
 func TestResult_Update_WithTest_StartConditions(t *testing.T) {
@@ -70,7 +70,7 @@ func TestResult_Update_WithTest(t *testing.T) {
 	assert.Equal(t, []Event{mockTestEventPass}, result.ReferenceEvents(mockTestReference1))
 	assert.Equal(t, []Reference{mockTestReference1}, result.ReferencesByAction(PassAction))
 	assert.Equal(t, []Reference{mockTestReference1}, result.TestReferencesByAction(PassAction))
-	assert.Equal(t, PassAction, result.ReferenceConclusion(mockTestReference1))
+	assert.Equal(t, PassAction, result.ReferenceConclusiveAction(mockTestReference1))
 
 	passed, running = result.Passed()
 	require.True(t, passed)
@@ -82,7 +82,7 @@ func TestResult_Update_WithTest(t *testing.T) {
 	assert.Equal(t, []Event{mockTestEventFail}, result.ReferenceEvents(mockTestReference2))
 	assert.Equal(t, []Reference{mockTestReference2}, result.ReferencesByAction(FailAction))
 	assert.Equal(t, []Reference{mockTestReference2}, result.TestReferencesByAction(FailAction))
-	assert.Equal(t, FailAction, result.ReferenceConclusion(mockTestReference2))
+	assert.Equal(t, FailAction, result.ReferenceConclusiveAction(mockTestReference2))
 
 	passed, running = result.Passed()
 	require.False(t, passed)
@@ -114,7 +114,7 @@ func TestResult_Update_WithPackage(t *testing.T) {
 	assert.Equal(t, []Event{mockEventPass}, result.ReferenceEvents(mockReference1))
 	assert.Equal(t, []Reference{mockReference1}, result.ReferencesByAction(PassAction))
 	assert.Equal(t, []Reference{}, result.TestReferencesByAction(PassAction)) // note the difference: no test was passed
-	assert.Equal(t, PassAction, result.ReferenceConclusion(mockReference1))
+	assert.Equal(t, PassAction, result.ReferenceConclusiveAction(mockReference1))
 
 	passed, running = result.Passed()
 	require.True(t, passed)
@@ -126,7 +126,7 @@ func TestResult_Update_WithPackage(t *testing.T) {
 	assert.Equal(t, []Event{mockEventFail}, result.ReferenceEvents(mockReference2))
 	assert.Equal(t, []Reference{mockReference2}, result.ReferencesByAction(FailAction))
 	assert.Equal(t, []Reference{}, result.TestReferencesByAction(FailAction)) // note the difference: no test was passed
-	assert.Equal(t, FailAction, result.ReferenceConclusion(mockReference2))
+	assert.Equal(t, FailAction, result.ReferenceConclusiveAction(mockReference2))
 
 	passed, running = result.Passed()
 	require.False(t, passed)
@@ -138,7 +138,7 @@ func TestResult_Update_WithPackage(t *testing.T) {
 	assert.Equal(t, []Event{mockEventRun}, result.ReferenceEvents(mockReference3))
 	assert.Equal(t, []Reference{mockReference3}, result.ReferencesByAction(RunAction))
 	assert.Equal(t, []Reference{}, result.TestReferencesByAction(RunAction))
-	assert.Equal(t, FailAction, result.ReferenceConclusion(mockReference2)) // from before the run event
+	assert.Equal(t, FailAction, result.ReferenceConclusiveAction(mockReference2)) // from before the run event
 
 	passed, running = result.Passed()
 	require.False(t, passed)
@@ -192,19 +192,13 @@ func TestResult_TestStats(t *testing.T) {
 	assert.Equal(t, 1, stats.Running)
 }
 
-func TestResult_ReferenceOutput(t *testing.T) {
+func TestResult_ReferenceConclusiveAction(t *testing.T) {
 	result := NewResult(ResultConfig{})
-	result.testOutputByReference[mockReference1] = []Event{{Output: "output1"}, {Output: "output2"}}
+	result.conclusionEvent[mockReference1] = Event{
+		Action: PassAction,
+	}
 
-	output := result.ReferenceOutput(mockReference1)
-	assert.Equal(t, "output1output2", output)
-}
-
-func TestResult_ReferenceConclusion(t *testing.T) {
-	result := NewResult(ResultConfig{})
-	result.conclusion[mockReference1] = PassAction
-
-	conclusion := result.ReferenceConclusion(mockReference1)
+	conclusion := result.ReferenceConclusiveAction(mockReference1)
 	assert.Equal(t, PassAction, conclusion)
 }
 

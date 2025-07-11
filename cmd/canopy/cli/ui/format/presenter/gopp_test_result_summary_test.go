@@ -16,45 +16,48 @@ func TestGoStdTestResultSummary_Present(t *testing.T) {
 	cases := []struct {
 		name      string
 		fixture   string
-		presenter GoStdTestResultSummary
+		presenter GoPPTestResultSummary
 	}{
 		{
 			name:    "failing package",
 			fixture: "mixed-verbose.json",
-			presenter: GoStdTestResultSummary{
-				config: GoStdTestResultSummaryConfig{
-					Color:            false,
-					WriteToStderr:    true,
-					PackageNameWidth: 100,
-					PackageCount:     50,
+			presenter: GoPPTestResultSummary{
+				config: GoPPTestResultSummaryConfig{
+					Color:              false,
+					WriteToStderr:      true,
+					PackageNameWidth:   100,
+					PackageCount:       50,
+					DurationFromEvents: true,
 				},
-				style: style.NewGoStd(false),
+				style: style.NewGo(false),
 			},
 		},
 		{
 			name:    "passing package",
 			fixture: "mixed-verbose.json",
-			presenter: GoStdTestResultSummary{
-				config: GoStdTestResultSummaryConfig{
-					Color:            false,
-					WriteToStderr:    true,
-					PackageNameWidth: 100,
-					PackageCount:     50,
+			presenter: GoPPTestResultSummary{
+				config: GoPPTestResultSummaryConfig{
+					Color:              false,
+					WriteToStderr:      true,
+					PackageNameWidth:   100,
+					PackageCount:       50,
+					DurationFromEvents: true,
 				},
-				style: style.NewGoStd(false),
+				style: style.NewGo(false),
 			},
 		},
 		{
 			name:    "panic package",
 			fixture: "panic-verbose.json",
-			presenter: GoStdTestResultSummary{
-				config: GoStdTestResultSummaryConfig{
-					Color:            false,
-					WriteToStderr:    true,
-					PackageNameWidth: 100,
-					PackageCount:     50,
+			presenter: GoPPTestResultSummary{
+				config: GoPPTestResultSummaryConfig{
+					Color:              false,
+					WriteToStderr:      true,
+					PackageNameWidth:   100,
+					PackageCount:       50,
+					DurationFromEvents: true,
 				},
-				style: style.NewGoStd(false),
+				style: style.NewGo(false),
 			},
 		},
 	}

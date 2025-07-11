@@ -1,13 +1,11 @@
-package gostd
+package handler
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"sort"
 	"strings"
 
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
@@ -15,20 +13,18 @@ import (
 	"github.com/wagoodman/go-partybus"
 )
 
-var ErrPackageComplete = fmt.Errorf("package output complete")
-
-type PackageHandlerFactory func(gotest.Reference, io.Writer) handler.Handler
+type PackageHandlerFactory func(gotest.Reference, io.Writer) Handler
 
 type packageHandler struct {
 	writer      io.Writer
-	runningPkgs map[string]handler.Handler
+	runningPkgs map[string]Handler
 	factory     PackageHandlerFactory
 }
 
-func newPackageHandler(factory PackageHandlerFactory, writer io.Writer) handler.Handler {
+func NewPackageHandler(factory PackageHandlerFactory, writer io.Writer) Handler {
 	return &packageHandler{
 		writer:      writer,
-		runningPkgs: make(map[string]handler.Handler),
+		runningPkgs: make(map[string]Handler),
 		factory:     factory,
 	}
 }
@@ -49,13 +45,14 @@ func (n *packageHandler) Handle(e partybus.Event) error {
 
 func (n *packageHandler) OnGoTestEvent(goTestEvent gotest.Event) error {
 	// buffer all package output until all package test results are in
-	if n.runningPkgs[goTestEvent.Reference.Package] == nil {
-		n.runningPkgs[goTestEvent.Reference.Package] = n.factory(goTestEvent.Reference, n.writer)
+	pkg := goTestEvent.Reference.Package
+	if n.runningPkgs[pkg] == nil {
+		n.runningPkgs[pkg] = n.factory(goTestEvent.Reference, n.writer)
 	}
 
-	if err := n.runningPkgs[goTestEvent.Reference.Package].OnGoTestEvent(goTestEvent); err != nil {
+	if err := n.runningPkgs[pkg].OnGoTestEvent(goTestEvent); err != nil {
 		if errors.Is(err, ErrPackageComplete) {
-			delete(n.runningPkgs, goTestEvent.Reference.Package)
+			delete(n.runningPkgs, pkg)
 		} else {
 			return err
 		}

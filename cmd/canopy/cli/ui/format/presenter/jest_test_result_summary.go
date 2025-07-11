@@ -40,10 +40,17 @@ func newJestStyle(color bool) jestStyle {
 }
 
 type JestTestResultSummaryConfig struct {
-	Color         bool
-	ShowElapsed   bool
+	// Color enables/ disables color output
+	Color bool
+
+	// ShowElapsed controls whether the elapsed time is shown in the summary
+	ShowElapsed bool
+
+	// WriteToStderr controls whether the summary is written to stderr instead of stdout
 	WriteToStderr bool
-	StaticTimer   bool
+
+	// DurationFromEvents controls whether the timer should be driven by event timestamps or by the wall clock
+	DurationFromEvents bool
 }
 
 func (c JestTestResultSummaryConfig) New(run gotest.Run) Presenter {
@@ -92,7 +99,7 @@ func (s JestTestResultSummary) Present(stdout, stderr io.Writer) error {
 	summary := s.style.wideTitle.Render("Tests: ") + strings.Join(tests, ", ") + "\n"
 
 	if s.config.ShowElapsed {
-		el := s.run.Result.Elapsed(!s.config.StaticTimer)
+		el := s.run.Result.Elapsed(!s.config.DurationFromEvents)
 		el = el.Truncate(time.Millisecond)
 		summary += s.style.wideTitle.Render("Elapsed:") + fmt.Sprintf("%s\n", el)
 	}

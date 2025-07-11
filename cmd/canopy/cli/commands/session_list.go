@@ -44,8 +44,8 @@ func runSessionList(cfg sessionListConfig) error {
 
 	s, err := test.NewManager(
 		test.Config{
-			DBRoot:    cfg.Store.Root,
-			Ephemeral: cfg.Store.Ephemeral,
+			DBRoot:    cfg.Root,
+			Ephemeral: cfg.Ephemeral,
 		},
 	)
 	if err != nil {

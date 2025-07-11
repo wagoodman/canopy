@@ -1,4 +1,4 @@
-package gostd
+package handler
 
 import (
 	"bytes"
@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/go-partybus"
@@ -34,7 +33,7 @@ func (m *mockHandler) String() string {
 }
 
 func TestNewMultiPackageHandler(t *testing.T) {
-	mockFactory := func(ref gotest.Reference, writer io.Writer) handler.Handler {
+	mockFactory := func(ref gotest.Reference, writer io.Writer) Handler {
 		return &mockHandler{}
 	}
 	h := NewMultiPackageHandler(mockFactory)
@@ -46,12 +45,12 @@ func TestNewMultiPackageHandler(t *testing.T) {
 func TestMultiPackageHandler_Handle(t *testing.T) {
 	mh := new(mockHandler)
 	mockWriter := new(bytes.Buffer)
-	mockFactory := func(ref gotest.Reference, writer io.Writer) handler.Handler {
+	mockFactory := func(ref gotest.Reference, writer io.Writer) Handler {
 		return mh
 	}
 
 	m := &multiPackageHandler{
-		packages: make(map[string]handler.Handler),
+		packages: make(map[string]Handler),
 		factory:  mockFactory,
 		writer:   mockWriter,
 	}
@@ -75,12 +74,12 @@ func TestMultiPackageHandler_Handle(t *testing.T) {
 func TestMultiPackageHandler_OnGoTestEvent(t *testing.T) {
 	mh := new(mockHandler)
 	mockWriter := new(bytes.Buffer)
-	mockFactory := func(ref gotest.Reference, writer io.Writer) handler.Handler {
+	mockFactory := func(ref gotest.Reference, writer io.Writer) Handler {
 		return mh
 	}
 
 	m := &multiPackageHandler{
-		packages: make(map[string]handler.Handler),
+		packages: make(map[string]Handler),
 		factory:  mockFactory,
 		writer:   mockWriter,
 	}
@@ -108,7 +107,7 @@ func TestMultiPackageHandler_String(t *testing.T) {
 	mockHandler2.On("String").Return("Handler2Output")
 
 	m := &multiPackageHandler{
-		packages: map[string]handler.Handler{
+		packages: map[string]Handler{
 			"package1": mockHandler1,
 			"package2": mockHandler2,
 		},

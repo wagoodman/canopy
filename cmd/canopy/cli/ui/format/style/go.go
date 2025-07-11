@@ -2,7 +2,7 @@ package style
 
 import "github.com/charmbracelet/lipgloss"
 
-type GoStd struct {
+type Go struct {
 	Bold         lipgloss.Style
 	Success      lipgloss.Style
 	Failed       lipgloss.Style
@@ -19,9 +19,9 @@ type GoStd struct {
 	PanicFileAux lipgloss.Style
 }
 
-func NewGoStd(color bool) GoStd {
+func NewGo(color bool) Go {
 	if color {
-		return GoStd{
+		return Go{
 			Bold:    lipgloss.NewStyle().Bold(true),
 			Success: lipgloss.NewStyle().Foreground(lipgloss.Color("10")),
 			Failed:  lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
@@ -47,7 +47,7 @@ func NewGoStd(color bool) GoStd {
 			// BorderForeground(lipgloss.Color("9")),
 		}
 	}
-	return GoStd{
+	return Go{
 		Bold:         lipgloss.NewStyle(),
 		Success:      lipgloss.NewStyle(),
 		Running:      lipgloss.NewStyle(),

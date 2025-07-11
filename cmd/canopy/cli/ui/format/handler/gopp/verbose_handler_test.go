@@ -1,4 +1,4 @@
-package gostd
+package gopp
 
 import (
 	"errors"
@@ -11,6 +11,7 @@ import (
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
 
@@ -41,7 +42,7 @@ func TestVerboseHandler(t *testing.T) {
 					events := fixtureEvents(t, tt.fixture)
 					for e := range events {
 						err := subject.OnGoTestEvent(e)
-						if errors.Is(err, ErrPackageComplete) {
+						if errors.Is(err, handler.ErrPackageComplete) {
 							// this one is OK to ignore
 							continue
 						}
@@ -100,7 +101,7 @@ func TestVerbosePackage(t *testing.T) {
 			events := fixtureEvents(t, tt.fixture)
 			for e := range events {
 				err := subject.OnGoTestEvent(e)
-				if errors.Is(err, ErrPackageComplete) {
+				if errors.Is(err, handler.ErrPackageComplete) {
 					// this one is OK to ignore
 					continue
 				}
@@ -120,46 +121,4 @@ func fixtureEvents(t testing.TB, name string) <-chan gotest.Event {
 	require.NoError(t, err)
 
 	return gotest.ReplayEvents(fh, nil)
-}
-
-func TestHasTestPassMarking(t *testing.T) {
-	tests := []struct {
-		output   string
-		expected bool
-	}{
-		{"--- PASS: TestExample", true},
-		{"   --- PASS: TestExample", true},
-		{"--- FAIL: TestExample", false},
-		{"PASS: TestExample", false},
-		{"", false},
-		{"--- PASS:TestExample", true}, // Even without a space, it should detect
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.output, func(t *testing.T) {
-			result := hasTestPassMarking(tt.output)
-			assert.Equal(t, tt.expected, result, "Output: %q", tt.output)
-		})
-	}
-}
-
-func TestHasTestStartMarking(t *testing.T) {
-	tests := []struct {
-		output   string
-		expected bool
-	}{
-		{"=== RUN   TestExample", true},
-		{"=== RUN", true},
-		{"--- RUN TestExample", false},
-		{"RUN TestExample", false},
-		{"", false},
-		{"  === RUN TestExample", false}, // Leading spaces make it false
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.output, func(t *testing.T) {
-			result := hasTestStartMarking(tt.output)
-			assert.Equal(t, tt.expected, result, "Output: %q", tt.output)
-		})
-	}
 }

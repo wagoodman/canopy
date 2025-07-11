@@ -24,8 +24,8 @@ type RunStore interface {
 type RunViewer interface {
 	Config() gotest.RunnerConfig
 	References() []gotest.Reference
-	ReferenceConclusion(gotest.Reference) gotest.Action
-	ReferenceOutput(gotest.Reference) string
+	ReferenceConclusiveAction(gotest.Reference) gotest.Action
+	// ReferenceOutput(gotest.Reference, io.Writer) error // simply not used....
 	ReferenceEvents(gotest.Reference) []gotest.Event
 	TestStats() gotest.ResultStats
 	Elapsed(bool) time.Duration

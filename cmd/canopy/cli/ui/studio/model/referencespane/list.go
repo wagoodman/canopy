@@ -332,7 +332,7 @@ func (d listItemDelegate) Render(w io.Writer, m list.Model, idx int, i list.Item
 
 	var act gotest.Action
 	if d.state != nil {
-		act = d.state.ReferenceConclusion(it.ref)
+		act = d.state.ReferenceConclusiveAction(it.ref)
 	}
 
 	if _, ok := d.multiSelect[it.ref]; ok {

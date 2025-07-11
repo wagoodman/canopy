@@ -112,6 +112,7 @@ func TestAddFailingSubtest(t *testing.T) {
 			}
 			// note: there is a nested t.Run here... for no reason at all other than to be evil
 			for _, o := range over {
+				time.Sleep(200 * time.Millisecond) // simulate some processing time
 				t.Run(fmt.Sprintf("offset=%d", o), func(t *testing.T) {
 					sum := Add(tt.a+o, tt.b)
 					if sum != tt.expected+o {

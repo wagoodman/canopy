@@ -5,66 +5,56 @@ import (
 	"io"
 	"strings"
 
+	"github.com/lindell/go-ordered-set/orderedset"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/internal"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
 )
 
 var (
-	_ handler.Handler  = (*VerbosePackage)(nil)
-	_ partybus.Handler = (*VerbosePackage)(nil)
-	_ fmt.Stringer     = (*VerbosePackage)(nil)
+	_ handler.Handler  = (*verboseHandler)(nil)
+	_ partybus.Handler = (*verboseHandler)(nil)
 )
 
-type VerbosePackageConfig struct {
+type PackageConfig struct {
 	Color                       bool
 	PackageNameWidth            int
 	IDE                         ide.Context
-	HidePackagesWithNoTestFiles bool
-	HideExecutionTestEvents     bool
+	HidePackagesWithNoTestFiles bool // TODO: not used??
 }
 
-func NewVerboseHandler(writer io.Writer, config VerbosePackageConfig) handler.Handler {
-	return newPackageHandler(
-		func(ref gotest.Reference, writer io.Writer) handler.Handler {
-			return NewVerbosePackage(writer, config, ref)
-		}, writer)
+type verboseHandler struct {
+	writer    io.Writer
+	result    *gotest.Result
+	packages  *orderedset.OrderedSet[gotest.Reference]
+	panic     map[gotest.Reference]bool
+	formatter func(gotest.Event, bool) fmt.Stringer
 }
 
-type VerbosePackage struct {
-	writer          io.Writer
-	config          VerbosePackageConfig
-	style           style.GoStd
-	lastOutputRef   *gotest.Reference
-	pkg             string
-	buffer          *strings.Builder
-	funcConcluded   map[gotest.Reference]struct{}
-	packageCoverage map[gotest.Reference]string
-	panic           map[gotest.Reference]bool
-}
-
-func NewVerbosePackage(writer io.Writer, config VerbosePackageConfig, ref gotest.Reference) *VerbosePackage {
-	if !ref.IsPackage() {
-		ref = ref.PackageRef()
-	}
-	return &VerbosePackage{
-		writer:          writer,
-		config:          config,
-		style:           style.NewGoStd(config.Color),
-		pkg:             ref.Package,
-		buffer:          &strings.Builder{},
-		funcConcluded:   make(map[gotest.Reference]struct{}),
-		packageCoverage: make(map[gotest.Reference]string),
-		panic:           make(map[gotest.Reference]bool),
+func NewVerboseHandler(writer io.Writer, config PackageConfig) handler.Handler {
+	return &verboseHandler{
+		writer:   writer,
+		result:   gotest.NewResult(gotest.ResultConfig{TrackOtherOutput: true, TrackFailingOutput: true}),
+		packages: orderedset.New[gotest.Reference](),
+		panic:    make(map[gotest.Reference]bool),
+		formatter: presenter.NewGoPPVerboseEventFactory(
+			style.NewGo(config.Color),
+			config.IDE,
+			false,
+			config.PackageNameWidth,
+		).NewEvent,
 	}
 }
 
-func (n *VerbosePackage) Handle(e partybus.Event) error {
+func (h *verboseHandler) Handle(e partybus.Event) error {
 	switch e.Type {
 	case event.GoTestType:
 		goTestEvent, err := parser.ParseGoTestType(e)
@@ -73,191 +63,96 @@ func (n *VerbosePackage) Handle(e partybus.Event) error {
 			return nil
 		}
 
-		return n.OnGoTestEvent(goTestEvent)
+		return h.OnGoTestEvent(goTestEvent)
 	}
 	return nil
 }
 
-func (n *VerbosePackage) String() string {
-	return n.buffer.String()
-}
-
-func (n *VerbosePackage) OnGoTestEvent(e gotest.Event) error {
-	if e.Reference.Package != n.pkg {
-		return nil
+func (h *verboseHandler) OnGoTestEvent(e gotest.Event) error {
+	h.result.Update(e)
+	if e.Reference.IsPackage() {
+		h.packages.Add(e.Reference)
 	}
 
-	if e.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) && n.config.HidePackagesWithNoTestFiles {
-		return nil
-	}
-
-	if hasPanicMarking(e.Output) {
-		n.panic[e.Reference] = true
-	}
-
-	if e.Action == gotest.OutputAction {
-		if !e.Reference.IsPackage() {
-			trimmedOutput := strings.TrimSpace(e.Output)
-			if n.lastOutputRef == nil || *n.lastOutputRef != e.Reference {
-				hasEqualMarker := strings.HasPrefix(trimmedOutput, "===")
-				hasDashMarker := strings.HasPrefix(trimmedOutput, "---")
-				if !hasEqualMarker && !hasDashMarker {
-					out := n.style.Aux.Render(fmt.Sprintf("%s  %s", "═══ NAME", e.Reference.TestName(true)))
-					_, err := fmt.Fprint(n.writer, out+"\n")
-					if err != nil {
-						return err
-					}
-				}
-				n.lastOutputRef = &e.Reference
-			}
-		}
-
-		var writer io.Writer = n.buffer
-		if !n.funcRefConcluded(e.Reference) {
-			writer = n.writer
-		}
-		_, err := fmt.Fprint(writer, n.renderOutput(e))
-
-		return err
-	}
-
-	if !e.Reference.IsPackage() {
-		return nil
+	if output.HasPanicMarking(e.Output) {
+		h.panic[e.Reference] = true
 	}
 
 	switch e.Action {
-	case gotest.PassAction, gotest.SkipAction, gotest.FailAction:
-		funcRef := e.Reference.FuncRef()
-		if funcRef != nil {
-			n.funcConcluded[*funcRef] = struct{}{}
+	// TODO: realtime output of test output... finally output the test conclusions
+
+	case gotest.PassAction, gotest.FailAction, gotest.SkipAction:
+		switch {
+		case e.Reference.IsPackage():
+			// print final "FAIL" or "PASS" line for the package
+			switch e.Action {
+			case gotest.PassAction:
+				e.Output = "PASS"
+			case gotest.FailAction:
+				e.Output = "FAIL"
+			case gotest.SkipAction:
+				e.Output = "SKIP"
+			}
+			e.Action = gotest.OutputAction
+			fmtr := h.formatter(e, h.panic[e.Reference])
+			fmt.Fprint(h.writer, fmtr.String())
+
+		case !e.Reference.IsSubTest():
+			h.outputTest(
+				e.Reference,
+				true,
+				func(e gotest.Event) bool {
+					return output.HasConclusionMarking(e.Output)
+				},
+			)
 		}
-		_, err := fmt.Fprint(n.writer, n.buffer.String())
-		if err != nil {
-			return err
+	case gotest.OutputAction:
+		if !output.HasConclusionMarking(e.Output) {
+			fmtr := h.formatter(e, h.panic[e.Reference])
+			if strings.TrimSpace(e.Output) != "" {
+				fmt.Fprint(h.writer, fmtr.String())
+			}
 		}
-		return ErrPackageComplete
 	}
 
 	return nil
 }
 
-func (n *VerbosePackage) funcRefConcluded(ref gotest.Reference) bool {
-	funcRef := ref.FuncRef()
-	if funcRef != nil {
-		if _, exists := n.funcConcluded[*funcRef]; exists {
-			return true
+func (h *verboseHandler) outputTest(testRef gotest.Reference, indent bool, include func(gotest.Event) bool) {
+	outputEvents := h.getEvents(testRef, include)
+
+	for _, e := range outputEvents {
+		writer := h.writer
+		if indent {
+			writer = internal.NewIndentWriter(writer, e.Reference)
+		}
+		fmtr := h.formatter(e, h.panic[e.Reference])
+		if strings.TrimSpace(e.Output) != "" {
+			fmt.Fprint(writer, fmtr.String())
 		}
 	}
-	return false
 }
 
-func (n *VerbosePackage) renderOutput(e gotest.Event) string {
-	if e.Reference.IsPackage() {
-		return n.formatPackage(e)
+func (h *verboseHandler) getEvents(testRef gotest.Reference, include func(gotest.Event) bool) []gotest.Event {
+	outputEvents := filterEvents(h.result.ReferenceEvents(testRef), include)
+
+	for _, childRef := range h.result.Children(testRef) {
+		outputEvents = append(outputEvents, h.getEvents(childRef, include)...)
 	}
-	return n.format(e)
+
+	return outputEvents
 }
 
-func (n *VerbosePackage) formatPackage(e gotest.Event) string {
-	if hasFailedPackageMarking(e.Output) || hasPassedPackageMarking(e.Output) || hasUnknownPackageMarking(e.Output) || hasPassMarking(e.Output) {
-		return parseAndFormatPackageLine(e.Output, n.style, n.config.PackageNameWidth)
-	}
-	if hasPackageCoverageMarking(e.Output) {
-		// withhold this until you are showing the final package output
-		n.packageCoverage[e.Reference] = e.Output
-		return ""
-	}
-	return e.Output
-}
-
-func (n *VerbosePackage) format(e gotest.Event) string {
-	if n.panic[e.Reference] {
-		return formatPanic(e.Output, n.style)
-	}
-	if hasFailedTestMarking(e.Output) {
-		return formatFailedTest(e.Output, n.style)
-	}
-	if hasTestPassMarking(e.Output) {
-		return formatPassedTest(e.Output, n.style)
-	}
-	if hasTestStartMarking(e.Output) || hasContinueMarking(e.Output) || hasPauseMarking(e.Output) {
-		if n.config.HideExecutionTestEvents {
-			return ""
+func filterEvents(events []gotest.Event, include func(gotest.Event) bool) []gotest.Event {
+	var filtered []gotest.Event
+	for _, e := range events {
+		if include(e) {
+			filtered = append(filtered, e)
 		}
-		return formatTestExecutionMark(e.Output, n.style)
 	}
-	if isLogLine(e.Output) {
-		return formatLogLine(e.PackageDirPath, e.Output, n.style, n.config.IDE)
-	}
-	return e.Output
+	return filtered
 }
 
-func hasTestPassMarking(output string) bool {
-	return strings.HasPrefix(strings.TrimSpace(output), "--- PASS:")
-}
-
-func hasTestStartMarking(output string) bool {
-	return strings.HasPrefix(output, "=== RUN")
-}
-
-func formatTestExecutionMark(s string, st style.GoStd) string {
-	// preserve but partition the line ending(s)
-	lnIdx := strings.LastIndex(s, "\n")
-	var trailer string
-	var line = s
-	if lnIdx > -1 {
-		trailer = line[lnIdx:]
-		line = line[:lnIdx]
-	}
-
-	return st.Aux.Render(line) + trailer
-
-	//// split into "=== RUN" and the rest
-	// idx := strings.Index(s, "Test")
-	// if idx == -1 {
-	//	return s
-	//}
-	//
-	// before := s[:idx]
-	// after := s[idx:]
-	//
-	// return st.Aux.Render(before) + after
-}
-
-func formatPassedTest(s string, st style.GoStd) string {
-	// split into "-- PASS:" and the rest
-	idx := strings.Index(s, ":")
-
-	if idx == -1 {
-		return s
-	}
-
-	before := s[:idx+1]
-	after := s[idx+1:]
-
-	// preserve but partition the line ending(s)
-	lnIdx := strings.LastIndex(after, "\n")
-	var trailer string
-	if lnIdx > -1 {
-		trailer = after[lnIdx:]
-		after = after[:lnIdx]
-	}
-
-	// split off "(0.20s)"
-	auxIdx := strings.LastIndex(after, "(")
-	var aux string
-	if auxIdx > -1 {
-		aux = after[auxIdx:]
-		after = after[:auxIdx]
-	}
-
-	// apply styles to all sections
-
-	before = strings.Replace(before, "--- PASS:", st.Aux.Render("─── ")+st.Success.Render("PASS")+" ", 1)
-
-	if aux != "" {
-		aux = st.Aux.Render(aux)
-	}
-
-	return before + after + aux + trailer
+func (h *verboseHandler) String() string {
+	return ""
 }

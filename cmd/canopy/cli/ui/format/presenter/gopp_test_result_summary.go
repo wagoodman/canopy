@@ -2,7 +2,6 @@ package presenter
 
 import (
 	"fmt"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gostd"
 	"io"
 	"strings"
 	"time"
@@ -14,35 +13,53 @@ import (
 
 var _ Presenter = (*JestTestResultSummary)(nil)
 
-type GoStdTestResultSummaryConfig struct {
-	Color            bool
-	WriteToStderr    bool
-	PackageNameWidth int
-	PackageCount     int
-	HidePackageCount bool
-	RunningState     string
-	StaticTimer      bool
+type GoPPTestResultSummaryConfig struct {
+	// Color enables/ disables color output
+	Color bool
 
+	// WriteToStderr controls whether the summary is written to stderr instead of stdout
+	WriteToStderr bool
+
+	// PackageNameWidth is the width of the package name in the summary (controls where the aux component column starts)
+	PackageNameWidth int
+
+	// PackageCount is the number of packages in the test run
+	PackageCount int
+
+	// HidePackageCount hides the package count in the summary
+	HidePackageCount bool
+
+	// RunningState is a short string indicating a spinner if running, or the conclusion state if not running
+	RunningState string
+
+	// DurationFromEvents controls whether the timer should be driven by event timestamps or by the wall clock
+	DurationFromEvents bool
+
+	// ShowRunningPackages toggles whether to show the full name of packages that have tests running in the summary
 	ShowRunningPackages bool
-	ShowRunningTests    bool
+
+	// ShowRunningTests toggles whether to show the full name of tests in progress in the summary
+	ShowRunningTests bool
+
+	// ShowRunningSubTests toggles whether to show the full name of sub-tests in progress in the summary
 	ShowRunningSubTests bool
 }
 
-func (c GoStdTestResultSummaryConfig) New(run gotest.Run) Presenter {
-	return GoStdTestResultSummary{
+func (c GoPPTestResultSummaryConfig) New(run gotest.Run) Presenter {
+	return GoPPTestResultSummary{
 		config: c,
-		style:  style.NewGoStd(c.Color),
+		style:  style.NewGo(c.Color),
 		run:    run,
 	}
 }
 
-type GoStdTestResultSummary struct {
-	config GoStdTestResultSummaryConfig
-	style  style.GoStd
+type GoPPTestResultSummary struct {
+	config GoPPTestResultSummaryConfig
+	style  style.Go
 	run    gotest.Run
 }
 
-func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error { //nolint:funlen
+func (s GoPPTestResultSummary) Present(stdout, stderr io.Writer) error {
 	var w = stdout
 	if s.config.WriteToStderr {
 		w = stderr
@@ -50,18 +67,10 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error { //noli
 
 	var runningFooter string
 	if s.config.ShowRunningPackages || s.config.ShowRunningTests {
-		var err error
-		runningFooter, err = s.runningFooter()
-		if err != nil {
-			return fmt.Errorf("failed to create running footer: %w", err)
-		}
-
+		runningFooter = s.runningFooter()
 	}
 
-	footer, err := s.summaryFooter()
-	if err != nil {
-		return fmt.Errorf("failed to create summary footer: %w", err)
-	}
+	footer := s.summaryFooter()
 
 	if _, err := fmt.Fprintln(w, runningFooter+footer); err != nil {
 		return fmt.Errorf("failed to write summary footer: %w", err)
@@ -70,24 +79,50 @@ func (s GoStdTestResultSummary) Present(stdout, stderr io.Writer) error { //noli
 	return nil
 }
 
-func (s GoStdTestResultSummary) runningFooter() (string, error) { //nolint:funlen
+func (s GoPPTestResultSummary) runningFooter() string {
 	runningRefs := s.run.Result.ReferencesByAction(gotest.RunAction)
 
 	var lines []string
 	for i, ref := range runningRefs {
-
 		var line string
 		switch {
 		case s.config.ShowRunningPackages && ref.IsPackage():
-			line = gostd.FormatPackageLine(s.config.RunningState, ref.Package, 0, nil, "", s.style, false, s.config.PackageNameWidth)
+			line = Package{
+				Status:         s.config.RunningState,
+				Name:           ref.Package,
+				TestsCompleted: 0,
+				Aux:            nil,
+				Trailer:        "",
+				Style:          s.style,
+				FormatStatus:   false,
+				MaxTestName:    s.config.PackageNameWidth,
+			}.String()
 		case s.config.ShowRunningSubTests && ref.IsSubTest():
 			subtestBranch := "  └── "
 			if i+1 < len(runningRefs) && runningRefs[i+1].IsSubTest() {
 				subtestBranch = "  ├── "
 			}
-			line = gostd.FormatPackageLine("", s.style.Aux.Render(subtestBranch)+ref.SubTestName(true), 0, nil, "", s.style, false, s.config.PackageNameWidth)
+			line = Package{
+				Status:         "",
+				Name:           s.style.Aux.Render(subtestBranch) + ref.SubTestName(true),
+				TestsCompleted: 0,
+				Aux:            nil,
+				Trailer:        "",
+				Style:          s.style,
+				FormatStatus:   false,
+				MaxTestName:    s.config.PackageNameWidth,
+			}.String()
 		case s.config.ShowRunningTests && !ref.IsSubTest() && !ref.IsPackage():
-			line = gostd.FormatPackageLine(s.config.RunningState, ref.String(true), 0, nil, "", s.style, false, s.config.PackageNameWidth)
+			line = Package{
+				Status:         s.config.RunningState,
+				Name:           ref.String(true),
+				TestsCompleted: 0,
+				Aux:            nil,
+				Trailer:        "",
+				Style:          s.style,
+				FormatStatus:   false,
+				MaxTestName:    s.config.PackageNameWidth,
+			}.String()
 		}
 		if line != "" {
 			lines = append(lines, line)
@@ -95,14 +130,13 @@ func (s GoStdTestResultSummary) runningFooter() (string, error) { //nolint:funle
 	}
 
 	if len(lines) == 0 {
-		return "", nil
+		return ""
 	}
 
-	return strings.Join(lines, "\n") + "\n", nil
+	return strings.Join(lines, "\n") + "\n"
 }
 
-func (s GoStdTestResultSummary) summaryFooter() (string, error) { //nolint:funlen
-
+func (s GoPPTestResultSummary) summaryFooter() string {
 	passed, isRunning := s.run.Result.Passed()
 
 	var result string
@@ -160,7 +194,7 @@ func (s GoStdTestResultSummary) summaryFooter() (string, error) { //nolint:funle
 
 	result += "\t" + wideSummary
 
-	elapsed := s.run.Result.Elapsed(!s.config.StaticTimer)
+	elapsed := s.run.Result.Elapsed(!s.config.DurationFromEvents)
 	if elapsed > 0 {
 		result += "\t" + s.style.Aux.Render(elapsed.Round(time.Millisecond).String())
 	} else {
@@ -172,5 +206,5 @@ func (s GoStdTestResultSummary) summaryFooter() (string, error) { //nolint:funle
 		result += "\t" + s.style.Aux.Render(fmt.Sprintf("[%0.1f%% coverage]", coverage))
 	}
 
-	return result, nil
+	return result
 }

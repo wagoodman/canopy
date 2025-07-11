@@ -1,0 +1,6 @@
+{"Time":"2024-08-30T23:57:28.354178-04:00","Action":"start","Package":"github.com/wagoodman/canopy/cmd/canopy/cli/options"}
+{"Time":"2024-08-30T23:57:28.354231-04:00","Action":"output","Package":"github.com/wagoodman/canopy/cmd/canopy/cli/options","Output":"?   \tgithub.com/wagoodman/canopy/cmd/canopy/cli/options\t[no test files]\n"}
+{"Time":"2024-08-30T23:57:28.354256-04:00","Action":"skip","Package":"github.com/wagoodman/canopy/cmd/canopy/cli/options","Elapsed":0}
+{"Time":"2024-08-30T23:57:28.354251-04:00","Action":"start","Package":"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"}
+{"Time":"2024-08-30T23:57:28.354279-04:00","Action":"output","Package":"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset","Output":"?   \tgithub.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset\t[no test files]\n"}
+{"Time":"2024-08-30T23:57:28.354288-04:00","Action":"skip","Package":"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset","Elapsed":0}

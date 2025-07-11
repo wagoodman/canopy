@@ -1,4 +1,4 @@
-package gostdref
+package goref
 
 import (
 	"bytes"
@@ -10,7 +10,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gostd"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
@@ -124,7 +123,7 @@ func (j Model) handlePartybusEvent(e partybus.Event) (tea.Model, tea.Cmd) {
 	switch {
 	case err == nil:
 		break
-	case errors.Is(err, gostd.ErrPackageComplete):
+	case errors.Is(err, handler.ErrPackageComplete):
 		return j, nil
 	default:
 		panic("TODO: gostdref error: " + err.Error())

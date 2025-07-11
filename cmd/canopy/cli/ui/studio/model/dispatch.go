@@ -61,7 +61,7 @@ func (m Dispatch) View() string {
 	return m.viewFn(m)
 }
 
-func (m Dispatch) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint: gocognit, funlen
+func (m Dispatch) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint: gocognit
 	// TODO: augment the WS on the parent to affect the children
 	var ws *tea.WindowSizeMsg
 	switch msg := msg.(type) {

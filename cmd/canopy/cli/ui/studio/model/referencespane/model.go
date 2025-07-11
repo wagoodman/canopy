@@ -247,7 +247,7 @@ func (m Model) filterToVisibleRefs(original []gotest.Reference, currentTestRun s
 	var refs []gotest.Reference
 	refs = append(refs, gotest.Reference{Package: "*"})
 	for _, ref := range original {
-		action := currentTestRun.ReferenceConclusion(ref)
+		action := currentTestRun.ReferenceConclusiveAction(ref)
 
 		if action == gotest.FailAction && !showFailed {
 			continue
@@ -319,9 +319,9 @@ func (m Model) statsView() string {
 	right += "in " + elapsed
 
 	// right aligned variant...
-	//right := m.config.SummaryLineStyle.Width(width - lipgloss.Width(left)).Align(lipgloss.Right).Faint(true).Render(right)
+	// right := m.config.SummaryLineStyle.Width(width - lipgloss.Width(left)).Align(lipgloss.Right).Faint(true).Render(right)
 	//
-	//line := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	// line := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
 	line := left + " " + right
 
