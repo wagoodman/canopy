@@ -25,8 +25,6 @@ import (
 	"github.com/anchore/go-logger/adapter/discard"
 )
 
-const defaultPackageSelection = "./..."
-
 var (
 	_ fangs.FlagAdder  = (*testCoreConfig)(nil)
 	_ fangs.PostLoader = (*testCoreConfig)(nil)
@@ -77,7 +75,7 @@ type testRuntimeConfig struct {
 
 func (t *testCoreConfig) AddFlags(flags fangs.FlagSet) {
 	t.NamedFlagSet = xflagset.NewNamed()
-	t.tracker = xflagset.NewDecorator(flags, t.NamedFlagSet.FlagSet("General"))
+	t.tracker = xflagset.NewDecorator(flags, t.NamedFlagSet.FlagSet("State"))
 	flags = t.tracker
 	flags.BoolVarP(&t.Test.NoCache, "no-cache", "", "do not use cached test results")
 }
@@ -86,10 +84,13 @@ func defaultTestOptions() *testCoreConfig {
 	return &testCoreConfig{
 		Store: options.DefaultStore(),
 		Test: testConfig{
-			Packages: options.Packages{
-				Specifiers: []string{defaultPackageSelection},
-			},
-			Format: options.DefaultTestFormat(),
+			Packages:   options.DefaultPackages(),
+			GoTest:     options.DefaultGoTest(),
+			Coverage:   options.DefaultCoverage(),
+			GoBuild:    options.DefaultGoBuild(),
+			Format:     options.DefaultTestFormat(),
+			Open:       options.DefaultOpen(),
+			Appearance: options.DefaultAppearance(),
 		},
 	}
 }
@@ -156,8 +157,9 @@ func Test(app clio.Application) *cobra.Command {
 		nfs.Merge(opts.Test.GoBuild.NamedFlagSet)
 		nfs.Merge(opts.Test.Packages.NamedFlagSet)
 		nfs.Merge(opts.Test.Format.NamedFlagSet)
-		// nfs.Merge(opts.Test.Appearance.NamedFlagSet)
+		nfs.Merge(opts.Test.Appearance.NamedFlagSet)
 		nfs.Merge(opts.Test.Open.NamedFlagSet)
+		nfs.Merge(opts.Store.NamedFlagSet)
 		nfs.Merge(opts.NamedFlagSet)
 		nfs.BindUsageAndHelpFunc(cmd, -1)
 		_ = ogHelp()

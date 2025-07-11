@@ -21,6 +21,13 @@ type Coverage struct {
 	NamedFlagSet *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
 }
 
+func DefaultCoverage() Coverage {
+	return Coverage{
+		Cover:    false,
+		CoverMin: 0.0, // default to no minimum coverage
+	}
+}
+
 func (o *Coverage) PostLoad() error {
 	if o.CoverMin > 0 {
 		o.Cover = true

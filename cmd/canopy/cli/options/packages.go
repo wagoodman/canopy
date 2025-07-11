@@ -21,6 +21,12 @@ type Packages struct {
 	NamedFlagSet *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
 }
 
+func DefaultPackages() Packages {
+	return Packages{
+		Specifiers: []string{"./..."},
+	}
+}
+
 func (o *Packages) PostLoad() error {
 	return nil
 }

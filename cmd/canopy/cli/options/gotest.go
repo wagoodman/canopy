@@ -31,6 +31,10 @@ type GoTest struct {
 	NamedFlagSet  *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
 }
 
+func DefaultGoTest() GoTest {
+	return GoTest{}
+}
+
 func (o *GoTest) PostLoad() error {
 	o.RenderedFlags = o.tracker.RenderFlags()
 	return nil

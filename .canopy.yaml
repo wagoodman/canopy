@@ -1,10 +1,8 @@
-test:
-  appearance:
-    no-color: false
-    show-packages-with-no-tests: false
-
 profiles:
   unit:
+    store:
+      enabled: true
+    
     test:
       cover: true
       covermin: 55

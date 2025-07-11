@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/anchore/go-homedir"
 	"github.com/google/uuid"
-	"github.com/mitchellh/go-homedir"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/db"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )

@@ -15,9 +15,15 @@ type Open struct {
 	NamedFlagSet *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
 }
 
+func DefaultOpen() Open {
+	return Open{
+		OpenSessionOnFailure: false,
+	}
+}
+
 func (o *Open) AddFlags(flags fangs.FlagSet) {
 	o.NamedFlagSet = xflagset.NewNamed()
-	o.tracker = xflagset.NewDecorator(flags, o.NamedFlagSet.FlagSet("Interactive"))
+	o.tracker = xflagset.NewDecorator(flags, o.NamedFlagSet.FlagSet("State"))
 	flags = o.tracker
 
 	flags.BoolVarP(&o.OpenSessionOnFailure, "open-on-failure", "f", "open an interactive session on test failure")

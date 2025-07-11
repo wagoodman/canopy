@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 
 	"github.com/anchore/fangs"
@@ -17,12 +18,31 @@ type Appearance struct {
 	NoColor                 bool `yaml:"no-color" json:"no-color" mapstructure:"no-color"`
 	ShowPackagesWithNoTests bool `yaml:"show-packages-with-no-tests" json:"show-packages-with-no-tests" mapstructure:"show-packages-with-no-tests"`
 
-	// tracker      *xflagset.Decorator
-	// NamedFlagSet *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
+	tracker      *xflagset.Decorator
+	NamedFlagSet *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
 }
 
-func (t *Appearance) PostLoad() error {
-	overrideNoColorFromEnv(&t.NoColor)
+func DefaultAppearance() Appearance {
+	return Appearance{
+		NoColor:                 false,
+		ShowPackagesWithNoTests: false,
+	}
+}
+
+func (o *Appearance) AddFlags(flags fangs.FlagSet) {
+	o.NamedFlagSet = xflagset.NewNamed()
+	o.tracker = xflagset.NewDecorator(flags, o.NamedFlagSet.FlagSet("Format"))
+	flags = o.tracker
+
+	flags.BoolVarP(
+		&o.NoColor,
+		"no-color", "",
+		"disable all colorized output (can be overridden by the NO_COLOR environment variable as well)",
+	)
+}
+
+func (o *Appearance) PostLoad() error {
+	overrideNoColorFromEnv(&o.NoColor)
 	return nil
 }
 

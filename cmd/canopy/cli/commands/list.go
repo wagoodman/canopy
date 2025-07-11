@@ -43,9 +43,7 @@ func List(app clio.Application) *cobra.Command {
 
 	opts := &listTestEnvelope{
 		List: listConfig{
-			Packages: options.Packages{
-				Specifiers: []string{defaultPackageSelection},
-			},
+			Packages: options.DefaultPackages(),
 			Format: options.Format{
 				Outputs:          []string{"function"},
 				AllowableFormats: []string{"function", "json", "package"},

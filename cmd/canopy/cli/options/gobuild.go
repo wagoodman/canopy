@@ -45,6 +45,10 @@ type GoBuild struct {
 	NamedFlagSet  *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
 }
 
+func DefaultGoBuild() GoBuild {
+	return GoBuild{}
+}
+
 func (b *GoBuild) PostLoad() error {
 	b.RenderedFlags = b.tracker.RenderFlags()
 	return nil
