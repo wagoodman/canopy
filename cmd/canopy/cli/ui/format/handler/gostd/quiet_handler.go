@@ -2,6 +2,10 @@ package gostd
 
 import (
 	"fmt"
+	"io"
+	"sort"
+	"strings"
+
 	"github.com/lindell/go-ordered-set/orderedset"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
@@ -12,9 +16,6 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
-	"io"
-	"sort"
-	"strings"
 )
 
 var (

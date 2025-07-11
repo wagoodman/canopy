@@ -3,18 +3,17 @@ package gopp
 import (
 	"errors"
 	"fmt"
-	error2 "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
-	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"strings"
 	"testing"
 
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
 
-func TestDefaultHandler(t *testing.T) {
+func TestQuietHandler(t *testing.T) {
 	cases := []struct {
 		name    string
 		fixture string
@@ -41,7 +40,7 @@ func TestDefaultHandler(t *testing.T) {
 					events := fixtureEvents(t, tt.fixture)
 					for e := range events {
 						err := subject.OnGoTestEvent(e)
-						if errors.Is(err, error2.ErrPackageComplete) {
+						if errors.Is(err, handler.ErrPackageComplete) {
 							// this one is OK to ignore
 							continue
 						}
@@ -55,7 +54,7 @@ func TestDefaultHandler(t *testing.T) {
 	}
 }
 
-func TestDefaultPackage(t *testing.T) {
+func TestQuietPackage(t *testing.T) {
 	cases := []struct {
 		name    string
 		fixture string
@@ -100,7 +99,7 @@ func TestDefaultPackage(t *testing.T) {
 			events := fixtureEvents(t, tt.fixture)
 			for e := range events {
 				err := subject.OnGoTestEvent(e)
-				if errors.Is(err, error2.ErrPackageComplete) {
+				if errors.Is(err, handler.ErrPackageComplete) {
 					// this one is OK to ignore
 					continue
 				}

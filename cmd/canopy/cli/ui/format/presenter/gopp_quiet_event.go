@@ -2,12 +2,13 @@ package presenter
 
 import (
 	"fmt"
+	"io"
+	"strings"
+
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
-	"io"
-	"strings"
 )
 
 type GoPPQuietEventFactory struct {
@@ -30,6 +31,7 @@ func (f GoPPQuietEventFactory) NewEvent(e gotest.Event, midPanic bool) fmt.Strin
 		IDE:              f.IDE,
 		PackageNameWidth: f.PackageNameWidth,
 		Event:            e,
+		Panic:            midPanic,
 	}
 }
 
@@ -38,6 +40,7 @@ type GoPPQuietEvent struct {
 	IDE              ide.Context
 	Event            gotest.Event
 	PackageNameWidth int
+	Panic            bool
 }
 
 func (p GoPPQuietEvent) Present(stdout, _ io.Writer) error {
@@ -65,6 +68,9 @@ func (p GoPPQuietEvent) formatPackage(e gotest.Event) string {
 }
 
 func (p GoPPQuietEvent) format(e gotest.Event) string {
+	if p.Panic {
+		return formatPanic(e.Output, p.Style)
+	}
 	if output.HasFailedTestMarking(e.Output) {
 		return formatFailedTest(e.Output, p.Style)
 	}

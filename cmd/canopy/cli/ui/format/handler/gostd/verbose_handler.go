@@ -2,8 +2,12 @@ package gostd
 
 import (
 	"fmt"
+	"io"
+	"strings"
+
 	"github.com/lindell/go-ordered-set/orderedset"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/internal"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
@@ -13,8 +17,6 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
-	"io"
-	"strings"
 )
 
 var (
@@ -108,7 +110,7 @@ func (h *verboseHandler) outputTest(testRef gotest.Reference, indent bool, inclu
 	for _, e := range outputEvents {
 		writer := h.writer
 		if indent {
-			writer = newIndentWriter(writer, e.Reference)
+			writer = internal.NewIndentWriter(writer, e.Reference)
 		}
 		fmtr := h.formatter(e, h.panic[e.Reference])
 		if strings.TrimSpace(e.Output) != "" {
@@ -148,48 +150,4 @@ func (h *verboseHandler) hasFailedChildren(testRef gotest.Reference) bool {
 
 func (h *verboseHandler) String() string {
 	return ""
-}
-
-type indentWriter struct {
-	w           io.Writer
-	indent      string
-	atLineStart bool
-}
-
-func newIndentWriter(w io.Writer, ref gotest.Reference) *indentWriter {
-	var count int
-	if ref.IsSubTest() {
-		count = strings.Count(ref.TRunName, "/") + 1
-	}
-
-	return &indentWriter{
-		w:           w,
-		indent:      strings.Repeat("    ", count),
-		atLineStart: true,
-	}
-}
-
-func (iw *indentWriter) Write(p []byte) (int, error) {
-	var written int
-	for i, b := range p {
-		if iw.atLineStart {
-			n, err := iw.w.Write([]byte(iw.indent))
-			if err != nil {
-				return written, err
-			}
-			written += n
-			iw.atLineStart = false
-		}
-
-		n, err := iw.w.Write(p[i : i+1])
-		if err != nil {
-			return written, err
-		}
-		written += n
-
-		if b == '\n' {
-			iw.atLineStart = true
-		}
-	}
-	return len(p), nil
 }

@@ -192,17 +192,11 @@ func TestResult_TestStats(t *testing.T) {
 	assert.Equal(t, 1, stats.Running)
 }
 
-func TestResult_ReferenceOutput(t *testing.T) {
+func TestResult_ReferenceConclusiveAction(t *testing.T) {
 	result := NewResult(ResultConfig{})
-	result.testOutputByReference[mockReference1] = []Event{{Output: "output1"}, {Output: "output2"}}
-
-	output := result.ReferenceOutput(mockReference1)
-	assert.Equal(t, "output1output2", output)
-}
-
-func TestResult_ReferenceConclusion(t *testing.T) {
-	result := NewResult(ResultConfig{})
-	result.conclusionEvent[mockReference1] = PassAction
+	result.conclusionEvent[mockReference1] = Event{
+		Action: PassAction,
+	}
 
 	conclusion := result.ReferenceConclusiveAction(mockReference1)
 	assert.Equal(t, PassAction, conclusion)

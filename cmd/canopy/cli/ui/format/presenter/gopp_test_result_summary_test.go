@@ -23,10 +23,11 @@ func TestGoStdTestResultSummary_Present(t *testing.T) {
 			fixture: "mixed-verbose.json",
 			presenter: GoPPTestResultSummary{
 				config: GoPPTestResultSummaryConfig{
-					Color:            false,
-					WriteToStderr:    true,
-					PackageNameWidth: 100,
-					PackageCount:     50,
+					Color:              false,
+					WriteToStderr:      true,
+					PackageNameWidth:   100,
+					PackageCount:       50,
+					DurationFromEvents: true,
 				},
 				style: style.NewGo(false),
 			},
@@ -36,10 +37,11 @@ func TestGoStdTestResultSummary_Present(t *testing.T) {
 			fixture: "mixed-verbose.json",
 			presenter: GoPPTestResultSummary{
 				config: GoPPTestResultSummaryConfig{
-					Color:            false,
-					WriteToStderr:    true,
-					PackageNameWidth: 100,
-					PackageCount:     50,
+					Color:              false,
+					WriteToStderr:      true,
+					PackageNameWidth:   100,
+					PackageCount:       50,
+					DurationFromEvents: true,
 				},
 				style: style.NewGo(false),
 			},
@@ -49,10 +51,11 @@ func TestGoStdTestResultSummary_Present(t *testing.T) {
 			fixture: "panic-verbose.json",
 			presenter: GoPPTestResultSummary{
 				config: GoPPTestResultSummaryConfig{
-					Color:            false,
-					WriteToStderr:    true,
-					PackageNameWidth: 100,
-					PackageCount:     50,
+					Color:              false,
+					WriteToStderr:      true,
+					PackageNameWidth:   100,
+					PackageCount:       50,
+					DurationFromEvents: true,
 				},
 				style: style.NewGo(false),
 			},

@@ -1,10 +1,12 @@
 package ui
 
 import (
-	"github.com/anchore/clio"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/json"
 	"io"
 	"os"
+
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/json"
+
+	"github.com/anchore/clio"
 )
 
 func NewJSONUI(cfg Config) clio.UI {

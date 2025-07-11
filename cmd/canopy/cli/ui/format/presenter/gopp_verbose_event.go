@@ -2,15 +2,16 @@ package presenter
 
 import (
 	"fmt"
+	"io"
+	"path/filepath"
+	"strconv"
+	"strings"
+
 	"github.com/savioxavier/termlink"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
-	"io"
-	"path/filepath"
-	"strconv"
-	"strings"
 )
 
 var _ Presenter = (*GoPPVerboseEvent)(nil)

@@ -14,16 +14,34 @@ import (
 var _ Presenter = (*JestTestResultSummary)(nil)
 
 type GoPPTestResultSummaryConfig struct {
-	Color            bool
-	WriteToStderr    bool
-	PackageNameWidth int
-	PackageCount     int
-	HidePackageCount bool
-	RunningState     string
-	StaticTimer      bool
+	// Color enables/ disables color output
+	Color bool
 
+	// WriteToStderr controls whether the summary is written to stderr instead of stdout
+	WriteToStderr bool
+
+	// PackageNameWidth is the width of the package name in the summary (controls where the aux component column starts)
+	PackageNameWidth int
+
+	// PackageCount is the number of packages in the test run
+	PackageCount int
+
+	// HidePackageCount hides the package count in the summary
+	HidePackageCount bool
+
+	// RunningState is a short string indicating a spinner if running, or the conclusion state if not running
+	RunningState string
+
+	// DurationFromEvents controls whether the timer should be driven by event timestamps or by the wall clock
+	DurationFromEvents bool
+
+	// ShowRunningPackages toggles whether to show the full name of packages that have tests running in the summary
 	ShowRunningPackages bool
-	ShowRunningTests    bool
+
+	// ShowRunningTests toggles whether to show the full name of tests in progress in the summary
+	ShowRunningTests bool
+
+	// ShowRunningSubTests toggles whether to show the full name of sub-tests in progress in the summary
 	ShowRunningSubTests bool
 }
 
@@ -186,7 +204,7 @@ func (s GoPPTestResultSummary) summaryFooter() (string, error) { //nolint:funlen
 
 	result += "\t" + wideSummary
 
-	elapsed := s.run.Result.Elapsed(!s.config.StaticTimer)
+	elapsed := s.run.Result.Elapsed(!s.config.DurationFromEvents)
 	if elapsed > 0 {
 		result += "\t" + s.style.Aux.Render(elapsed.Round(time.Millisecond).String())
 	} else {

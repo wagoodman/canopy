@@ -2,10 +2,11 @@ package presenter
 
 import (
 	"fmt"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
-	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"io"
 	"strings"
+
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 )
 
 type Package struct {

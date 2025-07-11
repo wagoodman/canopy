@@ -2,16 +2,16 @@ package gopp
 
 import (
 	"fmt"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
-	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"io"
 	"strings"
 
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
@@ -137,7 +137,7 @@ func (h *QuietPackage) render(writer io.Writer) { //nolint: gocognit
 				continue
 			}
 
-			fmt.Fprint(writer, h.formatter(resultEvent, false).String())
+			fmt.Fprint(writer, h.formatter(resultEvent, h.panic[e.Reference]).String())
 		default:
 			if e.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) && h.config.HidePackagesWithNoTestFiles {
 				continue

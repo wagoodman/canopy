@@ -3,7 +3,6 @@ package gopp
 import (
 	"errors"
 	"fmt"
-	error2 "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
 
@@ -42,7 +42,7 @@ func TestVerboseHandler(t *testing.T) {
 					events := fixtureEvents(t, tt.fixture)
 					for e := range events {
 						err := subject.OnGoTestEvent(e)
-						if errors.Is(err, error2.ErrPackageComplete) {
+						if errors.Is(err, handler.ErrPackageComplete) {
 							// this one is OK to ignore
 							continue
 						}
@@ -101,7 +101,7 @@ func TestVerbosePackage(t *testing.T) {
 			events := fixtureEvents(t, tt.fixture)
 			for e := range events {
 				err := subject.OnGoTestEvent(e)
-				if errors.Is(err, error2.ErrPackageComplete) {
+				if errors.Is(err, handler.ErrPackageComplete) {
 					// this one is OK to ignore
 					continue
 				}

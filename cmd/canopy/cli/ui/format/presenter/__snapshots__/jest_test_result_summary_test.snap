@@ -1,18 +1,18 @@
 
 [TestJestTestResultSummary_Present/failing_package - 1]
 Tests:    108 passed, 14 failed, 122 total
-Elapsed:  1.547s
+Elapsed:  1.55s
 
 ---
 
 [TestJestTestResultSummary_Present/passing_package - 1]
 Tests:    108 passed, 14 failed, 122 total
-Elapsed:  1.547s
+Elapsed:  1.551s
 
 ---
 
 [TestJestTestResultSummary_Present/panic_package - 1]
 Tests:    112 passed, 18 failed, 130 total
-Elapsed:  2.685s
+Elapsed:  2.689s
 
 ---

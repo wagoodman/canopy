@@ -1,6 +1,9 @@
 package ui
 
 import (
+	"io"
+	"os"
+
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/adapter"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gostd"
@@ -10,8 +13,6 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
-	"io"
-	"os"
 
 	"github.com/anchore/clio"
 )
