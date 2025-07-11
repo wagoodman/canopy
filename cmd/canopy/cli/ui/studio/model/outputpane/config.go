@@ -7,14 +7,6 @@ import (
 )
 
 type Config struct {
-	// You generally won't need this unless you're processing stuff with
-	// complicated ANSI escape sequences. Turn it on if you notice flickering.
-	//
-	// Also keep in mind that high performance rendering only works for programs
-	// that use the full size of the terminal. We're enabling that below with
-	// tea.EnterAltScreen().
-	UseHighPerformanceRenderer bool
-
 	// The width ratio of the viewport to the terminal width. This is useful
 	// for sidebars and other UI elements that don't take up the full width of
 	// the terminal.
@@ -33,7 +25,6 @@ func defaultOptions() Config {
 	baseSummaryStyle := lipgloss.NewStyle()
 
 	return Config{
-		//UseHighPerformanceRenderer: false,
 		WidthRatio: 1.0,
 
 		// counts
@@ -53,13 +44,6 @@ func defaultOptions() Config {
 }
 
 type Option func(*Config) error
-
-// func WithHighPerformanceRenderer() Option {
-//	return func(c *Config) error {
-//		c.UseHighPerformanceRenderer = true
-//		return nil
-//	}
-//}
 
 func WithWidthRatio(ratio float64) Option {
 	return func(c *Config) error {

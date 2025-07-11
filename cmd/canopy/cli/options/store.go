@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/anchore/go-homedir"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"
 	"github.com/wagoodman/canopy/cmd/canopy/internal"
 
 	"github.com/anchore/fangs"
+	"github.com/anchore/go-homedir"
 )
 
 var (

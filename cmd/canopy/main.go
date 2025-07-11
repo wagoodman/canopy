@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/wagoodman/canopy/cmd/canopy/cli"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/commands"
 	"github.com/wagoodman/canopy/cmd/canopy/internal"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 
@@ -69,11 +71,22 @@ func main() {
 	}()
 
 	if err := cmd.Execute(); err != nil {
-		msg := err.Error()
-		if msg != "" {
-			style := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-			fmt.Fprintf(os.Stderr, "%s\n", style.Render("error: "+err.Error()))
+		showError := func() {
+			msg := err.Error()
+			if msg != "" {
+				style := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+				fmt.Fprintf(os.Stderr, "%s\n", style.Render("error: "+err.Error()))
+			}
 		}
+		var sErr commands.SilentError
+		if errors.As(err, &sErr) {
+			if !sErr.IsSilent() {
+				showError()
+			}
+		} else {
+			showError()
+		}
+
 		exitCode = 1
 	}
 }

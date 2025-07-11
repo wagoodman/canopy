@@ -30,8 +30,15 @@ var (
 	_ fangs.PostLoader = (*testCoreConfig)(nil)
 )
 
+var _ SilentError = (*ErrTestSuiteFailed)(nil)
+
 type ErrTestSuiteFailed struct {
 	Reasons []string
+	noisy   bool
+}
+
+func (e ErrTestSuiteFailed) IsSilent() bool {
+	return !e.noisy
 }
 
 func (e ErrTestSuiteFailed) Error() string {
@@ -40,7 +47,7 @@ func (e ErrTestSuiteFailed) Error() string {
 	}
 	var render string
 	for _, reason := range e.Reasons {
-		render += fmt.Sprintf("\n  - %s", reason)
+		render += fmt.Sprintf("\n  • %s", reason)
 	}
 	return fmt.Sprintf("test suite failed: %s", render)
 }
@@ -420,7 +427,7 @@ func renderTestSuiteFailure(err ErrTestSuiteFailed) string {
 	}
 	var render string
 	for _, reason := range err.Reasons {
-		render += fmt.Sprintf("\n  - %s", reason)
+		render += fmt.Sprintf("\n  • %s", reason)
 	}
 	return fmt.Sprintf("Test suite failed: %s", render)
 }

@@ -55,10 +55,8 @@ func New(options ...Option) (Model, error) {
 	}
 
 	return Model{
-		config: cfg,
-		viewport: viewport.Model{
-			HighPerformanceRendering: cfg.UseHighPerformanceRenderer,
-		},
+		config:         cfg,
+		viewport:       viewport.Model{},
 		testCountsView: fragment.NewTestCounts(),
 		keyMap:         newKeyMap(),
 	}, nil
@@ -230,7 +228,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// here.
 			m.viewport = viewport.New(width, height)
 			// m.viewport.YPosition = headerHeight
-			m.viewport.HighPerformanceRendering = m.config.UseHighPerformanceRenderer
 			m.viewport.SetContent(m.content)
 			m.ready = true
 
@@ -242,14 +239,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.viewport.Width = width
 			m.viewport.Height = height
-		}
-
-		if m.config.UseHighPerformanceRenderer {
-			// Render (or re-render) the whole viewport. Necessary both to
-			// initialize the viewport and when the window is resized.
-			//
-			// This is needed for high-performance rendering only.
-			cmds = append(cmds, viewport.Sync(m.viewport))
 		}
 	}
 

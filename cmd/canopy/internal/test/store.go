@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/anchore/go-homedir"
 	"github.com/google/uuid"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/db"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
+
+	"github.com/anchore/go-homedir"
 )
 
 var _ store = (*dbStore)(nil)
