@@ -1,7 +1,7 @@
 package gotest
 
 import (
-	"strings"
+	"io"
 	"sync"
 	"time"
 
@@ -13,13 +13,14 @@ type Result struct {
 	config ResultConfig
 
 	references *orderedset.OrderedSet[Reference]
+	//packages   *orderedset.OrderedSet[Reference]
+	children map[Reference]*orderedset.OrderedSet[Reference]
 	// testEventsByReference *orderedmap.OrderedMap[Reference, []Event]   // all action types except "output"
-	testEventsByReference map[Reference][]Event                        // all action types // TODO rethink this
-	testOutputByReference map[Reference][]Event                        // only "output" action // TODO rethink this
-	referencesByAction    map[Action]*orderedset.OrderedSet[Reference] // all action types except "output"
-
+	testEventsByReference  map[Reference][]Event                        // all action types // TODO rethink this
+	testOutputByReference  map[Reference][]Event                        // only "output" action // TODO rethink this
+	referencesByAction     map[Action]*orderedset.OrderedSet[Reference] // all action types except "output"
 	testReferencesByAction map[Action]*orderedset.OrderedSet[Reference]
-	conclusion             map[Reference]Action
+	conclusionEvent        map[Reference]Event
 	start                  time.Time
 	startOffset            time.Duration
 	lastEventTime          time.Time
@@ -56,12 +57,14 @@ func NewResult(config ResultConfig) *Result {
 		config: config,
 
 		//testEventsByReference:  orderedmap.NewOrderedMap[Reference, []Event](),
-		references:             orderedset.New[Reference](),
+		references: orderedset.New[Reference](),
+		//packages:               orderedset.New[Reference](),
+		children:               make(map[Reference]*orderedset.OrderedSet[Reference]),
 		testEventsByReference:  make(map[Reference][]Event),
 		testOutputByReference:  make(map[Reference][]Event),
 		referencesByAction:     referencesByAction,
 		testReferencesByAction: testReferencesByAction,
-		conclusion:             make(map[Reference]Action),
+		conclusionEvent:        make(map[Reference]Event),
 	}
 }
 
@@ -99,6 +102,18 @@ func (r *Result) Update(e Event) {
 	}
 	r.lastEventTime = e.Time
 
+	// keep track of children for each reference to be able to walk a tree of tests
+	parentRef := e.Reference.ParentRef()
+	if parentRef != nil {
+		parent := *parentRef
+		if _, ok := r.children[parent]; !ok {
+			r.children[parent] = orderedset.New[Reference]()
+		}
+		//if !e.Reference.IsPackage() {
+		r.children[parent].Add(e.Reference)
+		//}
+	}
+
 	// process output and events
 	switch e.Action {
 	case OutputAction:
@@ -119,13 +134,17 @@ func (r *Result) Update(e Event) {
 
 	// all events
 	r.testEventsByReference[e.Reference] = append(r.testEventsByReference[e.Reference], e)
+
 	r.references.Add(e.Reference)
+	//if e.Reference.IsPackage() {
+	//	r.packages.Add(e.Reference)
+	//}
 
 	// process conclusion
 	switch e.Action {
 	case PassAction, SkipAction, FailAction:
 
-		r.conclusion[e.Reference] = e.Action
+		r.conclusionEvent[e.Reference] = e
 		r.referencesByAction[RunAction].Delete(e.Reference)
 		r.testReferencesByAction[RunAction].Delete(e.Reference)
 	}
@@ -151,6 +170,23 @@ func (r Result) References() []Reference {
 	defer r.lock.RUnlock()
 
 	return r.references.Values()
+}
+
+//func (r Result) Packages() []Reference {
+//	r.lock.RLock()
+//	defer r.lock.RUnlock()
+//
+//	return r.packages.Values()
+//}
+
+func (r Result) Children(reference Reference) []Reference {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	if children, ok := r.children[reference]; ok {
+		return children.Values()
+	}
+	return nil
 }
 
 func (r Result) ReferenceEvents(reference Reference) []Event {
@@ -192,30 +228,56 @@ func (r Result) TestStats() ResultStats {
 	}
 }
 
-func (r Result) ReferenceOutput(reference Reference) string {
+func (r Result) ReferenceOutput(reference Reference, writer io.Writer) error {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	sb := strings.Builder{}
 	for _, e := range r.testOutputByReference[reference] {
-		_, err := sb.WriteString(e.Output)
+		_, err := writer.Write([]byte(e.Output))
 		if err != nil {
-			// TODO
-			panic(err)
+			return err
 		}
 	}
-	return sb.String()
+	return nil
 }
 
-func (r Result) ReferenceConclusion(reference Reference) Action {
+func (r Result) ReferenceConclusiveAction(reference Reference) Action {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	act, ok := r.conclusion[reference]
+	e, ok := r.conclusionEvent[reference]
 	if !ok {
 		return ""
 	}
-	return act
+	return e.Action
+}
+
+func (r Result) ReferenceConclusion(reference Reference) *Event {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	e, ok := r.conclusionEvent[reference]
+	if !ok {
+		return nil
+	}
+	return &e
+}
+
+func (r Result) ReferenceDuration(reference Reference) time.Duration {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	e1, ok := r.testEventsByReference[reference]
+	if !ok || len(e1) == 0 {
+		return 0
+	}
+	e2, ok := r.conclusionEvent[reference]
+	if ok {
+		return e2.Time.Sub(e1[0].Time)
+	}
+
+	// if no conclusion event, return the duration from the first event to the last event
+	return e1[len(e1)-1].Time.Sub(e1[0].Time)
 }
 
 func (r *Result) SetCoverage(coverage *float64) {
@@ -250,7 +312,7 @@ func (r Result) Passed() (bool, bool) {
 	passedTestRefs := r.testReferencesByAction[PassAction]
 	failedTestRefs := r.testReferencesByAction[FailAction]
 	skippedTestRefs := r.testReferencesByAction[SkipAction]
-	hasMirroredRefs := len(r.conclusion) == r.references.Size()
+	hasMirroredRefs := len(r.conclusionEvent) == r.references.Size()
 	isStarting := (refCount(passedTestRefs) + refCount(failedTestRefs) + refCount(skippedTestRefs)) == 0
 	isStillRunning := hasRefs(runningTestRefs) || isStarting || (!hasMirroredRefs && r.references.Size() > 0)
 	passed := refCount(failedTestRefs) == 0

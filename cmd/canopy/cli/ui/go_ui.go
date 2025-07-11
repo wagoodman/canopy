@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/adapter"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gostd"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/gosummary"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/syncspinner"
@@ -44,16 +45,28 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	reportReader, reportWriter := readerWriterPair()
 	notificationReader, notificationWriter := readerWriterPair()
 
-	h := gostd.NewHandler(
-		reportWriter,
-		cfg.Verbose > 0,
-		gostd.PackageConfig{
-			PackageNameWidth:            maxPkgName,
-			Color:                       cfg.Color,
-			IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
-			HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
-		},
-	)
+	var h handler.Handler
+	if cfg.Verbose > 0 {
+		h = gostd.NewVerboseHandler(
+			reportWriter,
+			gostd.PackageConfig{
+				PackageNameWidth:            maxPkgName,
+				Color:                       cfg.Color,
+				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
+				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
+			},
+		)
+	} else {
+		h = gostd.NewQuietHandler(
+			reportWriter,
+			gostd.PackageConfig{
+				PackageNameWidth:            maxPkgName,
+				Color:                       cfg.Color,
+				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
+				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
+			},
+		)
+	}
 
 	ux := newSimpleUI().
 		withNotifications().
@@ -108,16 +121,28 @@ func newSafeGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	}
 	notificationWriter := os.Stderr
 
-	h := gostd.NewHandler(
-		reportWriter,
-		cfg.Verbose > 0,
-		gostd.PackageConfig{
-			PackageNameWidth:            maxPkgName,
-			Color:                       cfg.Color,
-			IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
-			HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
-		},
-	)
+	var h handler.Handler
+	if cfg.Verbose > 0 {
+		h = gostd.NewVerboseHandler(
+			reportWriter,
+			gostd.PackageConfig{
+				PackageNameWidth:            maxPkgName,
+				Color:                       cfg.Color,
+				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
+				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
+			},
+		)
+	} else {
+		h = gostd.NewQuietHandler(
+			reportWriter,
+			gostd.PackageConfig{
+				PackageNameWidth:            maxPkgName,
+				Color:                       cfg.Color,
+				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
+				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
+			},
+		)
+	}
 
 	ux := newSimpleUI().
 		withNotifications().

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	error2 "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
-	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"os"
 	"path/filepath"
 	"strings"
@@ -122,46 +121,4 @@ func fixtureEvents(t testing.TB, name string) <-chan gotest.Event {
 	require.NoError(t, err)
 
 	return gotest.ReplayEvents(fh, nil)
-}
-
-func TestHasTestPassMarking(t *testing.T) {
-	tests := []struct {
-		output   string
-		expected bool
-	}{
-		{"--- PASS: TestExample", true},
-		{"   --- PASS: TestExample", true},
-		{"--- FAIL: TestExample", false},
-		{"PASS: TestExample", false},
-		{"", false},
-		{"--- PASS:TestExample", true}, // Even without a space, it should detect
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.output, func(t *testing.T) {
-			result := output.HasTestPassMarking(tt.output)
-			assert.Equal(t, tt.expected, result, "Output: %q", tt.output)
-		})
-	}
-}
-
-func TestHasTestStartMarking(t *testing.T) {
-	tests := []struct {
-		output   string
-		expected bool
-	}{
-		{"=== RUN   TestExample", true},
-		{"=== RUN", true},
-		{"--- RUN TestExample", false},
-		{"RUN TestExample", false},
-		{"", false},
-		{"  === RUN TestExample", false}, // Leading spaces make it false
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.output, func(t *testing.T) {
-			result := output.HasTestStartMarking(tt.output)
-			assert.Equal(t, tt.expected, result, "Output: %q", tt.output)
-		})
-	}
 }

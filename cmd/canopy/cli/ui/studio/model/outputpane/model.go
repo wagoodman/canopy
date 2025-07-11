@@ -307,7 +307,7 @@ func (m Model) statsView() string {
 			continue
 		}
 		tests++
-		switch m.currentTestRun.ReferenceConclusion(ref) {
+		switch m.currentTestRun.ReferenceConclusiveAction(ref) {
 		case gotest.PassAction:
 			passedTests++
 		case gotest.SkipAction:

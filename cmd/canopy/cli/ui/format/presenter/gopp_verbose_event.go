@@ -89,7 +89,7 @@ func (p GoPPVerboseEvent) format() string {
 	if output.HasTestPassMarking(e.Output) {
 		return formatPassedTest(e.Output, p.Style)
 	}
-	if output.HasTestStartMarking(e.Output) || output.HasContinueMarking(e.Output) || output.HasPauseMarking(e.Output) {
+	if output.HasRunMarking(e.Output) || output.HasContinueMarking(e.Output) || output.HasPauseMarking(e.Output) {
 		if p.HideExecutionTestEvents {
 			return ""
 		}

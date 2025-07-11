@@ -247,7 +247,7 @@ func (m Model) filterToVisibleRefs(original []gotest.Reference, currentTestRun s
 	var refs []gotest.Reference
 	refs = append(refs, gotest.Reference{Package: "*"})
 	for _, ref := range original {
-		action := currentTestRun.ReferenceConclusion(ref)
+		action := currentTestRun.ReferenceConclusiveAction(ref)
 
 		if action == gotest.FailAction && !showFailed {
 			continue

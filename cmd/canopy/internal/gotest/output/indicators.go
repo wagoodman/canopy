@@ -22,10 +22,6 @@ func HasTestPassMarking(output string) bool {
 	return strings.HasPrefix(strings.TrimSpace(output), "--- PASS:")
 }
 
-func HasTestStartMarking(output string) bool {
-	return strings.HasPrefix(output, "=== RUN")
-}
-
 func HasPackageCoverageMarking(output string) bool {
 	return strings.HasPrefix(strings.TrimSpace(output), "coverage:")
 }
@@ -44,6 +40,14 @@ func HasPassMarking(output string) bool {
 
 func HasRunMarking(output string) bool {
 	return strings.HasPrefix(strings.TrimSpace(output), "=== RUN")
+}
+
+func HasConclusionMarking(output string) bool {
+	return strings.HasPrefix(strings.TrimSpace(output), "--- ")
+}
+
+func HasStateMarking(output string) bool {
+	return strings.HasPrefix(strings.TrimSpace(output), "=== ")
 }
 
 func HasContinueMarking(output string) bool {

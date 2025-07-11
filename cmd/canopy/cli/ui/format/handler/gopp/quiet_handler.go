@@ -58,6 +58,7 @@ func NewQuietPackage(writer io.Writer, config QuietPackageConfig, ref gotest.Ref
 		failedRefs:      make(map[gotest.Reference]struct{}),
 		resultEvent:     make(map[gotest.Reference]gotest.Event),
 		packageCoverage: make(map[gotest.Reference]string),
+		panic:           make(map[gotest.Reference]bool),
 		formatter: presenter.NewGoPPQuietEventFactory(
 			style.NewGo(config.Color),
 			config.IDE,
