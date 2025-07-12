@@ -33,7 +33,7 @@ func (p Package) String() string {
 	var aux = p.Aux
 	if p.FormatStatus {
 		switch {
-		case output.HasPassMarking(status):
+		case output.HasPackagePassMarking(status):
 			status = p.Style.Success.Render(status)
 		case output.HasPassedPackageMarking(status):
 			status = p.Style.Success.Render(status)

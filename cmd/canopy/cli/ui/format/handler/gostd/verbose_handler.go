@@ -84,19 +84,13 @@ func (h *verboseHandler) OnGoTestEvent(e gotest.Event) error {
 	case gotest.PassAction, gotest.FailAction, gotest.SkipAction:
 		switch {
 		case e.Reference.IsPackage():
-			// print final "FAIL" or "PASS" line for the package
-			switch e.Action {
-			case gotest.PassAction:
-				e.Output = "PASS"
-			case gotest.FailAction:
+			if e.Action == gotest.FailAction {
+				// print final "FAIL" line for the package
 				e.Output = "FAIL"
-			case gotest.SkipAction:
-				e.Output = "SKIP"
+				e.Action = gotest.OutputAction
+				fmtr := h.formatter(e, h.panic[e.Reference])
+				fmt.Fprint(h.writer, fmtr.String())
 			}
-			e.Action = gotest.OutputAction
-			fmtr := h.formatter(e, h.panic[e.Reference])
-			fmt.Fprint(h.writer, fmtr.String())
-
 		case !e.Reference.IsSubTest():
 			h.outputTest(
 				e.Reference,

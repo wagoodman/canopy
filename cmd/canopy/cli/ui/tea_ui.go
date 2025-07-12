@@ -20,6 +20,8 @@ import (
 	"github.com/anchore/clio"
 )
 
+const tabWidth = 4 // number of spaces per tab character
+
 var _ tea.Model = (*frameWithFooter)(nil)
 
 var _ interface {
@@ -158,7 +160,7 @@ func (m *UI) Setup(subscription partybus.Unsubscribable) error {
 			// scan for every line in the reader and print it just behind the UI
 			scanner := bufio.NewScanner(reader)
 			for scanner.Scan() {
-				m.program.Println(scanner.Text())
+				m.program.Println(expandTabs(scanner.Text()))
 			}
 
 			m.running.Done()
@@ -166,6 +168,93 @@ func (m *UI) Setup(subscription partybus.Unsubscribable) error {
 	}
 
 	return m.config.simpleUI.Setup(subscription)
+}
+
+// expandTabs replaces tab characters in a string with spaces, expanding each tab to a fixed width. Tabs in the terminal
+// really advance the cursor to the next tab stop, which is typically every 4 spaces. However, whatever characters
+// that are between the tab and the next tab stop are not overwritten with spaces. In a bubbletea UI, this can cause
+// issues since we may be continually overwriting the same line with new content, leaving artifacts behind where tab
+// characters were present (like small 4 character windows in the previous screen buffer). For this reason, we simulate
+// tab characters for any possible input, replacing with spaces to overwrite all characters between the tab and
+// next tab stop.
+// Why go this route instead of changing the output to not use tabs? Mainly because the output from `go test` already
+// uses tabs, so we would need to preserve the semantics in each case anyway. For this reason, it's generally easier
+// to do this once just-in-time before rendering the output to the terminal, rather than in all places where we are
+// reasoning about the output of `go test` (which would still need to preserve ansi control characters too).
+func expandTabs(s string) string {
+	var result strings.Builder
+	column := 0
+
+	runes := []rune(s)
+	i := 0
+
+	for i < len(runes) {
+		r := runes[i]
+
+		switch r {
+		case '\t':
+			// calculate how many spaces needed to reach next tab stop
+			spacesToAdd := tabWidth - (column % tabWidth)
+			result.WriteString(strings.Repeat(" ", spacesToAdd))
+			column += spacesToAdd
+			i++
+		case '\n', '\r':
+			// reset column position on newline
+			result.WriteRune(r)
+			column = 0
+			i++
+		case '\x1b': // ESC character - start of ANSI sequence
+			// find the end of the ANSI escape sequence and copy it without affecting column
+			start := i
+			i++ // skip ESC
+
+			// handle CSI sequences (most common: ESC[...m)
+			if i < len(runes) && runes[i] == '[' {
+				i++ // skip '['
+				// find the end of the CSI sequence (ends with a letter)
+				for i < len(runes) && !isCSITerminator(runes[i]) {
+					i++
+				}
+				if i < len(runes) {
+					i++ // include the terminator
+				}
+			} else {
+				// handle other escape sequences (like ESC(, ESC), etc.)
+				// most are 2 characters, but some can be longer
+				for i < len(runes) && i < start+10 { // reasonable limit
+					if isEscapeTerminator(runes[i]) {
+						i++
+						break
+					}
+					i++
+				}
+			}
+
+			// copy the entire ANSI sequence to result without affecting column
+			for j := start; j < i; j++ {
+				result.WriteRune(runes[j])
+			}
+		default:
+			// regular character - affects column position
+			result.WriteRune(r)
+			column++
+			i++
+		}
+	}
+
+	return result.String()
+}
+
+// isCSITerminator checks if a rune terminates a CSI sequence
+func isCSITerminator(r rune) bool {
+	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z')
+}
+
+// isEscapeTerminator checks if a rune terminates other escape sequences
+func isEscapeTerminator(r rune) bool {
+	// common terminators for various escape sequences
+	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') ||
+		r == '(' || r == ')' || r == '#' || r == '%'
 }
 
 func (m *UI) Handle(e partybus.Event) error {
@@ -319,7 +408,7 @@ func (m UI) View() string {
 	// if m.teardownCalled {
 	//	return ""
 	//}
-	return m.config.frame.View()
+	return expandTabs(m.config.frame.View())
 }
 
 func runWithTimeout(timeout time.Duration, fn func() error) (err error) {

@@ -83,7 +83,6 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI { //
 			PackageCount:     pkgCount,
 			HidePackageCount: true,
 			//ShowElapsed: true,
-
 			ShowRunningPackages: true,
 			ShowRunningTests:    true,
 			ShowRunningSubTests: true,

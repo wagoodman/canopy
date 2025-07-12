@@ -142,7 +142,7 @@ func (h *QuietPackage) render(writer io.Writer) {
 			if e.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) && h.config.HidePackagesWithNoTestFiles {
 				continue
 			}
-			if output.HasRunMarking(e.Output) || output.HasPassMarking(e.Output) {
+			if output.HasRunMarking(e.Output) || output.HasPackagePassMarking(e.Output) {
 				// skip the run line
 				continue
 			}

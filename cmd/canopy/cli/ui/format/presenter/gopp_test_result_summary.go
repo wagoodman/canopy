@@ -3,6 +3,7 @@ package presenter
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -82,13 +83,16 @@ func (s GoPPTestResultSummary) Present(stdout, stderr io.Writer) error {
 func (s GoPPTestResultSummary) runningFooter() string {
 	runningRefs := s.run.Result.ReferencesByAction(gotest.RunAction)
 
+	// these references are in started order... but that doesn't mean they are in the logical topological order if t.Parallel() is used across tests / subtests
+	sort.Sort(gotest.References(runningRefs))
+
 	var lines []string
 	for i, ref := range runningRefs {
 		var line string
 		switch {
 		case s.config.ShowRunningPackages && ref.IsPackage():
 			line = Package{
-				Status:         s.config.RunningState,
+				Status:         s.config.RunningState + "\t",
 				Name:           ref.Package,
 				TestsCompleted: 0,
 				Aux:            nil,
@@ -98,12 +102,12 @@ func (s GoPPTestResultSummary) runningFooter() string {
 				MaxTestName:    s.config.PackageNameWidth,
 			}.String()
 		case s.config.ShowRunningSubTests && ref.IsSubTest():
-			subtestBranch := "  └── "
+			subtestBranch := " └── "
 			if i+1 < len(runningRefs) && runningRefs[i+1].IsSubTest() {
-				subtestBranch = "  ├── "
+				subtestBranch = " ├── "
 			}
 			line = Package{
-				Status:         "",
+				Status:         "\t",
 				Name:           s.style.Aux.Render(subtestBranch) + ref.SubTestName(true),
 				TestsCompleted: 0,
 				Aux:            nil,
@@ -114,7 +118,7 @@ func (s GoPPTestResultSummary) runningFooter() string {
 			}.String()
 		case s.config.ShowRunningTests && !ref.IsSubTest() && !ref.IsPackage():
 			line = Package{
-				Status:         s.config.RunningState,
+				Status:         s.config.RunningState + "\t",
 				Name:           ref.String(true),
 				TestsCompleted: 0,
 				Aux:            nil,

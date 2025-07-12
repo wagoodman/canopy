@@ -34,7 +34,7 @@ func HasUnknownPackageMarking(output string) bool {
 	return strings.HasPrefix(output, "?") || strings.HasPrefix(output, "\t")
 }
 
-func HasPassMarking(output string) bool {
+func HasPackagePassMarking(output string) bool {
 	return strings.HasPrefix(strings.TrimSpace(output), "PASS")
 }
 

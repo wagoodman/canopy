@@ -90,7 +90,7 @@ func (h *quietHandler) render() {
 
 		if !action.Completed() {
 			// this package isn't done yet, so we can't output anything after it
-			break
+			return
 		}
 
 		h.outputPackage(
@@ -124,29 +124,18 @@ func (h *quietHandler) outputPackage(pkgRef gotest.Reference, include func(gotes
 			h.outputTest(testRef, include, render)
 		}
 	}
+
 	// output package conclusions
 	outputEvents := h.result.ReferenceEvents(pkgRef)
 	for _, e := range outputEvents {
+		if output.HasPackagePassMarking(e.Output) {
+			// if the package passed, we don't need to output anything
+			continue
+		}
 		fmtr := h.formatter(e, h.panic[e.Reference])
 		if strings.TrimSpace(e.Output) != "" {
 			fmt.Fprint(h.writer, fmtr.String())
 		}
-	}
-
-	// print final "FAIL" or "PASS" line for the package
-	e := h.result.ReferenceConclusion(pkgRef)
-	if e != nil {
-		switch e.Action {
-		case gotest.PassAction:
-			e.Output = "PASS"
-		case gotest.FailAction:
-			e.Output = "FAIL"
-		case gotest.SkipAction:
-			e.Output = "SKIP"
-		}
-		e.Action = gotest.OutputAction
-		fmtr := h.formatter(*e, h.panic[e.Reference])
-		fmt.Fprint(h.writer, fmtr.String())
 	}
 }
 

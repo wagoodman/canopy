@@ -1,8 +1,8 @@
 profiles:
   unit:
     store:
-      enabled: true
-    
+      enabled: false
+
     test:
       cover: true
       covermin: 55

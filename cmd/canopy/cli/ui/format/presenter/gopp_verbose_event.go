@@ -68,7 +68,7 @@ func (p GoPPVerboseEvent) String() string {
 }
 
 func (p GoPPVerboseEvent) formatPackage(e gotest.Event) string {
-	if output.HasFailedPackageMarking(e.Output) || output.HasPassedPackageMarking(e.Output) || output.HasUnknownPackageMarking(e.Output) || output.HasPassMarking(e.Output) {
+	if output.HasFailedPackageMarking(e.Output) || output.HasPassedPackageMarking(e.Output) || output.HasUnknownPackageMarking(e.Output) || output.HasPackagePassMarking(e.Output) {
 		return parseAndFormatPackageLine(e.Output, p.Style, p.PackageNameWidth)
 	}
 	if output.HasPackageCoverageMarking(e.Output) {

@@ -85,7 +85,7 @@ func TestHasUnknownPackageMarking(t *testing.T) {
 	}
 }
 
-func TestHasPassMarking(t *testing.T) {
+func TestHasPackagePassMarking(t *testing.T) {
 	tests := []struct {
 		output   string
 		expected bool
@@ -99,7 +99,7 @@ func TestHasPassMarking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.output, func(t *testing.T) {
-			result := HasPassMarking(tt.output)
+			result := HasPackagePassMarking(tt.output)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
