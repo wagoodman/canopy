@@ -81,9 +81,10 @@ func (h *quietHandler) OnGoTestEvent(e gotest.Event) error {
 }
 
 func (h *quietHandler) render() {
-	// only render packages that are done, and render them in the order they were started
+	// only render packages that are done, and render them in alphabetical order
 	// this is the reason why we cannot use a package handler (since order of packages is important, independent of the order of completion)
 	pkgs := h.packages.Values()
+	sort.Sort(gotest.References(pkgs))
 	for len(pkgs) > 0 {
 		pkgRef := pkgs[0]
 		action := h.result.ReferenceConclusiveAction(pkgRef)

@@ -78,12 +78,7 @@ func newVerboseDynamicGoPPUI(testPkgs *golist.PackageCollection, cfg Config) cli
 			Color:            cfg.Color,
 			PackageNameWidth: maxPkgName,
 			PackageCount:     pkgCount,
-			HidePackageCount: true,
-			//ShowElapsed: true,
-
-			ShowRunningPackages: true,
-			ShowRunningTests:    true,
-			ShowRunningSubTests: true,
+			ShowRunningTests: true,
 		},
 		common,
 	)
@@ -166,13 +161,8 @@ func newDefaultDynamicGoPPUI(testPkgs *golist.PackageCollection, cfg Config) cli
 			Color:            cfg.Color,
 			PackageNameWidth: maxPkgName,
 			PackageCount:     pkgCount,
-			HidePackageCount: true,
-			//ShowElapsed: true,
-
 			// we turn all of this off since pkgModelFactory will handle these details
-			ShowRunningPackages: false,
-			ShowRunningTests:    false,
-			ShowRunningSubTests: false,
+			ShowRunningTests: false,
 		},
 		common,
 	)

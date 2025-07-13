@@ -1,15 +1,15 @@
 
 [TestGoStdTestResultSummary_Present/failing_package - 1]
-FAIL 50 packages, 108 passed / 14 failed / 122 total tests                                                1.548s
+FAIL 108 passed / 14 failed tests                                                                         1.548s
 
 ---
 
 [TestGoStdTestResultSummary_Present/passing_package - 1]
-FAIL 50 packages, 108 passed / 14 failed / 122 total tests                                                1.548s
+FAIL 108 passed / 14 failed tests                                                                         1.548s
 
 ---
 
 [TestGoStdTestResultSummary_Present/panic_package - 1]
-FAIL 50 packages, 112 passed / 18 failed / 130 total tests                                                2.686s
+FAIL 112 passed / 18 failed tests                                                                         2.686s
 
 ---

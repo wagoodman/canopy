@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/scylladb/go-set/strset"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
@@ -27,8 +28,11 @@ type GoPPTestResultSummaryConfig struct {
 	// PackageCount is the number of packages in the test run
 	PackageCount int
 
-	// HidePackageCount hides the package count in the summary
-	HidePackageCount bool
+	// ShowPackageCount toggles whether the package count is shown in the summary
+	ShowPackageCount bool
+
+	// ShowTotalTestCount toggles whether the total test count is shown in the summary
+	ShowTotalTestCount bool
 
 	// RunningState is a short string indicating a spinner if running, or the conclusion state if not running
 	RunningState string
@@ -37,13 +41,13 @@ type GoPPTestResultSummaryConfig struct {
 	DurationFromEvents bool
 
 	// ShowRunningPackages toggles whether to show the full name of packages that have tests running in the summary
-	ShowRunningPackages bool
+	// ShowRunningPackages bool
 
 	// ShowRunningTests toggles whether to show the full name of tests in progress in the summary
 	ShowRunningTests bool
 
 	// ShowRunningSubTests toggles whether to show the full name of sub-tests in progress in the summary
-	ShowRunningSubTests bool
+	// ShowRunningSubTests bool
 }
 
 func (c GoPPTestResultSummaryConfig) New(run gotest.Run) Presenter {
@@ -67,7 +71,7 @@ func (s GoPPTestResultSummary) Present(stdout, stderr io.Writer) error {
 	}
 
 	var runningFooter string
-	if s.config.ShowRunningPackages || s.config.ShowRunningTests {
+	if s.config.ShowRunningTests {
 		runningFooter = s.runningFooter()
 	}
 
@@ -86,51 +90,59 @@ func (s GoPPTestResultSummary) runningFooter() string {
 	// these references are in started order... but that doesn't mean they are in the logical topological order if t.Parallel() is used across tests / subtests
 	sort.Sort(gotest.References(runningRefs))
 
+	var testFuncsByPackage = make(map[string]*strset.Set)
+	var statsByPackage = make(map[string]gotest.ResultStats)
+	var testCountByFunction = make(map[string]map[string]int)
+	pkgsSet := strset.New()
+	var pkgs []string
+	for _, ref := range runningRefs {
+		if ref.IsPackage() {
+			continue
+		}
+		if !pkgsSet.Has(ref.Package) {
+			pkgsSet.Add(ref.Package)
+			pkgs = append(pkgs, ref.Package)
+			statsByPackage[ref.Package] = s.run.Result.ReferenceTestStats(ref.PackageRef(), false)
+		}
+
+		if ref.IsSubTest() {
+			continue
+		}
+
+		if _, ok := testFuncsByPackage[ref.Package]; !ok {
+			testFuncsByPackage[ref.Package] = strset.New()
+		}
+		testFuncsByPackage[ref.Package].Add(ref.FuncName)
+		if _, ok := testCountByFunction[ref.Package]; !ok {
+			testCountByFunction[ref.Package] = make(map[string]int)
+		}
+		testCountByFunction[ref.Package][ref.FuncName]++
+	}
+
 	var lines []string
-	for i, ref := range runningRefs {
-		var line string
-		switch {
-		case s.config.ShowRunningPackages && ref.IsPackage():
-			line = Package{
-				Status:         s.config.RunningState + "\t",
-				Name:           ref.Package,
-				TestsCompleted: 0,
-				Aux:            nil,
-				Trailer:        "",
-				Style:          s.style,
-				FormatStatus:   false,
-				MaxTestName:    s.config.PackageNameWidth,
-			}.String()
-		case s.config.ShowRunningSubTests && ref.IsSubTest():
-			subtestBranch := " └── "
-			if i+1 < len(runningRefs) && runningRefs[i+1].IsSubTest() {
-				subtestBranch = " ├── "
-			}
-			line = Package{
-				Status:         "\t",
-				Name:           s.style.Aux.Render(subtestBranch) + ref.SubTestName(true),
-				TestsCompleted: 0,
-				Aux:            nil,
-				Trailer:        "",
-				Style:          s.style,
-				FormatStatus:   false,
-				MaxTestName:    s.config.PackageNameWidth,
-			}.String()
-		case s.config.ShowRunningTests && !ref.IsSubTest() && !ref.IsPackage():
-			line = Package{
-				Status:         s.config.RunningState + "\t",
-				Name:           ref.String(true),
-				TestsCompleted: 0,
-				Aux:            nil,
-				Trailer:        "",
-				Style:          s.style,
-				FormatStatus:   false,
-				MaxTestName:    s.config.PackageNameWidth,
-			}.String()
-		}
-		if line != "" {
-			lines = append(lines, line)
-		}
+	for _, pkg := range pkgs {
+		lines = append(lines, Package{
+			Status:         s.config.RunningState,
+			NameAsAux:      true,
+			Name:           pkg,
+			TestsCompleted: 0,
+			Aux:            nil,
+			Trailer:        "",
+			Style:          s.style,
+			FormatStatus:   false,
+			MaxTestName:    s.config.PackageNameWidth,
+		}.String())
+
+		stats := statsByPackage[pkg]
+
+		fmtStats := "\t\t" + s.style.Aux.Render(" ├── ") + s.renderStats(stats)
+
+		funcs := testFuncsByPackage[pkg].List()
+		sort.Strings(funcs)
+
+		fmtTests := "\t\t" + s.style.Aux.Render(" └── ") + fmt.Sprintf("%d running: %s", len(funcs), strings.Join(funcs, ", "))
+
+		lines = append(lines, fmtStats, fmtTests)
 	}
 
 	if len(lines) == 0 {
@@ -143,22 +155,60 @@ func (s GoPPTestResultSummary) runningFooter() string {
 func (s GoPPTestResultSummary) summaryFooter() string {
 	passed, isRunning := s.run.Result.Passed()
 
-	var result string
+	var status string
 	switch {
 	case isRunning:
 		if s.config.RunningState != "" {
-			result += s.style.Running.Render(s.config.RunningState)
+			status = s.style.Running.Render(s.config.RunningState)
 		} else {
-			result += s.style.Running.Render("RUNNING")
+			status = s.style.Running.Render("RUNNING")
 		}
 	case !passed:
-		result += s.style.Failed.Render("FAIL")
+		status = s.style.Failed.Render("FAIL")
 	default:
-		result += s.style.Success.Render("PASS")
+		status = s.style.Success.Render("PASS")
 	}
 
-	stats := s.run.Result.TestStats()
+	width := lipgloss.Width(status)
+	switch {
+	case width == 0:
+		status = "\t\t"
+	case width < 4:
+		status += "\t\t"
+	case width < 8:
+		status += "\t"
+	}
 
+	result := status
+	var sections []string
+
+	if s.config.ShowPackageCount {
+		sections = append(sections, fmt.Sprintf("%d packages", s.config.PackageCount))
+	}
+
+	sections = append(sections, s.renderStats(s.run.Result.TestStats()))
+
+	summary := strings.Join(sections, ", ")
+	wideSummary := lipgloss.NewStyle().Width(s.config.PackageNameWidth).Render(summary)
+
+	result += wideSummary
+
+	elapsed := s.run.Result.Elapsed(!s.config.DurationFromEvents)
+	if elapsed > 0 {
+		result += "\t" + s.style.Aux.Render(elapsed.Round(time.Millisecond).String())
+	} else {
+		result += "\t" + s.style.Aux.Render("compiling...")
+	}
+
+	if coverage, ok := s.run.Result.Coverage(); ok {
+		// match the same format changes used in the gostd handlers
+		result += "\t" + s.style.Aux.Render(fmt.Sprintf("[%0.1f%% coverage]", coverage))
+	}
+
+	return result
+}
+
+func (s GoPPTestResultSummary) renderStats(stats gotest.ResultStats) string {
 	var tests []string
 
 	if stats.Passed > 0 {
@@ -179,36 +229,11 @@ func (s GoPPTestResultSummary) summaryFooter() string {
 	case total == 0:
 		tests = append(tests, s.style.Waiting.Render("(waiting for tests results)"))
 		testCountSuffix = ""
-	case total != stats.Passed:
+	case s.config.ShowTotalTestCount && total != stats.Passed:
 		tests = append(tests, fmt.Sprintf("%d total", stats.Total()))
 	}
 
 	testSummaryCount := strings.Join(tests, " / ")
 
-	var sections []string
-
-	if !s.config.HidePackageCount {
-		sections = append(sections, fmt.Sprintf("%d packages", s.config.PackageCount))
-	}
-
-	sections = append(sections, fmt.Sprintf("%s%s", testSummaryCount, testCountSuffix))
-
-	summary := strings.Join(sections, ", ")
-	wideSummary := lipgloss.NewStyle().Width(s.config.PackageNameWidth).Render(summary)
-
-	result += "\t" + wideSummary
-
-	elapsed := s.run.Result.Elapsed(!s.config.DurationFromEvents)
-	if elapsed > 0 {
-		result += "\t" + s.style.Aux.Render(elapsed.Round(time.Millisecond).String())
-	} else {
-		result += "\t" + s.style.Aux.Render("compiling...")
-	}
-
-	if coverage, ok := s.run.Result.Coverage(); ok {
-		// match the same format changes used in the gostd handlers
-		result += "\t" + s.style.Aux.Render(fmt.Sprintf("[%0.1f%% coverage]", coverage))
-	}
-
-	return result
+	return fmt.Sprintf("%s%s", testSummaryCount, testCountSuffix)
 }

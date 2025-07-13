@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 )
@@ -12,6 +13,7 @@ import (
 type Package struct {
 	Status         string
 	Name           string
+	NameAsAux      bool
 	TestsCompleted int
 	Aux            []string
 	Trailer        string
@@ -30,6 +32,17 @@ func (p Package) Present(stdout, _ io.Writer) error {
 // func FormatPackageLine(status, pkgName string, testsCompleted int, aux []string, trailer string, st style.Go, formatStatus bool, maxTestName int) string {
 func (p Package) String() string {
 	var status = p.Status
+
+	width := lipgloss.Width(status)
+	switch {
+	case width == 0:
+		status = "\t\t"
+	case width < 4:
+		status += "\t\t"
+	case width < 8:
+		status += "\t"
+	}
+
 	var aux = p.Aux
 	if p.FormatStatus {
 		switch {
@@ -52,6 +65,10 @@ func (p Package) String() string {
 		p.Name = fmt.Sprintf("%-*s", p.MaxTestName, p.Name)
 	}
 
+	if p.NameAsAux {
+		p.Name = p.Style.Aux.Render(p.Name)
+	}
+
 	for i, a := range aux {
 		switch {
 		case output.HasTimeMarker(a):
@@ -70,5 +87,5 @@ func (p Package) String() string {
 		aux[i] = p.Style.Aux.Render(a)
 	}
 
-	return strings.Join(append([]string{status, p.Name}, aux...), "\t") + p.Trailer
+	return status + strings.Join(append([]string{p.Name}, aux...), "\t") + p.Trailer
 }

@@ -4,8 +4,8 @@
 ---
 
 [TestVerboseHandler/go1.21.3/hide-no-tests=false - 1]
-?    github.com/wagoodman/canopy/cmd/canopy/cli/options                                                                                                     [no test files]
-?    github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset                                                                                            [no test files]
+?       github.com/wagoodman/canopy/cmd/canopy/cli/options                                                                                                     [no test files]
+?       github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset                                                                                            [no test files]
 
 ---
 
@@ -84,8 +84,8 @@
         ─── FAIL  TestAddFailingSubtest/Test_weird_numbers_(oops)/offset=1 (0.00s)
         ─── FAIL  TestAddFailingSubtest/Test_weird_numbers_(oops)/offset=2 (0.00s)
         ─── FAIL  TestAddFailingSubtest/Test_weird_numbers_(oops)/offset=3 (0.00s)
-FAIL 
-FAIL github.com/wagoodman/canopy/internal/test-fixtures/weird.d                                                                                             0.587s
+FAIL    
+FAIL    github.com/wagoodman/canopy/internal/test-fixtures/weird.d                                                                                             0.587s
 
 ---
 
@@ -190,8 +190,8 @@ FAIL github.com/wagoodman/canopy/internal/test-fixtures/weird.d                 
     ─── PASS  Test_dfsTreeIterator_Next/multiple_cases (0.00s)
     ─── PASS  Test_dfsTreeIterator_Next/duplicate_case (0.00s)
     ─── PASS  Test_dfsTreeIterator_Next/many_cases (0.00s)
-PASS 
-ok   github.com/wagoodman/canopy/cmd/canopy/internal/gotest                                                                                                 (cached)
+PASS    
+ok      github.com/wagoodman/canopy/cmd/canopy/internal/gotest                                                                                                 (cached)
 
 ---
 
@@ -223,6 +223,6 @@ ok   github.com/wagoodman/canopy/cmd/canopy/internal/gotest                     
 ░     /Users/wagoodman/.local/share/mise/installs/go/1.21.1/go/src/testing/testing.go:1595 +0xe8
 ░ created by testing.(*T).Run in goroutine 36
 ░     /Users/wagoodman/.local/share/mise/installs/go/1.21.1/go/src/testing/testing.go:1648 +0x33c
-FAIL github.com/wagoodman/canopy/internal/test-fixtures/panic                                                                                               0.550s
+FAIL    github.com/wagoodman/canopy/internal/test-fixtures/panic                                                                                               0.550s
 
 ---

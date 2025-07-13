@@ -179,21 +179,21 @@ func (r Result) References() []Reference {
 //	return r.packages.Values()
 //}
 
-func (r Result) Children(reference Reference) []Reference {
+func (r Result) Children(ref Reference) []Reference {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	if children, ok := r.children[reference]; ok {
+	if children, ok := r.children[ref]; ok {
 		return children.Values()
 	}
 	return nil
 }
 
-func (r Result) ReferenceEvents(reference Reference) []Event {
+func (r Result) ReferenceEvents(ref Reference) []Event {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	return r.testEventsByReference[reference]
+	return r.testEventsByReference[ref]
 }
 
 func (r Result) ReferencesByAction(action Action) []Reference {
@@ -216,6 +216,39 @@ func (r Result) TestReferencesByAction(action Action) []Reference {
 	return nil
 }
 
+// ReferenceTestStats returns the test events for all children of the given reference (recursively),
+// and optionally the given reference itself.
+func (r Result) ReferenceTestStats(ref Reference, inclusive bool) ResultStats {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	stats := ResultStats{}
+
+	if inclusive {
+		action := r.ReferenceConclusiveAction(ref)
+		switch action {
+		case PassAction:
+			stats.Passed++
+		case FailAction:
+			stats.Failed++
+		case SkipAction:
+			stats.Skipped++
+		case RunAction:
+			stats.Running++
+		}
+	}
+
+	for _, childRef := range r.Children(ref) {
+		childStats := r.ReferenceTestStats(childRef, true)
+		stats.Passed += childStats.Passed
+		stats.Failed += childStats.Failed
+		stats.Skipped += childStats.Skipped
+		stats.Running += childStats.Running
+	}
+
+	return stats
+}
+
 func (r Result) TestStats() ResultStats {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
@@ -228,11 +261,11 @@ func (r Result) TestStats() ResultStats {
 	}
 }
 
-func (r Result) ReferenceOutput(reference Reference, writer io.Writer) error {
+func (r Result) ReferenceOutput(ref Reference, writer io.Writer) error {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	for _, e := range r.testOutputByReference[reference] {
+	for _, e := range r.testOutputByReference[ref] {
 		_, err := writer.Write([]byte(e.Output))
 		if err != nil {
 			return err
@@ -241,37 +274,37 @@ func (r Result) ReferenceOutput(reference Reference, writer io.Writer) error {
 	return nil
 }
 
-func (r Result) ReferenceConclusiveAction(reference Reference) Action {
+func (r Result) ReferenceConclusiveAction(ref Reference) Action {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	e, ok := r.conclusionEvent[reference]
+	e, ok := r.conclusionEvent[ref]
 	if !ok {
 		return ""
 	}
 	return e.Action
 }
 
-func (r Result) ReferenceConclusion(reference Reference) *Event {
+func (r Result) ReferenceConclusion(ref Reference) *Event {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	e, ok := r.conclusionEvent[reference]
+	e, ok := r.conclusionEvent[ref]
 	if !ok {
 		return nil
 	}
 	return &e
 }
 
-func (r Result) ReferenceDuration(reference Reference) time.Duration {
+func (r Result) ReferenceDuration(ref Reference) time.Duration {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	e1, ok := r.testEventsByReference[reference]
+	e1, ok := r.testEventsByReference[ref]
 	if !ok || len(e1) == 0 {
 		return 0
 	}
-	e2, ok := r.conclusionEvent[reference]
+	e2, ok := r.conclusionEvent[ref]
 	if ok {
 		return e2.Time.Sub(e1[0].Time)
 	}

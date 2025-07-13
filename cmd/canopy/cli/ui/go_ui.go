@@ -24,7 +24,7 @@ func NewGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	return newSafeGoUI(testPkgs, cfg)
 }
 
-func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI { //nolint:funlen
+func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	var pkgCount int
 	maxPkgName := 30
 	if testPkgs != nil {
@@ -81,11 +81,7 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI { //
 			Color:            cfg.Color,
 			PackageNameWidth: maxPkgName,
 			PackageCount:     pkgCount,
-			HidePackageCount: true,
-			//ShowElapsed: true,
-			ShowRunningPackages: true,
-			ShowRunningTests:    true,
-			ShowRunningSubTests: true,
+			ShowRunningTests: true,
 		},
 		common,
 	)
@@ -156,6 +152,7 @@ func newSafeGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 				PackageNameWidth: maxPkgName,
 				PackageCount:     pkgCount,
 				Color:            cfg.Color,
+				ShowRunningTests: false, // it's safer to not thrash the number of lines we're writing to the terminal
 			}.New),
 		)
 
