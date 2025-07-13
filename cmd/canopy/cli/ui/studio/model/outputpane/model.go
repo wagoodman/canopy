@@ -13,7 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/gopp"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/event"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/fragment"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/state"
@@ -117,18 +117,18 @@ func newViewModel(userArgs []string) viewModel {
 	isVerbose := slices.Contains(userArgs, "-v")
 	var hnd handler.Handler
 	if isVerbose {
-		hnd = gopp.NewVerboseHandler(
+		hnd = goxx.NewVerboseHandler(
 			&sb,
-			gopp.VerbosePackageConfig{
+			goxx.VerbosePackageConfig{
 				Color:            true,
 				PackageNameWidth: 50,
 				IDE:              ide.Select(&ide.OSEnvironmentGetter{}),
 			},
 		)
 	} else {
-		hnd = gopp.NewQuietHandler(
+		hnd = goxx.NewQuietHandler(
 			&sb,
-			gopp.QuietPackageConfig{
+			goxx.QuietPackageConfig{
 				Color:            true,
 				PackageNameWidth: 50,
 				IDE:              ide.Select(&ide.OSEnvironmentGetter{}),

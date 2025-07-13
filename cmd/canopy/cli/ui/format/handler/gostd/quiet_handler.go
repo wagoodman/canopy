@@ -37,7 +37,7 @@ func NewQuietHandler(writer io.Writer, config PackageConfig) handler.Handler {
 		result:   gotest.NewResult(gotest.ResultConfig{TrackOtherOutput: true, TrackFailingOutput: true}),
 		packages: orderedset.New[gotest.Reference](),
 		panic:    make(map[gotest.Reference]bool),
-		formatter: presenter.NewGoPPQuietEventFactory(
+		formatter: presenter.NewGoQuietEventFactory(
 			style.NewGo(config.Color),
 			config.IDE,
 			config.PackageNameWidth,

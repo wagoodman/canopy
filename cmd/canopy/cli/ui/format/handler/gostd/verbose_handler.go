@@ -3,6 +3,7 @@ package gostd
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/lindell/go-ordered-set/orderedset"
@@ -45,7 +46,7 @@ func NewVerboseHandler(writer io.Writer, config PackageConfig) handler.Handler {
 		result:   gotest.NewResult(gotest.ResultConfig{TrackOtherOutput: true, TrackFailingOutput: true}),
 		packages: orderedset.New[gotest.Reference](),
 		panic:    make(map[gotest.Reference]bool),
-		formatter: presenter.NewGoPPVerboseEventFactory(
+		formatter: presenter.NewGoVerboseEventFactory(
 			style.NewGo(config.Color),
 			config.IDE,
 			false,
@@ -79,37 +80,61 @@ func (h *verboseHandler) OnGoTestEvent(e gotest.Event) error {
 	}
 
 	switch e.Action {
-	// TODO: realtime output of test output... finally output the test conclusions
-
 	case gotest.PassAction, gotest.FailAction, gotest.SkipAction:
-		switch {
-		case e.Reference.IsPackage():
-			if e.Action == gotest.FailAction {
-				// print final "FAIL" line for the package
-				e.Output = "FAIL"
-				e.Action = gotest.OutputAction
-				fmtr := h.formatter(e, h.panic[e.Reference])
-				fmt.Fprint(h.writer, fmtr.String())
-			}
-		case !e.Reference.IsSubTest():
-			h.outputTest(
-				e.Reference,
-				true,
-				func(e gotest.Event) bool {
-					return output.HasConclusionMarking(e.Output)
-				},
-			)
-		}
-	case gotest.OutputAction:
-		if !output.HasConclusionMarking(e.Output) {
-			fmtr := h.formatter(e, h.panic[e.Reference])
-			if strings.TrimSpace(e.Output) != "" {
-				fmt.Fprint(h.writer, fmtr.String())
-			}
+		if e.Reference.IsPackage() {
+			// try to output completed packages in start order
+			h.render()
 		}
 	}
 
 	return nil
+}
+
+func (h *verboseHandler) render() {
+	// only render packages that are done, and render them in alphabetical order
+	// this is the reason why we cannot use a package handler (since order of packages is important, independent of the order of completion)
+	pkgs := h.packages.Values()
+	sort.Sort(gotest.References(pkgs))
+	for len(pkgs) > 0 {
+		pkgRef := pkgs[0]
+		action := h.result.ReferenceConclusiveAction(pkgRef)
+
+		if !action.Completed() {
+			// this package isn't done yet, so we can't output anything after it
+			return
+		}
+
+		h.outputPackage(
+			pkgRef,
+		)
+
+		h.packages.Delete(pkgRef)
+		pkgs = h.packages.Values()
+	}
+}
+
+func (h *verboseHandler) outputPackage(pkgRef gotest.Reference) {
+	for _, testRef := range h.result.Children(pkgRef) {
+		// output run/pause/continue and logs
+		h.outputTest(testRef, false, func(e gotest.Event) bool {
+			return !output.HasConclusionMarking(e.Output)
+		})
+	}
+	for _, testRef := range h.result.Children(pkgRef) {
+		// output pass/failed
+		h.outputTest(testRef, true, func(e gotest.Event) bool {
+			return output.HasConclusionMarking(e.Output)
+		})
+	}
+
+	// output package conclusions
+	outputEvents := h.result.ReferenceEvents(pkgRef)
+	for _, e := range outputEvents {
+		fmtr := h.formatter(e, h.panic[e.Reference])
+		if strings.TrimSpace(e.Output) != "" {
+			fmt.Fprint(h.writer, fmtr.String())
+		}
+	}
 }
 
 func (h *verboseHandler) outputTest(testRef gotest.Reference, indent bool, include func(gotest.Event) bool) {

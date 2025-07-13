@@ -320,8 +320,8 @@ func setupUI(app clio.Application, format options.FormatWriter, appearance optio
 
 	var logTestFailuresAsErrors bool
 	switch format.Name {
-	case "go++":
-		ux = ui.NewGoPPUI(testPkgs, uiConfig)
+	// case "go++":
+	//	ux = ui.NewGoxxUI(testPkgs, uiConfig)
 	case "go":
 		ux = ui.NewGoUI(testPkgs, uiConfig)
 	case "json":

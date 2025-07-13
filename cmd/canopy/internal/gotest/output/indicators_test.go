@@ -60,7 +60,7 @@ func TestHasPassedPackageMarking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.output, func(t *testing.T) {
-			result := HasPassedPackageMarking(tt.output)
+			result := HasPackageOKMarking(tt.output)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

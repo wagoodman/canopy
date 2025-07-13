@@ -26,8 +26,8 @@ func HasPackageCoverageMarking(output string) bool {
 	return strings.HasPrefix(strings.TrimSpace(output), "coverage:")
 }
 
-func HasPassedPackageMarking(output string) bool {
-	return strings.HasPrefix(output, "ok")
+func HasPackageOKMarking(output string) bool {
+	return strings.HasPrefix(output, "ok ")
 }
 
 func HasUnknownPackageMarking(output string) bool {
@@ -64,6 +64,10 @@ func HasFailedTestMarking(output string) bool {
 
 func HasFailedPackageMarking(output string) bool {
 	return strings.HasPrefix(output, "FAIL")
+}
+
+func HasFailedPackageTrailer(output string) bool {
+	return strings.HasPrefix(output, "FAIL\n")
 }
 
 func HasPanicMarking(output string) bool {

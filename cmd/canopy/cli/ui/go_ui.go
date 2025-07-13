@@ -77,7 +77,7 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 		withStderr(notificationWriter)
 
 	summaryHandler := gosummary.NewFactory(
-		presenter.GoPPTestResultSummaryConfig{
+		presenter.GoTestResultSummaryConfig{
 			Color:            cfg.Color,
 			PackageNameWidth: maxPkgName,
 			PackageCount:     pkgCount,
@@ -147,7 +147,7 @@ func newSafeGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 		withStdout(reportWriter).
 		withStderr(notificationWriter).
 		withHandledPresenters(
-			adapter.NewTestRun(presenter.GoPPTestResultSummaryConfig{
+			adapter.NewTestRun(presenter.GoTestResultSummaryConfig{
 				WriteToStderr:    writeToStderr,
 				PackageNameWidth: maxPkgName,
 				PackageCount:     pkgCount,
