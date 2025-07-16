@@ -5,6 +5,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/lindell/go-ordered-set/orderedset"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
@@ -30,6 +31,11 @@ type PackageConfig struct {
 	PackageNameWidth            int
 	IDE                         ide.Context
 	HidePackagesWithNoTestFiles bool // TODO: not used??
+
+	// LoosePackageOrder is used to determine if the packages should be rendered in strict alphabetical order
+	// or allow for skipping ahead across packages that are taking a long time to complete (based on the stale duration).
+	LoosePackageOrder    bool
+	StalePackageDuration time.Duration
 }
 
 type verboseHandler struct {
@@ -130,6 +136,10 @@ func (h *verboseHandler) outputPackage(pkgRef gotest.Reference) {
 	// output package conclusions
 	outputEvents := h.result.ReferenceEvents(pkgRef)
 	for _, e := range outputEvents {
+		if output.HasAny(output.HasPackagePassMarking, output.HasPackageCoverageMarking)(e.Output) {
+			// if the package passed or there is a final coverage line, we don't need to output anything
+			continue
+		}
 		fmtr := h.formatter(e, h.panic[e.Reference])
 		if strings.TrimSpace(e.Output) != "" {
 			fmt.Fprint(h.writer, fmtr.String())

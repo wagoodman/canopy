@@ -3,6 +3,7 @@ package ui
 import (
 	"io"
 	"os"
+	"time"
 
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/adapter"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
@@ -24,7 +25,7 @@ func NewGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	return newSafeGoUI(testPkgs, cfg)
 }
 
-func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
+func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI { //nolint:funlen
 	var pkgCount int
 	maxPkgName := 30
 	if testPkgs != nil {
@@ -46,6 +47,9 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	reportReader, reportWriter := readerWriterPair()
 	notificationReader, notificationWriter := readerWriterPair()
 
+	loosePackageOrder := true               // allow the UI to skip ahead to packages that are taking a long time to complete
+	stalePackageDuration := 3 * time.Second // this is the duration that a package can be stale before the UI skips ahead to the next package
+
 	var h handler.Handler
 	if cfg.Verbose > 0 {
 		h = gostd.NewVerboseHandler(
@@ -55,6 +59,8 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 				Color:                       cfg.Color,
 				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
 				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
+				LoosePackageOrder:           loosePackageOrder,
+				StalePackageDuration:        stalePackageDuration,
 			},
 		)
 	} else {
@@ -65,6 +71,8 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 				Color:                       cfg.Color,
 				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
 				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
+				LoosePackageOrder:           loosePackageOrder,
+				StalePackageDuration:        stalePackageDuration,
 			},
 		)
 	}
@@ -77,12 +85,12 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 		withStderr(notificationWriter)
 
 	summaryHandler := gosummary.NewFactory(
-		presenter.GoTestResultSummaryConfig{
-			Color:            cfg.Color,
-			PackageNameWidth: maxPkgName,
-			PackageCount:     pkgCount,
-			ShowRunningTests: true,
-		},
+		presenter.DefaultGoTestResultSummaryConfig().
+			WithColor(cfg.Color).WithPackageNameWidth(maxPkgName).
+			WithPackageCount(pkgCount).
+			WithStalePackageDuration(stalePackageDuration).
+			WithLoosePackageOrder(loosePackageOrder).
+			WithDurationFromEvents(false), //  we're running with a true wall clock, so we want to use that. Otherwise you'll see the timers jitter, only updating when there is a test event that arrives.
 		common,
 	)
 
@@ -152,7 +160,12 @@ func newSafeGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 				PackageNameWidth: maxPkgName,
 				PackageCount:     pkgCount,
 				Color:            cfg.Color,
-				ShowRunningTests: false, // it's safer to not thrash the number of lines we're writing to the terminal
+				// we're running with a true wall clock, so we want to use that. Otherwise you'll see the timers jitter,
+				// only updating when there is a test event that arrives.
+				DurationFromEvents:               false,
+				ShowElapsedForRunningPackages:    true,
+				ShowSummaryForUnrenderedPackages: true,
+				ShowRunningTests:                 false, // it's safer to not thrash the number of lines we're writing to the terminal
 			}.New),
 		)
 

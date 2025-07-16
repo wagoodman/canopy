@@ -12,6 +12,7 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
 
@@ -186,7 +187,7 @@ func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case gotest.OutputAction:
 		j.output = append(j.output, gt.Output)
 
-		if j.ref.IsPackage() && strings.HasPrefix(gt.Output, "coverage:") {
+		if j.ref.IsPackage() && output.HasPackageCoverageMarking(gt.Output) {
 			j.coverage = gt.Output
 		}
 	}

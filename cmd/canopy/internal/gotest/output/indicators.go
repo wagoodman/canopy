@@ -12,6 +12,30 @@ var (
 	panicGoroutinePattern = regexp.MustCompile(`^goroutine \d+`)
 )
 
+type Indicator func(string) bool
+
+func HasAny(indicators ...Indicator) Indicator {
+	return func(output string) bool {
+		for _, indicator := range indicators {
+			if indicator(output) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+func HasAll(indicators ...Indicator) Indicator {
+	return func(output string) bool {
+		for _, indicator := range indicators {
+			if !indicator(output) {
+				return false
+			}
+		}
+		return true
+	}
+}
+
 func IsLogLine(output string) bool {
 	// match regex for a line like this:
 	//    palindrome_test.go:51: th
@@ -27,7 +51,7 @@ func HasPackageCoverageMarking(output string) bool {
 }
 
 func HasPackageOKMarking(output string) bool {
-	return strings.HasPrefix(output, "ok ")
+	return strings.HasPrefix(output, "ok")
 }
 
 func HasUnknownPackageMarking(output string) bool {
@@ -88,4 +112,8 @@ func IsPanicFuncLine(s string) bool {
 
 func IsPanicFileLine(s string) bool {
 	return strings.HasPrefix(s, "\t"+string(os.PathSeparator))
+}
+
+func IsWhitespace(s string) bool {
+	return len(s) > 0 && strings.TrimSpace(s) == ""
 }

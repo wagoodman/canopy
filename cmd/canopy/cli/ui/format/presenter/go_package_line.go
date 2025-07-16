@@ -73,13 +73,19 @@ func (p Package) String() string {
 
 	for i, a := range aux {
 		switch {
+		case output.IsWhitespace(a):
+			// allow whitespace to occur...
+			break
+
 		case output.HasTimeMarker(a):
 			break
 
 		case strings.ContainsAny(a, "(["):
+			// TODO: why!?
 			// already formatted
 			break
 		case output.HasPackageCoverageMarking(a):
+			// TODO: does this cover "coverage: [no statements]"? (no)
 			a = strings.ReplaceAll(strings.ReplaceAll(a, "coverage: ", "[")+"]", "of statements", "coverage")
 
 		default:

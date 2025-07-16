@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+func TestParallel1Fail(t *testing.T) {
+	t.Error("woops")
+}
+
 func TestParallel1(t *testing.T) {
 	t.Parallel()
 	t.Log("1: Starting parallel tests")

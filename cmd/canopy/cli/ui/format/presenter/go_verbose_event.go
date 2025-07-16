@@ -68,7 +68,7 @@ func (p goVerboseEvent) String() string {
 }
 
 func (p goVerboseEvent) formatPackage(e gotest.Event) string {
-	if output.HasFailedPackageMarking(e.Output) || output.HasPackageOKMarking(e.Output) || output.HasUnknownPackageMarking(e.Output) || output.HasPackagePassMarking(e.Output) {
+	if output.HasAny(output.HasFailedPackageMarking, output.HasPackageOKMarking, output.HasUnknownPackageMarking, output.HasPackagePassMarking)(e.Output) {
 		return parseAndFormatPackageLine(e.Output, p.Style, p.PackageNameWidth)
 	}
 	if output.HasPackageCoverageMarking(e.Output) {
@@ -90,7 +90,7 @@ func (p goVerboseEvent) format() string {
 	if output.HasTestPassMarking(e.Output) {
 		return formatPassedTest(e.Output, p.Style)
 	}
-	if output.HasRunMarking(e.Output) || output.HasContinueMarking(e.Output) || output.HasPauseMarking(e.Output) {
+	if output.HasAny(output.HasRunMarking, output.HasContinueMarking, output.HasPauseMarking)(e.Output) {
 		if p.HideExecutionTestEvents {
 			return ""
 		}

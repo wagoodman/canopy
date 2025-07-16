@@ -13,8 +13,8 @@ type Result struct {
 	config ResultConfig
 
 	references *orderedset.OrderedSet[Reference]
-	// packages   *orderedset.OrderedSet[Reference]
-	children map[Reference]*orderedset.OrderedSet[Reference]
+	packages   *orderedset.OrderedSet[Reference]
+	children   map[Reference]*orderedset.OrderedSet[Reference]
 	// testEventsByReference *orderedmap.OrderedMap[Reference, []Event]   // all action types except "output"
 	testEventsByReference  map[Reference][]Event                        // all action types // TODO rethink this
 	testOutputByReference  map[Reference][]Event                        // only "output" action // TODO rethink this
@@ -45,6 +45,15 @@ func (s ResultStats) Total() int {
 	return s.Passed + s.Failed + s.Skipped
 }
 
+func (s ResultStats) Merge(other ResultStats) ResultStats {
+	return ResultStats{
+		Passed:  s.Passed + other.Passed,
+		Failed:  s.Failed + other.Failed,
+		Skipped: s.Skipped + other.Skipped,
+		Running: s.Running + other.Running,
+	}
+}
+
 func NewResult(config ResultConfig) *Result {
 	referencesByAction := make(map[Action]*orderedset.OrderedSet[Reference])
 	testReferencesByAction := make(map[Action]*orderedset.OrderedSet[Reference])
@@ -57,8 +66,8 @@ func NewResult(config ResultConfig) *Result {
 		config: config,
 
 		//testEventsByReference:  orderedmap.NewOrderedMap[Reference, []Event](),
-		references: orderedset.New[Reference](),
-		//packages:               orderedset.New[Reference](),
+		references:             orderedset.New[Reference](),
+		packages:               orderedset.New[Reference](),
 		children:               make(map[Reference]*orderedset.OrderedSet[Reference]),
 		testEventsByReference:  make(map[Reference][]Event),
 		testOutputByReference:  make(map[Reference][]Event),
@@ -66,6 +75,32 @@ func NewResult(config ResultConfig) *Result {
 		testReferencesByAction: testReferencesByAction,
 		conclusionEvent:        make(map[Reference]Event),
 	}
+}
+
+func (r *Result) ReferenceElapsed(ref Reference, live bool) time.Duration {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	events := r.testEventsByReference[ref]
+	if len(events) == 0 {
+		return 0
+	}
+
+	if r.lastEventTime.IsZero() {
+		return 0
+	}
+
+	start := events[0].Time
+	end := events[len(events)-1].Time
+	if len(events) == 1 {
+		if live {
+			end = time.Now()
+		} else {
+			end = time.Now().Add(-r.startOffset)
+		}
+	}
+
+	return end.Sub(start)
 }
 
 func (r *Result) Elapsed(live bool) time.Duration {
@@ -136,9 +171,9 @@ func (r *Result) Update(e Event) {
 	r.testEventsByReference[e.Reference] = append(r.testEventsByReference[e.Reference], e)
 
 	r.references.Add(e.Reference)
-	// if e.Reference.IsPackage() {
-	//	r.packages.Add(e.Reference)
-	//}
+	if e.Reference.IsPackage() {
+		r.packages.Add(e.Reference)
+	}
 
 	// process conclusion
 	switch e.Action {
@@ -172,12 +207,12 @@ func (r Result) References() []Reference {
 	return r.references.Values()
 }
 
-// func (r Result) Packages() []Reference {
-//	r.lock.RLock()
-//	defer r.lock.RUnlock()
-//
-//	return r.packages.Values()
-//}
+func (r Result) Packages() []Reference {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	return r.packages.Values()
+}
 
 func (r Result) Children(ref Reference) []Reference {
 	r.lock.RLock()

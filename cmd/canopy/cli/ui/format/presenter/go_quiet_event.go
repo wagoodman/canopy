@@ -61,7 +61,7 @@ func (p goxxQuietEvent) String() string {
 }
 
 func (p goxxQuietEvent) formatPackage(e gotest.Event) string {
-	if output.HasFailedPackageMarking(e.Output) || output.HasPackageOKMarking(e.Output) || output.HasUnknownPackageMarking(e.Output) {
+	if output.HasAny(output.HasFailedPackageMarking, output.HasPackageOKMarking, output.HasUnknownPackageMarking)(e.Output) {
 		return parseAndFormatPackageLine(e.Output, p.Style, p.PackageNameWidth)
 	}
 	return e.Output

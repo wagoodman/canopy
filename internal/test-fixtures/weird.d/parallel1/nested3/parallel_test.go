@@ -5,9 +5,9 @@ import (
 	"time"
 )
 
-func TestNestedParallel1Slow(t *testing.T) {
+func TestNestedParallel1Slow1(t *testing.T) {
 	t.Parallel()
-	time.Sleep(10 * time.Second)
+	time.Sleep(15 * time.Second) // simulate a really slow test
 
 	testCases := []struct {
 		name string

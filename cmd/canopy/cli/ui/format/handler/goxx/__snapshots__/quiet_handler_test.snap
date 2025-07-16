@@ -21,7 +21,6 @@
             sum_test.go:117: Expected 37 but got 4
         ─── FAIL  TestAddFailingSubtest/Test_weird_numbers_(oops)/offset=3 (0.00s)
             sum_test.go:117: Expected 37 but got 5
-FAIL    
 FAIL    github.com/wagoodman/canopy/internal/test-fixtures/weird.d                                                                                             0.670s
 
 ---

@@ -24,6 +24,7 @@ var (
 )
 
 type quietHandler struct {
+	config    PackageConfig
 	writer    io.Writer
 	result    *gotest.Result
 	packages  *orderedset.OrderedSet[gotest.Reference]
@@ -33,6 +34,7 @@ type quietHandler struct {
 
 func NewQuietHandler(writer io.Writer, config PackageConfig) handler.Handler {
 	return &quietHandler{
+		config:   config,
 		writer:   writer,
 		result:   gotest.NewResult(gotest.ResultConfig{TrackOtherOutput: true, TrackFailingOutput: true}),
 		packages: orderedset.New[gotest.Reference](),
@@ -85,12 +87,26 @@ func (h *quietHandler) render() {
 	// this is the reason why we cannot use a package handler (since order of packages is important, independent of the order of completion)
 	pkgs := h.packages.Values()
 	sort.Sort(gotest.References(pkgs))
-	for len(pkgs) > 0 {
-		pkgRef := pkgs[0]
+	offset := 0
+	for len(pkgs) > 0 && offset < len(pkgs) {
+		pkgRef := pkgs[offset]
 		action := h.result.ReferenceConclusiveAction(pkgRef)
 
 		if !action.Completed() {
-			// this package isn't done yet, so we can't output anything after it
+			if h.config.LoosePackageOrder {
+				// attempt alphabetical order... unless a package is running for "too long"
+				elapsed := h.result.ReferenceElapsed(pkgRef, true)
+				if elapsed > h.config.StalePackageDuration {
+					// this package has been running for too long, blocking the result output of other packages.
+					// Let's skip around this and render the other results that are done. This will allow for package
+					// results to show up in a more realtime manner, but sacrifice the strict alphabetical order
+					// of packages.
+					offset++
+					continue
+				}
+			}
+			// strictly alphabetical order... or this package isn't stale yet.
+			// this package isn't done yet, so we can't output anything else after it
 			return
 		}
 
@@ -129,8 +145,8 @@ func (h *quietHandler) outputPackage(pkgRef gotest.Reference, include func(gotes
 	// output package conclusions
 	outputEvents := h.result.ReferenceEvents(pkgRef)
 	for _, e := range outputEvents {
-		if output.HasPackagePassMarking(e.Output) {
-			// if the package passed, we don't need to output anything
+		if output.HasAny(output.HasPackagePassMarking, output.HasPackageCoverageMarking)(e.Output) {
+			// if the package passed or there is a final coverage line, we don't need to output anything
 			continue
 		}
 		fmtr := h.formatter(e, h.panic[e.Reference])

@@ -1,0 +1,15 @@
+
+[TestGoTestResultSummary_Present/failing_package - 1]
+FAIL 108 passed / 14 failed tests                                                                         1.54s
+
+---
+
+[TestGoTestResultSummary_Present/passing_package - 1]
+FAIL 108 passed / 14 failed tests                                                                         1.54s
+
+---
+
+[TestGoTestResultSummary_Present/panic_package - 1]
+FAIL 112 passed / 18 failed tests                                                                         2.68s
+
+---

@@ -146,7 +146,7 @@ func (h *QuietPackage) render(writer io.Writer) { //nolint:gocognit
 				// skip the package FAIL line, this is redundant
 				continue
 			}
-			if output.HasStateMarking(e.Output) || output.HasPackagePassMarking(e.Output) {
+			if output.HasAny(output.HasStateMarking, output.HasPackagePassMarking)(e.Output) {
 				// skip the run/continue/pause line
 				continue
 			}

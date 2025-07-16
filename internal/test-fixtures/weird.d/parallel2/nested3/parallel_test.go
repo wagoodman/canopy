@@ -7,7 +7,7 @@ import (
 
 func TestNestedParallel1Slow(t *testing.T) {
 	t.Parallel()
-	time.Sleep(10 * time.Second)
+	time.Sleep(10 * time.Second) // simulate a really slow test
 
 	testCases := []struct {
 		name string
