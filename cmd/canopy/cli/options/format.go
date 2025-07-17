@@ -51,7 +51,7 @@ func (o *Format) PostLoad() error {
 		o.Output = ""
 	}
 
-	if len(o.Outputs) > 0 && !o.AllowMultiple {
+	if len(o.Outputs) > 1 && !o.AllowMultiple {
 		return fmt.Errorf("only one output format may be specified (multiple were specified: %v)", strings.Join(o.Outputs, ", "))
 	}
 

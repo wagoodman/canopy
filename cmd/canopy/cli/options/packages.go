@@ -23,7 +23,7 @@ type Packages struct {
 
 func DefaultPackages() Packages {
 	return Packages{
-		Specifiers: []string{"./..."},
+		Specifiers: []string{"."},
 	}
 }
 
