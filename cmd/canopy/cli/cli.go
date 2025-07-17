@@ -14,7 +14,7 @@ func New(id clio.Identification) *cobra.Command {
 	clioCfg := clio.NewSetupConfig(id).
 		WithGlobalConfigFlag().   // add persistent -c <path> for reading an application config from
 		WithGlobalLoggingFlags(). // add persistent -v and -q flags tied to the logging config
-		WithUI(ui.None()).
+		WithUI(ui.TestNoUI()).
 		WithInitializers(
 			func(state *clio.State) error {
 				bus.Set(state.Bus)

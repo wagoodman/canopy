@@ -13,7 +13,7 @@ import (
 	"github.com/anchore/clio"
 )
 
-func NewJestUI(config Config) clio.UI {
+func NewTestJestUI(config TestUIConfig) clio.UI {
 	rowCfg := jesttestrow.Config{
 		Color:                       config.Color,
 		ShowPackages:                true,

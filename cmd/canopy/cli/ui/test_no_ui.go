@@ -7,7 +7,7 @@ import (
 	"github.com/anchore/clio"
 )
 
-func None() clio.UI {
+func TestNoUI() clio.UI {
 	return newSimpleUI().
 		withNotifications().
 		withReports().

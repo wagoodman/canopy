@@ -9,7 +9,7 @@ import (
 	"github.com/anchore/clio"
 )
 
-func NewJSONUI(cfg Config) clio.UI {
+func NewTestJSONUI(cfg TestUIConfig) clio.UI {
 	var reportWriter io.WriteCloser
 	if cfg.Writer != nil {
 		reportWriter = cfg.Writer

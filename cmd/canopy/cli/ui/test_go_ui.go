@@ -18,14 +18,14 @@ import (
 	"github.com/anchore/clio"
 )
 
-func NewGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
+func NewTestGoUI(testPkgs *golist.PackageCollection, cfg TestUIConfig) clio.UI {
 	if cfg.IsTTY && cfg.Writer == nil {
 		return newDynamicGoUI(testPkgs, cfg)
 	}
 	return newSafeGoUI(testPkgs, cfg)
 }
 
-func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI { //nolint:funlen
+func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg TestUIConfig) clio.UI { //nolint:funlen
 	var pkgCount int
 	maxPkgName := 30
 	if testPkgs != nil {
@@ -103,7 +103,7 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI { //
 	return NewTeaUI(c)
 }
 
-func newSafeGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
+func newSafeGoUI(testPkgs *golist.PackageCollection, cfg TestUIConfig) clio.UI {
 	var writeToStderr bool
 	var pkgCount int
 	maxPkgName := 30

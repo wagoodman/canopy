@@ -23,7 +23,7 @@ import (
 	"github.com/anchore/clio"
 )
 
-func NewGoxxUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
+func NewTestGoxxUI(testPkgs *golist.PackageCollection, cfg TestUIConfig) clio.UI {
 	if cfg.IsTTY && cfg.Writer == nil {
 		if cfg.Verbose > 0 {
 			return newVerboseDynamicGoxxUI(testPkgs, cfg)
@@ -33,7 +33,7 @@ func NewGoxxUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 	return newSafeGoxxUI(testPkgs, cfg)
 }
 
-func newVerboseDynamicGoxxUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
+func newVerboseDynamicGoxxUI(testPkgs *golist.PackageCollection, cfg TestUIConfig) clio.UI {
 	var pkgCount int
 	maxPkgName := 30
 	if testPkgs != nil {
@@ -97,7 +97,7 @@ func readerWriterPair() (io.Reader, io.WriteCloser) {
 	return r, w
 }
 
-func newDefaultDynamicGoxxUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI { //nolint:funlen
+func newDefaultDynamicGoxxUI(testPkgs *golist.PackageCollection, cfg TestUIConfig) clio.UI { //nolint:funlen
 	var pkgCount int
 	maxPkgName := 30
 	if testPkgs != nil {
@@ -178,7 +178,7 @@ func newDefaultDynamicGoxxUI(testPkgs *golist.PackageCollection, cfg Config) cli
 	return NewTeaUI(c)
 }
 
-func newSafeGoxxUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
+func newSafeGoxxUI(testPkgs *golist.PackageCollection, cfg TestUIConfig) clio.UI {
 	var handler partybus.Handler
 	var writeToStderr bool
 	var pkgCount int

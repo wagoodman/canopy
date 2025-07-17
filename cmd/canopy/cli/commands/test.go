@@ -323,14 +323,14 @@ func setupUI(app clio.Application, format options.FormatWriter, appearance optio
 	// case "go++":
 	//	ux = ui.NewGoxxUI(testPkgs, uiConfig)
 	case "go":
-		ux = ui.NewGoUI(testPkgs, uiConfig)
+		ux = ui.NewTestGoUI(testPkgs, uiConfig)
 	case "json":
 		// TODO: we're not passing testPkgs intentionally?
-		ux = ui.NewJSONUI(uiConfig)
+		ux = ui.NewTestJSONUI(uiConfig)
 	case "jest":
-		ux = ui.NewJestUI(uiConfig)
+		ux = ui.NewTestJestUI(uiConfig)
 	case "dot":
-		ux = ui.NewDotUI(uiConfig)
+		ux = ui.NewTestDotUI(uiConfig)
 	case "log":
 		if state.Config.Log.Verbosity == 0 || !logger.IsVerbose(state.Config.Log.Level) {
 			if state.Config.Log.Verbosity == 0 {
@@ -346,7 +346,7 @@ func setupUI(app clio.Application, format options.FormatWriter, appearance optio
 			log.Set(state.Logger)
 		}
 
-		ux = ui.None()
+		ux = ui.TestNoUI()
 		if format.PrimaryUI {
 			logTestFailuresAsErrors = true
 		}
@@ -362,8 +362,8 @@ func setupUI(app clio.Application, format options.FormatWriter, appearance optio
 	return ux, logTestFailuresAsErrors, nil
 }
 
-func getUIConfig(appearance options.Appearance, clioCfg clio.Config, format options.FormatWriter) ui.Config {
-	return ui.Config{
+func getUIConfig(appearance options.Appearance, clioCfg clio.Config, format options.FormatWriter) ui.TestUIConfig {
+	return ui.TestUIConfig{
 		Color:                   !appearance.NoColor,
 		Verbose:                 clioCfg.Log.Verbosity,
 		ShowPackagesWithNoTests: appearance.ShowPackagesWithNoTests,
