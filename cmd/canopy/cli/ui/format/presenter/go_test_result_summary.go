@@ -424,7 +424,10 @@ func (s GoTestResultSummary) renderStats(stats gotest.ResultStats, asAux bool) s
 	}
 
 	total := stats.Total()
-	testCountSuffix := " tests"
+	var testCountSuffix string
+	if !asAux {
+		testCountSuffix = " tests"
+	}
 	switch {
 	case total == 0:
 		tests = append(tests, s.style.Waiting.Render("(waiting for tests results)"))

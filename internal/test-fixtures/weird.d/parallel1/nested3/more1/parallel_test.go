@@ -21,6 +21,7 @@ func TestMoreParallel1(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Logf("n3-more-p1: Running test %s with sleep duration %v", tt.name, tt.amt)
 			t.Parallel()
 			time.Sleep(tt.amt * time.Millisecond * 350)
 		})
