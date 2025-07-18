@@ -25,16 +25,14 @@ func New(id clio.Identification) *cobra.Command {
 
 	app := clio.New(*clioCfg)
 
-	testCmd := commands.Test(app)
-
-	root := commands.Root(app, testCmd)
+	root := commands.Root(app)
 
 	app.AddFlags(root.PersistentFlags())
 
 	root.AddCommand(
 		clio.VersionCommand(id),
 		clio.ConfigCommand(app, nil),
-		testCmd,
+		commands.Test(app),
 		commands.List(app),
 		commands.Session(app),
 		commands.Format(app),

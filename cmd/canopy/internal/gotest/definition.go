@@ -2,6 +2,7 @@ package gotest
 
 import (
 	"fmt"
+	"github.com/scylladb/go-set/strset"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -18,6 +19,44 @@ type Definition struct {
 	Start      token.Position
 	End        token.Position
 	Cases      []string
+}
+
+func (d Definition) References() []Reference {
+	refs := []Reference{
+		{
+			// function reference
+			Package:  d.ImportPath,
+			FuncName: d.FnName,
+		},
+	}
+	for _, c := range d.Cases {
+		refs = append(refs, Reference{
+			// test case reference
+			Package:  d.ImportPath,
+			FuncName: d.FnName,
+			TRunName: c,
+		})
+	}
+	return refs
+}
+
+type Definitions []Definition
+
+func (d Definitions) References() []Reference {
+	var refs []Reference
+	pkgs := strset.New()
+	for _, def := range d {
+		for _, ref := range def.References() {
+			if !pkgs.Has(ref.Package) {
+				pkgs.Add(ref.Package)
+				refs = append(refs, Reference{
+					Package: ref.Package,
+				})
+			}
+			refs = append(refs, ref)
+		}
+	}
+	return refs
 }
 
 func FindDefinitions(collection *golist.PackageCollection) ([]Definition, error) {

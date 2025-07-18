@@ -2,7 +2,6 @@ package referencespane
 
 import (
 	"fmt"
-
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -40,6 +39,7 @@ func defaultOptions() Config {
 	bdr := lipgloss.NormalBorder()
 	// bdr.Bottom = "▔"
 	return Config{
+		WidthRatio: 1.0, // full width
 		BorderSummaryStyle: lipgloss.NewStyle().
 			Border(bdr, false, false, true, false).
 			// Border(lipgloss.NormalBorder(), false, false, true, false).

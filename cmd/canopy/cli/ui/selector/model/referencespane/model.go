@@ -2,21 +2,14 @@ package referencespane
 
 import (
 	"fmt"
-	"math"
-	"sort"
-	"strconv"
-	"time"
-
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
-	uievent "github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/event"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/fragment"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/state"
+	uievent "github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/event"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/state"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
+	"sort"
 )
 
 var _ tea.Model = (*Model)(nil)
@@ -26,15 +19,13 @@ const Name = "references-pane"
 type Model struct {
 	config Config
 
-	spinner        spinner.Model
-	list           list.Model
-	testCountsView fragment.TestCounts
+	list list.Model
 
 	// reference state
 	visibleRefs []gotest.Reference
 
 	// go test state
-	currentTestRun state.RunViewer
+	currentTestRun state.DefinitionViewer
 
 	keyMap
 }
@@ -49,12 +40,7 @@ func New(options ...Option) (Model, error) {
 
 	km := newKeyMap(cfg.ShowFailedOnly)
 
-	s := spinner.New()
-	s.Spinner = spinner.Jump
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205")) // purple... TODO: put this style somewhere central
-
 	return Model{
-		spinner: s,
 		list: newList(
 			km.ShowPassedTests.Binding,
 			km.ShowFailedTests.Binding,
@@ -64,23 +50,23 @@ func New(options ...Option) (Model, error) {
 			km.NextPackage.Binding,
 			km.PrevPackage.Binding,
 		),
-		testCountsView: fragment.NewTestCounts(),
-		keyMap:         km,
-		config:         cfg,
+		keyMap: km,
+		config: cfg,
 	}, nil
 }
 
 func (m Model) isRunning() bool {
-	if m.currentTestRun == nil {
-		return false
-	}
-
-	_, isRunning := m.currentTestRun.Passed()
-	return isRunning
+	return false // TODO: implement this properly
+	//if m.currentTestRun == nil {
+	//	return false
+	//}
+	//
+	//_, isRunning := m.currentTestRun.Passed()
+	//return isRunning
 }
 
 func (m Model) Init() tea.Cmd {
-	return m.spinner.Tick
+	return nil
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint: funlen
@@ -153,19 +139,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint: funlen
 		}
 
 	// handle core interactions...
-	case uievent.SwitchTestRun:
-		cmds = append(cmds, m.onSwitchTestRun(state.NewRunViewer(msg.TestRun)))
+	case uievent.SwitchState:
+		// TODO: make this work a little better....
+		if msg.TestRun != nil {
+			cmds = append(cmds, m.onSwitchState(state.NewRunViewer(msg.TestRun)))
+		} else if msg.Definitions != nil {
+			cmds = append(cmds, m.onSwitchState(state.NewDefinitionViewer(msg.Definitions)))
+		} else {
+			panic(fmt.Sprintf("unexpected switch state message: %#v", msg))
+		}
 
 	case gotest.Event:
 		// respond to core application behavior
 		cmds = append(cmds, m.refreshRun())
 
-	case spinner.TickMsg:
-		var cmd tea.Cmd
-		if m.isRunning() {
-			m.spinner, cmd = m.spinner.Update(msg)
-		}
-		return m, cmd
 	}
 
 	filterStateBefore := m.list.FilterState()
@@ -190,22 +177,22 @@ func (m *Model) toggleFilter(filterState list.FilterState) tea.Cmd {
 		m.ShowFailedTests.SetEnabled(false)
 		m.ShowPassedTests.SetEnabled(false)
 		m.ShowSkippedTests.SetEnabled(false)
-		isFiltering = true // TODO: bad
-		m.list.SetShowFilter(true)
+		//isFiltering = true // TODO: bad
+		//m.list.SetShowFilter(true)
 	case list.FilterApplied:
 		completed = true
 		m.ShowFailedTests.SetEnabled(false)
 		m.ShowPassedTests.SetEnabled(false)
 		m.ShowSkippedTests.SetEnabled(false)
-		isFiltering = true // TODO: bad
-		m.list.SetShowFilter(false)
+		//isFiltering = true // TODO: bad
+		//m.list.SetShowFilter(false)
 	case list.Unfiltered:
 		completed = true
 		m.ShowFailedTests.SetEnabled(true)
 		m.ShowPassedTests.SetEnabled(true)
 		m.ShowSkippedTests.SetEnabled(true)
-		isFiltering = false // TODO: bad
-		m.list.SetShowFilter(false)
+		//isFiltering = false // TODO: bad
+		//m.list.SetShowFilter(false)
 	}
 	return func() tea.Msg {
 		return uievent.FilteringInput{
@@ -216,17 +203,16 @@ func (m *Model) toggleFilter(filterState list.FilterState) tea.Cmd {
 }
 
 func (m *Model) refreshRun() tea.Cmd {
-	return m.onSwitchTestRun(m.currentTestRun)
+	return m.onSwitchState(m.currentTestRun)
 }
 
-func (m *Model) onSwitchTestRun(run state.RunViewer) tea.Cmd {
+func (m *Model) onSwitchState(run state.DefinitionViewer) tea.Cmd {
 	// TODO: we need to add and remove the difference of the new refs and the old refs
 	// then update the viewport selected indexes and cursor position
 	m.currentTestRun = run
 
 	return tea.Batch(
 		m.setReferences(run.References()...),
-		m.spinner.Tick, // restart the spinner
 	)
 }
 
@@ -239,26 +225,30 @@ func (m *Model) setReferences(refs ...gotest.Reference) tea.Cmd {
 	)
 }
 
-func (m Model) filterToVisibleRefs(original []gotest.Reference, currentTestRun state.RunViewer) []gotest.Reference {
+func (m Model) filterToVisibleRefs(original []gotest.Reference, currentDefs state.DefinitionViewer) []gotest.Reference {
 	showFailed := m.ShowFailedTests.Engaged()
 	showPassed := m.ShowPassedTests.Engaged()
 	showSkipped := m.ShowSkippedTests.Engaged()
 
+	currentTestRun, hasRunInfo := currentDefs.(state.RunViewer)
+
 	var refs []gotest.Reference
 	refs = append(refs, gotest.Reference{Package: "*"})
 	for _, ref := range original {
-		action := currentTestRun.ReferenceConclusiveAction(ref)
+		if hasRunInfo {
+			action := currentTestRun.ReferenceConclusiveAction(ref)
 
-		if action == gotest.FailAction && !showFailed {
-			continue
-		}
+			if action == gotest.FailAction && !showFailed {
+				continue
+			}
 
-		if action == gotest.PassAction && !showPassed {
-			continue
-		}
+			if action == gotest.PassAction && !showPassed {
+				continue
+			}
 
-		if action == gotest.SkipAction && !showSkipped {
-			continue
+			if action == gotest.SkipAction && !showSkipped {
+				continue
+			}
 		}
 
 		refs = append(refs, ref)
@@ -267,110 +257,6 @@ func (m Model) filterToVisibleRefs(original []gotest.Reference, currentTestRun s
 	return refs
 }
 
-func (m Model) statsView() string {
-	if m.currentTestRun == nil {
-		return ""
-	}
-	width := m.list.Width() + 1
-
-	stats := m.currentTestRun.TestStats()
-
-	coverage, covExists := m.currentTestRun.Coverage()
-
-	elapsed := formatDuration(m.currentTestRun.Elapsed(m.isRunning()))
-
-	var status string
-	if m.isRunning() {
-		status = m.spinner.View() + " "
-
-		var statsStr string
-		if stats.Total() > 0 {
-			statsStr = m.testCountsView.View(stats.Passed, stats.Failed, stats.Skipped)
-		} else {
-			statsStr = m.testCountsView.AuxStyle.Render("Running...")
-		}
-
-		left := lipgloss.JoinHorizontal(lipgloss.Top, status, statsStr)
-
-		right := m.config.SummaryLineStyle.Width(width - lipgloss.Width(left)).Align(lipgloss.Right).Faint(true).Render(elapsed)
-
-		line := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
-
-		return m.config.BorderSummaryStyle.Width(width).Render(line)
-	}
-
-	// concluded view...
-
-	if pass, _ := m.currentTestRun.Passed(); pass {
-		status = m.testCountsView.PassedCountStyle.Render("✔ ")
-	} else {
-		status = m.testCountsView.FailedCountStyle.Render("✘ ")
-	}
-
-	left := lipgloss.JoinHorizontal(lipgloss.Top, status, m.testCountsView.View(stats.Passed, stats.Failed, stats.Skipped))
-
-	var right string
-	var covStr string
-	if stats.Total() > 0 && covExists {
-		covStr = drop0Decimal(coverage)
-		right += "with " + covStr + ", "
-	}
-
-	right += "in " + elapsed
-
-	// right aligned variant...
-	// right := m.config.SummaryLineStyle.Width(width - lipgloss.Width(left)).Align(lipgloss.Right).Faint(true).Render(right)
-	//
-	// line := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
-
-	line := left + " " + right
-
-	return m.config.BorderSummaryStyle.Width(width).Render(line)
-}
-
-func formatDuration(d time.Duration) string {
-	hours := d / time.Hour
-	d -= hours * time.Hour
-	minutes := d / time.Minute
-	d -= minutes * time.Minute
-	seconds := float64(d) / float64(time.Second)
-
-	switch {
-	case hours > 0:
-		return fmt.Sprintf("%dh %02dm %02.2fs", hours, minutes, seconds)
-	case minutes > 0:
-		return fmt.Sprintf("%dm %02.2fs", minutes, seconds)
-	default:
-		return fmt.Sprintf("%0.2fs", seconds)
-	}
-}
-
-// func insertBetween(slice []string, str string) []string {
-//	if len(slice) == 0 {
-//		return slice
-//	}
-//
-//	result := make([]string, 0, len(slice)*2-1)
-//
-//	for i, s := range slice {
-//		result = append(result, s)
-//		if i < len(slice)-1 {
-//			result = append(result, str)
-//		}
-//	}
-//
-//	return result
-//}
-
 func (m Model) View() string {
-	// debug.SetLine(fmt.Sprintf("item count from view: %d", len(m.list.Items())))
-	return lipgloss.JoinVertical(lipgloss.Left, m.statsView(), m.list.View())
-}
-
-func drop0Decimal(coverage float64) string {
-	truncated := math.Trunc(coverage*100) / 100
-	if strconv.FormatFloat(truncated, 'f', 2, 64) == strconv.FormatFloat(math.Trunc(truncated), 'f', 2, 64) {
-		return fmt.Sprintf("%d%% coverage", int(truncated))
-	}
-	return fmt.Sprintf("%.2f%% coverage", truncated)
+	return m.list.View()
 }

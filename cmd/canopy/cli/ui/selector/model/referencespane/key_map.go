@@ -3,7 +3,7 @@ package referencespane
 import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/xhelp"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/xhelp"
 )
 
 type keyMap struct {
@@ -34,17 +34,17 @@ func newKeyMap(showFailedOnly bool) keyMap {
 		),
 		ShowFailedTests: xhelp.NewKeyBinding(
 			key.NewBinding(
-				key.WithKeys("f"),
+				key.WithKeys("ctrl+f"),
 			),
 		).WithToggle(true, "hide failed", "show failed"),
 		ShowPassedTests: xhelp.NewKeyBinding(
 			key.NewBinding(
-				key.WithKeys("p"),
+				key.WithKeys("ctrl+p"),
 			),
 		).WithToggle(!showFailedOnly, "hide passed", "show passed"),
 		ShowSkippedTests: xhelp.NewKeyBinding(
 			key.NewBinding(
-				key.WithKeys("s"),
+				key.WithKeys("ctrl+s"),
 			),
 		).WithToggle(false, "hide skipped", "show skipped"),
 		NextPackage: xhelp.NewKeyBinding(

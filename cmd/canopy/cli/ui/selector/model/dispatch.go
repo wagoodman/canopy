@@ -4,8 +4,8 @@ import (
 	"slices"
 
 	tea "github.com/charmbracelet/bubbletea"
-	uievent "github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/event"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/xhelp"
+	uievent "github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/event"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/xhelp"
 )
 
 var _ Element = (*Dispatch)(nil)

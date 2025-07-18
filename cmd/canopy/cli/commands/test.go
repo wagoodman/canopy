@@ -131,7 +131,7 @@ func Test(app clio.Application) *cobra.Command {
 			opts.Test.Runtime.Packages = testPkgs
 
 			// set the UI dynamically
-			logTestFailuresAsErrors, err = setupUIs(app, opts.Test.Writers, opts.Test.Appearance, testPkgs)
+			logTestFailuresAsErrors, err = setupTestUIs(app, opts.Test.Writers, opts.Test.Appearance, testPkgs)
 			return err
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -271,12 +271,12 @@ func evaluateResult(run *gotest.Run, logTestFailuresAsErrors bool, coverMin floa
 	return passed, resultErr
 }
 
-func setupUIs(app clio.Application, writers []options.FormatWriter, appearance options.Appearance, testPkgs *golist.PackageCollection) (bool, error) {
+func setupTestUIs(app clio.Application, writers []options.FormatWriter, appearance options.Appearance, testPkgs *golist.PackageCollection) (bool, error) {
 	var logTestFailuresAsErrors bool
 
 	var uxs []clio.UI
 	for _, writer := range writers {
-		ux, ltaf, err := setupUI(app, writer, appearance, testPkgs)
+		ux, ltaf, err := setupTestUI(app, writer, appearance, testPkgs)
 		if err != nil {
 			return false, fmt.Errorf("unable to setup UI %q: %w", writer.Name, err)
 		}
@@ -299,7 +299,7 @@ func setupUIs(app clio.Application, writers []options.FormatWriter, appearance o
 	return logTestFailuresAsErrors, nil
 }
 
-func setupUI(app clio.Application, format options.FormatWriter, appearance options.Appearance, testPkgs *golist.PackageCollection) (clio.UI, bool, error) {
+func setupTestUI(app clio.Application, format options.FormatWriter, appearance options.Appearance, testPkgs *golist.PackageCollection) (clio.UI, bool, error) {
 	var ux clio.UI
 
 	fields := logger.Fields{

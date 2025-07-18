@@ -4,9 +4,12 @@ import (
 	"github.com/anchore/clio"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector"
+	uievent "github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
+
 	"github.com/wagoodman/go-partybus"
 	"sync"
 )
@@ -18,14 +21,16 @@ type SelectorUI struct {
 	program      *tea.Program
 	running      *sync.WaitGroup
 	subscription partybus.Unsubscribable
+	testDefs     gotest.Definitions
 }
 
-func NewSelectorUI(cfg selector.Config) *SelectorUI {
+func NewSelectorUI(cfg selector.Config, testDefs []gotest.Definition) *SelectorUI {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	return &SelectorUI{
-		config:  cfg,
-		running: wg,
+		config:   cfg,
+		running:  wg,
+		testDefs: testDefs,
 	}
 }
 
@@ -36,11 +41,19 @@ func (s *SelectorUI) Setup(subscription partybus.Unsubscribable) error {
 	s.subscription = subscription
 	s.program = tea.NewProgram(
 		selector.New(s.config, s.running),
-		tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"
+		//tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"
 		tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
 		tea.WithoutSignalHandler(),
 	)
 
+	// setup initial state
+	go func() {
+		s.program.Send(uievent.SwitchState{
+			Definitions: s.testDefs,
+		})
+	}()
+
+	// run the application
 	go func() {
 		defer s.running.Done()
 		if _, err := s.program.Run(); err != nil {

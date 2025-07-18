@@ -10,18 +10,18 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	zone "github.com/lrstanley/bubblezone"
-	uievent "github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/event"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/state"
+	uievent "github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/event"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/state"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
 
 // TODO: this is a bad global, please delete me
-var isFiltering bool
+//var isFiltering bool
 
 type item struct {
-	id         string
-	ref        gotest.Reference
-	tRunBranch string
+	id    string
+	ref   gotest.Reference
+	tRuns []string
 }
 
 type listItemDelegate struct {
@@ -51,7 +51,7 @@ type listItemDelegate struct {
 	cursorScope map[gotest.Reference]struct{}
 	multiSelect map[gotest.Reference]struct{}
 
-	state state.RunViewer
+	state state.DefinitionViewer
 }
 
 func listKeyMap() list.KeyMap {
@@ -213,42 +213,29 @@ func (i item) title() string {
 		return allTestsTitle
 	}
 
-	if isFiltering {
-		return i.filterTitle()
-	}
+	//if isFiltering {
+	return i.filterTitle()
+	//}
 
-	return i.treeTitle()
+	//return i.treeTitle()
 }
 
 func (i item) treeTitle() string {
-	if i.ref.TRunName != "" {
-		branch := i.tRunBranch
-		if branch == "" {
-			branch = "   "
-		}
-		return fmt.Sprintf("  %s%s", branch, i.ref.TRunName)
+	//return i.ref.String(true)
+	var tRuns string
+	if len(i.tRuns) > 0 {
+		tRuns = fmt.Sprintf(" (%d cases)", len(i.tRuns))
 	}
 
 	if i.ref.FuncName != "" {
-		return fmt.Sprintf(" • %s", i.ref.FuncName)
+		return fmt.Sprintf(" • %s%s", i.ref.FuncName, tRuns)
 	}
 
 	return i.ref.Package
 }
 
 func (i item) filterTitle() string {
-	name := i.ref.Package
-	decl := "[pkg] "
-
-	if i.ref.TRunName != "" {
-		decl = "[case]"
-		name = i.ref.TRunName
-	} else if i.ref.FuncName != "" {
-		decl = "[func]"
-		name = i.ref.FuncName
-	}
-
-	return fmt.Sprintf("%s %s", decl, name)
+	return i.ref.String(true)
 }
 
 func (i item) Description() string { return "" }
@@ -260,14 +247,11 @@ func (i item) FilterValue() string {
 }
 
 func newItems(refs ...gotest.Reference) []list.Item {
-	items := make([]list.Item, len(refs))
-	var next *gotest.Reference
-	for i, ref := range refs {
-		if i+1 < len(refs) {
-			next = &refs[i+1]
-		} else {
-			next = nil
-		}
+	var items []list.Item
+	var last *item
+	var offset int
+	for i := 0; i+offset < len(refs); i++ {
+		ref := refs[i+offset]
 
 		var id string
 		if ref.Package == "*" {
@@ -275,40 +259,33 @@ func newItems(refs ...gotest.Reference) []list.Item {
 		} else {
 			id = ref.String(true)
 		}
-		it := item{id: id, ref: ref}
 
-		if ref.TRunName != "" {
-			if samePkg(ref, next) && sameFunc(ref, next) && !sameTRun(ref, next) {
-				it.tRunBranch = "  ├── "
-			} else {
-				it.tRunBranch = "  └── "
+		var tRuns []string
+		if ref.TRunName != "" && last != nil {
+			for j := i + offset; j < len(refs); j++ {
+				if samePkg(ref, last.ref) && sameFunc(ref, last.ref) && refs[j].TRunName != "" {
+					tRuns = append(tRuns, refs[j].TRunName)
+				} else {
+					// we have reached the end of the test runs for this function
+					break
+				}
+				offset++
 			}
+		} else {
+			it := item{id: id, ref: ref, tRuns: tRuns}
+			items = append(items, it)
+			last = &it
 		}
-
-		items[i] = it
 	}
 	return items
 }
 
-func samePkg(a gotest.Reference, b *gotest.Reference) bool {
-	if b == nil {
-		return false
-	}
+func samePkg(a gotest.Reference, b gotest.Reference) bool {
 	return a.Package == b.Package
 }
 
-func sameFunc(a gotest.Reference, b *gotest.Reference) bool {
-	if b == nil {
-		return false
-	}
+func sameFunc(a gotest.Reference, b gotest.Reference) bool {
 	return a.FuncName == b.FuncName
-}
-
-func sameTRun(a gotest.Reference, b *gotest.Reference) bool {
-	if b == nil {
-		return false
-	}
-	return a.TRunName == b.TRunName
 }
 
 func (d listItemDelegate) visibleItems(m *list.Model) []item {
@@ -332,7 +309,10 @@ func (d listItemDelegate) Render(w io.Writer, m list.Model, idx int, i list.Item
 
 	var act gotest.Action
 	if d.state != nil {
-		act = d.state.ReferenceConclusiveAction(it.ref)
+		run, ok := d.state.(state.RunViewer)
+		if ok {
+			act = run.ReferenceConclusiveAction(it.ref)
+		}
 	}
 
 	if _, ok := d.multiSelect[it.ref]; ok {
@@ -384,7 +364,7 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 	case gotest.Event:
 		cmds = append(cmds, d.onNavigate(m))
 
-	case uievent.SwitchTestRun:
+	case uievent.SwitchState:
 		// select the last item that was selected in the list
 		if d.current != nil {
 			for idx, i := range m.Items() {
@@ -396,7 +376,15 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 			}
 		}
 
-		d.state = state.NewRunViewer(msg.TestRun)
+		// TODO: make this work a little better....
+		if msg.TestRun != nil {
+			d.state = state.NewRunViewer(msg.TestRun)
+		} else if msg.Definitions != nil {
+			d.state = state.NewDefinitionViewer(msg.Definitions)
+		} else {
+			panic(fmt.Sprintf("unexpected switch state message for list: %#v", msg))
+		}
+
 		cmds = append(cmds, d.onNavigate(m))
 
 	case tea.MouseMsg:

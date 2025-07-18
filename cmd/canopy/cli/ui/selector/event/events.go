@@ -7,8 +7,9 @@ type FilteringInput struct {
 	Completed bool
 }
 
-type SwitchTestRun struct {
-	TestRun *gotest.Run
+type SwitchState struct {
+	Definitions gotest.Definitions
+	TestRun     *gotest.Run
 }
 
 type SelectedTestReferences struct {

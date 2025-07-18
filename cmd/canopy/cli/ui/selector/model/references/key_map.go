@@ -1,10 +1,48 @@
-package testlist
+package references
 
 import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/xhelp"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/xhelp"
 )
+
+//type listKeyMap struct {
+//	toggleSpinner    key.Binding
+//	toggleTitleBar   key.Binding
+//	toggleStatusBar  key.Binding
+//	togglePagination key.Binding
+//	toggleHelpMenu   key.Binding
+//	insertItem       key.Binding
+//}
+//
+//func newListKeyMap() *listKeyMap {
+//	return &listKeyMap{
+//		//insertItem: key.NewBinding(
+//		//	key.WithKeys("a"),
+//		//	key.WithHelp("a", "add item"),
+//		//),
+//		toggleSpinner: key.NewBinding(
+//			key.WithKeys("s"),
+//			key.WithHelp("s", "toggle spinner"),
+//		),
+//		toggleTitleBar: key.NewBinding(
+//			key.WithKeys("T"),
+//			key.WithHelp("T", "toggle title"),
+//		),
+//		toggleStatusBar: key.NewBinding(
+//			key.WithKeys("S"),
+//			key.WithHelp("S", "toggle status"),
+//		),
+//		togglePagination: key.NewBinding(
+//			key.WithKeys("P"),
+//			key.WithHelp("P", "toggle pagination"),
+//		),
+//		toggleHelpMenu: key.NewBinding(
+//			key.WithKeys("H"),
+//			key.WithHelp("H", "toggle help"),
+//		),
+//	}
+//}
 
 type keyMap struct {
 	SelectTest       xhelp.Item
@@ -34,17 +72,17 @@ func newKeyMap(showFailedOnly bool) keyMap {
 		),
 		ShowFailedTests: xhelp.NewKeyBinding(
 			key.NewBinding(
-				key.WithKeys("f"),
+				key.WithKeys("ctrl+f"),
 			),
 		).WithToggle(true, "hide failed", "show failed"),
 		ShowPassedTests: xhelp.NewKeyBinding(
 			key.NewBinding(
-				key.WithKeys("p"),
+				key.WithKeys("ctrl+p"),
 			),
 		).WithToggle(!showFailedOnly, "hide passed", "show passed"),
 		ShowSkippedTests: xhelp.NewKeyBinding(
 			key.NewBinding(
-				key.WithKeys("s"),
+				key.WithKeys("ctrl+s"),
 			),
 		).WithToggle(false, "hide skipped", "show skipped"),
 		NextPackage: xhelp.NewKeyBinding(

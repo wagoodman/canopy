@@ -2,7 +2,7 @@ package model
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/xhelp"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/xhelp"
 )
 
 type Element interface {

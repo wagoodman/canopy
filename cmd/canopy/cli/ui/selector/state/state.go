@@ -22,8 +22,8 @@ type RunStore interface {
 }
 
 type RunViewer interface {
+	DefinitionViewer
 	Config() gotest.RunnerConfig
-	References() []gotest.Reference
 	ReferenceConclusiveAction(gotest.Reference) gotest.Action
 	// ReferenceOutput(gotest.Reference, io.Writer) error // simply not used....
 	ReferenceEvents(gotest.Reference) []gotest.Event
@@ -31,6 +31,10 @@ type RunViewer interface {
 	Elapsed(bool) time.Duration
 	Coverage() (float64, bool)
 	Passed() (bool, bool) // indicates pass/fail and is-still-running
+}
+
+type DefinitionViewer interface {
+	References() []gotest.Reference
 }
 
 type RunController interface {
@@ -59,6 +63,10 @@ func NewRunViewer(run *gotest.Run) RunViewer {
 		Result: &run.Result,
 		Run:    run,
 	}
+}
+
+func NewDefinitionViewer(defs gotest.Definitions) DefinitionViewer {
+	return defs
 }
 
 func (r configAdapter) Config() gotest.RunnerConfig {
