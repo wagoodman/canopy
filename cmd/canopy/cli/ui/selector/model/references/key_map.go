@@ -3,123 +3,110 @@ package references
 import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/xhelp"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/model/toggle"
 )
 
-//type listKeyMap struct {
-//	toggleSpinner    key.Binding
-//	toggleTitleBar   key.Binding
-//	toggleStatusBar  key.Binding
-//	togglePagination key.Binding
-//	toggleHelpMenu   key.Binding
-//	insertItem       key.Binding
-//}
-//
-//func newListKeyMap() *listKeyMap {
-//	return &listKeyMap{
-//		//insertItem: key.NewBinding(
-//		//	key.WithKeys("a"),
-//		//	key.WithHelp("a", "add item"),
-//		//),
-//		toggleSpinner: key.NewBinding(
-//			key.WithKeys("s"),
-//			key.WithHelp("s", "toggle spinner"),
-//		),
-//		toggleTitleBar: key.NewBinding(
-//			key.WithKeys("T"),
-//			key.WithHelp("T", "toggle title"),
-//		),
-//		toggleStatusBar: key.NewBinding(
-//			key.WithKeys("S"),
-//			key.WithHelp("S", "toggle status"),
-//		),
-//		togglePagination: key.NewBinding(
-//			key.WithKeys("P"),
-//			key.WithHelp("P", "toggle pagination"),
-//		),
-//		toggleHelpMenu: key.NewBinding(
-//			key.WithKeys("H"),
-//			key.WithHelp("H", "toggle help"),
-//		),
-//	}
-//}
-
-type keyMap struct {
-	SelectTest       xhelp.Item
-	SelectAllTests   xhelp.Item
-	ShowFailedTests  xhelp.Item
-	ShowPassedTests  xhelp.Item
-	ShowSkippedTests xhelp.Item
-	NextPackage      xhelp.Item
-	PrevPackage      xhelp.Item
-	NextTestFunc     xhelp.Item
-	PrevTestFunc     xhelp.Item
+type KeyMap struct {
+	SelectTest       key.Binding
+	SelectAllTests   key.Binding
+	ShowFailedTests  toggle.Toggle
+	ShowPassedTests  toggle.Toggle
+	ShowSkippedTests toggle.Toggle
+	NextPackage      key.Binding
+	PrevPackage      key.Binding
+	NextTestFunc     key.Binding
+	PrevTestFunc     key.Binding
 }
 
-func newKeyMap(showFailedOnly bool) keyMap {
-	return keyMap{
-		SelectTest: xhelp.NewKeyBinding(
-			key.NewBinding(
-				key.WithKeys(" "), // space
-				key.WithHelp("space", "select test"),
-			),
+func NewKeyMap() KeyMap {
+	return KeyMap{
+		SelectTest: key.NewBinding(
+			key.WithKeys(" "), // space
+			key.WithHelp("space", "select"),
 		),
-		SelectAllTests: xhelp.NewKeyBinding(
-			key.NewBinding(
-				key.WithKeys("ctrl+a"),
-				key.WithHelp("ctrl+a", "select all"),
-			),
+		SelectAllTests: key.NewBinding(
+			key.WithKeys("ctrl+a"),
+			key.WithHelp("^a", "all"),
 		),
-		ShowFailedTests: xhelp.NewKeyBinding(
+		ShowFailedTests: toggle.New(
 			key.NewBinding(
 				key.WithKeys("ctrl+f"),
+				key.WithHelp("^f", "failed"),
 			),
-		).WithToggle(true, "hide failed", "show failed"),
-		ShowPassedTests: xhelp.NewKeyBinding(
+			//toggle.WithEngagedDescription("hide failed"),
+			//toggle.WithDisengagedDescription("show failed"),
+			toggle.WithEngaged(true),
+		),
+		ShowPassedTests: toggle.New(
 			key.NewBinding(
 				key.WithKeys("ctrl+p"),
+				key.WithHelp("^p", "passed"),
 			),
-		).WithToggle(!showFailedOnly, "hide passed", "show passed"),
-		ShowSkippedTests: xhelp.NewKeyBinding(
+			//toggle.WithEngagedDescription("hide passed"),
+			//toggle.WithDisengagedDescription("show passed"),
+			toggle.WithEngaged(true),
+		),
+		ShowSkippedTests: toggle.New(
 			key.NewBinding(
 				key.WithKeys("ctrl+s"),
+				key.WithHelp("^s", "skipped"),
 			),
-		).WithToggle(false, "hide skipped", "show skipped"),
-		NextPackage: xhelp.NewKeyBinding(
-			key.NewBinding(
-				key.WithKeys(tea.KeyCtrlShiftDown.String()), // space
-				key.WithHelp(tea.KeyCtrlShiftDown.String(), "next package"),
-			),
+			//toggle.WithEngagedDescription("hide skipped"),
+			//toggle.WithDisengagedDescription("show skipped"),
+			toggle.WithEngaged(true),
 		),
-		PrevPackage: xhelp.NewKeyBinding(
-			key.NewBinding(
-				key.WithKeys(tea.KeyCtrlShiftUp.String()), // space
-				key.WithHelp(tea.KeyCtrlShiftUp.String(), "prev package"),
-			),
+		NextPackage: key.NewBinding(
+			key.WithKeys(tea.KeyCtrlShiftDown.String()), // space
+			key.WithHelp(tea.KeyCtrlShiftDown.String(), "next package"),
 		),
-		NextTestFunc: xhelp.NewKeyBinding(
-			key.NewBinding(
-				key.WithKeys(tea.KeyShiftDown.String()), // space
-				key.WithHelp(tea.KeyShiftDown.String(), "next test function"),
-			),
+		PrevPackage: key.NewBinding(
+			key.WithKeys(tea.KeyCtrlShiftUp.String()), // space
+			key.WithHelp(tea.KeyCtrlShiftUp.String(), "prev package"),
 		),
-		PrevTestFunc: xhelp.NewKeyBinding(
-			key.NewBinding(
-				key.WithKeys(tea.KeyShiftUp.String()), // space
-				key.WithHelp(tea.KeyShiftUp.String(), "prev test function"),
-			),
+		NextTestFunc: key.NewBinding(
+			key.WithKeys(tea.KeyShiftDown.String()), // space
+			key.WithHelp(tea.KeyShiftDown.String(), "next test function"),
 		),
+		PrevTestFunc: key.NewBinding(
+			key.WithKeys(tea.KeyShiftUp.String()), // space
+			key.WithHelp(tea.KeyShiftUp.String(), "prev test function"),
+		),
+		//ReRunAllTests:
+		//		key.WithKeys("a"),
+		//		key.WithHelp("a", "re-run all"),
+		//),
+		//ReRunTestSelection: key.NewBinding(
+		//		key.WithKeys("r"),
+		//		key.WithHelp("r", "re-run"),
+		//),
 	}
 }
 
-func (k keyMap) ShortHelp() []xhelp.Item {
-	return []xhelp.Item{k.SelectTest, k.SelectAllTests, k.ShowFailedTests, k.ShowPassedTests, k.ShowSkippedTests}
+func (k KeyMap) Toggles() toggle.Toggles {
+	return toggle.Toggles{
+		k.ShowFailedTests,
+		k.ShowPassedTests,
+		k.ShowSkippedTests,
+	}
 }
 
-func (k keyMap) FullHelp() [][]xhelp.Item {
-	return [][]xhelp.Item{
-		{k.SelectTest, k.SelectAllTests},
-		{k.ShowFailedTests, k.ShowPassedTests, k.ShowSkippedTests},
-		{k.PrevPackage, k.NextPackage, k.PrevTestFunc, k.NextTestFunc},
+func (k KeyMap) AdditionalShortHelp() []key.Binding {
+	return []key.Binding{k.SelectTest, k.SelectAllTests, k.ShowFailedTests.Binding, k.ShowPassedTests.Binding, k.ShowSkippedTests.Binding}
+}
+
+//func (k KeyMap) FullHelp() [][]key.Binding {
+//	return [][]key.Binding{
+//		{k.SelectTest, k.SelectAllTests},
+//		{k.ShowFailedTests.Binding, k.ShowPassedTests.Binding, k.ShowSkippedTests.Binding},
+//		{k.PrevPackage, k.NextPackage, k.PrevTestFunc, k.NextTestFunc},
+//	}
+//}
+
+func (k KeyMap) AdditionalFullHelp() []key.Binding {
+	return []key.Binding{
+		k.NextPackage,
+		k.PrevPackage,
+		k.NextTestFunc,
+		k.PrevTestFunc,
 	}
 }

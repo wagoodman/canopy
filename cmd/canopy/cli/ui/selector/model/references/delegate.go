@@ -51,7 +51,7 @@ func newItemDelegate(navigateBindings ...key.Binding) *listItemDelegate {
 	//	Padding(0, 0, 0, 1)
 
 	cursorBrd := lipgloss.NormalBorder()
-	cursorBrd.Left = "●" // ❯❱ ●• » ▚ [ "\U0001FB6A", this is a powerline glyph, but it doesn't work in all terminals, so we use a normal character instead )
+	cursorBrd.Left = "❯" // ❯❱ ●• » ▚ [ "\U0001FB6A", this is a powerline glyph, but it doesn't work in all terminals, so we use a normal character instead )
 
 	highlightPadding := lipgloss.NewStyle().Padding(0, 0, 0, 1)
 	notHighlightedPadding := lipgloss.NewStyle().Padding(0, 0, 0, 2)

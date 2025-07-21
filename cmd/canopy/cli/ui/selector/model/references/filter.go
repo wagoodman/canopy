@@ -48,7 +48,7 @@ func filter(term string, targets []string) []list.Rank {
 		chars := util.ToChars([]byte(target))
 		result, positions := algo.FuzzyMatchV2(
 			false, // consider input as case-insensitive
-			false, // don't normalize
+			true,  // non ascii characters are equated to similar ascii characters
 			true,  // forward search
 			&chars,
 			pattern,

@@ -10,56 +10,14 @@ import (
 const allTestsTitle = "(all available tests)"
 
 type item struct {
-	title     string
-	ref       gotest.Reference
-	tRuns     []string
-	filtering bool
+	title string
+	ref   gotest.Reference
+	tRuns []string
 }
 
-//func (i item) Title() string       { return i.title }
-//func (i item) Description() string { return "" }
-//func (i item) FilterValue() string { return i.title }
-
-func (i item) Title() string {
-	return zone.Mark(i.title, i.display())
-}
-
-func (i item) display() string {
-	if i.ref.Package == "*" {
-		return allTestsTitle
-	}
-
-	if i.filtering {
-		return i.filterTitle()
-	}
-
-	return i.treeTitle()
-}
-
-func (i item) treeTitle() string {
-	var tRuns string
-	if len(i.tRuns) > 0 {
-		tRuns = fmt.Sprintf(" (%d cases)", len(i.tRuns))
-	}
-
-	if i.ref.FuncName != "" {
-		return fmt.Sprintf(" • %s%s", i.ref.FuncName, tRuns)
-	}
-
-	return i.ref.Package
-}
-
-func (i item) filterTitle() string {
-	return i.ref.String(true)
-}
-
+func (i item) Title() string       { return zone.Mark(i.title, i.title) }
 func (i item) Description() string { return "" }
-func (i item) FilterValue() string {
-	if i.ref.Package == "*" {
-		return allTestsTitle
-	}
-	return i.display()
-}
+func (i item) FilterValue() string { return zone.Mark(i.title, i.title) }
 
 func newItems(filter bool, refs ...gotest.Reference) []list.Item {
 	var items []list.Item
@@ -67,13 +25,6 @@ func newItems(filter bool, refs ...gotest.Reference) []list.Item {
 	var offset int
 	for i := 0; i+offset < len(refs); i++ {
 		ref := refs[i+offset]
-
-		var title string
-		if ref.Package == "*" {
-			title = allTestsTitle
-		} else {
-			title = ref.String(true)
-		}
 
 		var tRuns []string
 		// we don't include t.Run cases, instead they are pruned and the t.Run name is added to the func test item
@@ -88,12 +39,41 @@ func newItems(filter bool, refs ...gotest.Reference) []list.Item {
 				offset++
 			}
 		} else {
-			it := item{title: title, ref: ref, tRuns: tRuns, filtering: filter}
+			it := item{title: display(ref, tRuns, filter), ref: ref, tRuns: tRuns}
 			items = append(items, it)
 			lastRef = &it.ref
 		}
 	}
 	return items
+}
+
+func display(ref gotest.Reference, tRuns []string, filtering bool) string {
+	if ref.Package == "*" {
+		return allTestsTitle
+	}
+
+	if filtering {
+		return filterTitle(ref)
+	}
+
+	return treeTitle(ref, tRuns)
+}
+
+func filterTitle(ref gotest.Reference) string {
+	return ref.String(true)
+}
+
+func treeTitle(ref gotest.Reference, tRuns []string) string {
+	var tRunsStr string
+	if len(tRuns) > 0 {
+		tRunsStr = fmt.Sprintf(" (%d cases)", len(tRuns))
+	}
+
+	if ref.FuncName != "" {
+		return fmt.Sprintf(" • %s%s", ref.FuncName, tRunsStr)
+	}
+
+	return ref.Package
 }
 
 func samePkg(a gotest.Reference, b gotest.Reference) bool {

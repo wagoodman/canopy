@@ -12,44 +12,58 @@ import (
 	"sort"
 )
 
+var filterKeyBindings []key.Binding
+
+func init() {
+	// for a-z, A-Z , make bindings for each letter
+	for i := 'a'; i <= 'z'; i++ {
+		filterKeyBindings = append(filterKeyBindings, key.NewBinding(
+			key.WithKeys(string(i)),
+			key.WithHelp(fmt.Sprintf("%c", i), "filter by letter"),
+		))
+	}
+
+	for i := 'A'; i <= 'Z'; i++ {
+		filterKeyBindings = append(filterKeyBindings, key.NewBinding(
+			key.WithKeys(string(i)),
+			key.WithHelp(fmt.Sprintf("%c", i), "filter by letter"),
+		))
+	}
+}
+
 type Model struct {
 	list        list.Model
 	state       state.DefinitionViewer
 	visibleRefs []gotest.Reference
-
-	keyMap
+	keyMap      KeyMap
 }
 
-func New() Model {
-	km := newKeyMap(false)
-
+func New(km KeyMap) Model {
 	l := list.New(
 		newItems(false), // empty, but will be populated later with an event
 		newItemDelegate(
 			km.ShowPassedTests.Binding,
 			km.ShowFailedTests.Binding,
 			km.ShowSkippedTests.Binding,
-			km.NextTestFunc.Binding,
-			km.PrevTestFunc.Binding,
-			km.NextPackage.Binding,
-			km.PrevPackage.Binding,
+			km.NextTestFunc,
+			km.PrevTestFunc,
+			km.NextPackage,
+			km.PrevPackage,
 		),
 		0,
 		0,
 	)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
+	l.SetShowHelp(true)
+	l.SetShowPagination(false)
 	l.Filter = filter
+	//l.FilterInput = filterInput()
+	l.AdditionalShortHelpKeys = func() []key.Binding {
+		return km.AdditionalShortHelp()
+	}
 	l.AdditionalFullHelpKeys = func() []key.Binding {
-		return []key.Binding{
-			km.ShowPassedTests.Binding,
-			km.ShowFailedTests.Binding,
-			km.ShowSkippedTests.Binding,
-			km.NextTestFunc.Binding,
-			km.PrevTestFunc.Binding,
-			km.NextPackage.Binding,
-			km.PrevPackage.Binding,
-		}
+		return km.AdditionalFullHelp()
 	}
 
 	return Model{
@@ -57,6 +71,22 @@ func New() Model {
 		keyMap: km,
 	}
 }
+
+//func filterInput() textinput.Model {
+//	// 	s.FilterPrompt = lipgloss.NewStyle().
+//	//		Foreground(lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#ECFD65"})
+//	//
+//	//	s.FilterCursor = lipgloss.NewStyle().
+//	//		Foreground(lipgloss.AdaptiveColor{Light: "#EE6FF8", Dark: "#EE6FF8"})
+//
+//	filterInput := textinput.New()
+//	filterInput.Prompt = "Filter: "
+//	//filterInput.PromptStyle = styles.FilterPrompt
+//	//filterInput.Cursor.Style = styles.FilterCursor
+//	filterInput.CharLimit = 64
+//	filterInput.Focus()
+//	return filterInput
+//}
 
 func (m Model) Init() tea.Cmd {
 	return nil
@@ -67,7 +97,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.list.SetSize(msg.Width, msg.Height)
+		// TODO: what to do about the height?
+		m.list.SetSize(msg.Width, msg.Height-4)
 
 	case tea.MouseMsg:
 		switch msg.Button {
@@ -96,37 +127,48 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 
-		//switch {
-		//case key.Matches(msg, m.key.toggleSpinner):
-		//	cmd := m.list.ToggleSpinner()
-		//	return m, cmd
-		//
-		//case key.Matches(msg, m.keys.toggleTitleBar):
-		//	v := !m.list.ShowTitle()
-		//	m.list.SetShowTitle(v)
-		//	m.list.SetShowFilter(v)
-		//	m.list.SetFilteringEnabled(v)
-		//	return m, nil
-		//
-		//case key.Matches(msg, m.keys.toggleStatusBar):
-		//	m.list.SetShowStatusBar(!m.list.ShowStatusBar())
-		//	return m, nil
-		//
-		//case key.Matches(msg, m.keys.togglePagination):
-		//	m.list.SetShowPagination(!m.list.ShowPagination())
-		//	return m, nil
-		//
-		//case key.Matches(msg, m.keys.toggleHelpMenu):
-		//	m.list.SetShowHelp(!m.list.ShowHelp())
-		//	return m, nil
+		switch {
+		case key.Matches(msg, filterKeyBindings...):
+			// if matches a-z, A-Z then we set the filter state to filtering
+			m.list.SetFilterState(list.Filtering)
 
-		//case key.Matches(msg, m.keys.insertItem):
-		//	m.delegateKeys.remove.SetEnabled(true)
-		//	newItem := m.itemGenerator.next()
-		//	insCmd := m.list.InsertItem(0, newItem)
-		//	statusCmd := m.list.NewStatusMessage(statusMessageStyle("Added " + newItem.Title()))
-		//	return m, tea.Batch(insCmd, statusCmd)
-		//}
+		case key.Matches(msg, m.keyMap.ShowPassedTests.Binding):
+			// TODO...
+		case key.Matches(msg, m.keyMap.ShowFailedTests.Binding):
+			// TODO...
+		case key.Matches(msg, m.keyMap.ShowSkippedTests.Binding):
+			// TODO...
+
+			//case key.Matches(msg, m.key.toggleSpinner):
+			//	cmd := m.list.ToggleSpinner()
+			//	return m, cmd
+			//
+			//case key.Matches(msg, m.keys.toggleTitleBar):
+			//	v := !m.list.ShowTitle()
+			//	m.list.SetShowTitle(v)
+			//	m.list.SetShowFilter(v)
+			//	m.list.SetFilteringEnabled(v)
+			//	return m, nil
+			//
+			//case key.Matches(msg, m.keys.toggleStatusBar):
+			//	m.list.SetShowStatusBar(!m.list.ShowStatusBar())
+			//	return m, nil
+			//
+			//case key.Matches(msg, m.keys.togglePagination):
+			//	m.list.SetShowPagination(!m.list.ShowPagination())
+			//	return m, nil
+			//
+			//case key.Matches(msg, m.keys.toggleHelpMenu):
+			//	m.list.SetShowHelp(!m.list.ShowHelp())
+			//	return m, nil
+			//
+			//case key.Matches(msg, m.keys.insertItem):
+			//	m.delegateKeys.remove.SetEnabled(true)
+			//	newItem := m.itemGenerator.next()
+			//	insCmd := m.list.InsertItem(0, newItem)
+			//	statusCmd := m.list.NewStatusMessage(statusMessageStyle("Added " + newItem.Title()))
+			//	return m, tea.Batch(insCmd, statusCmd)
+		}
 
 	// handle core interactions...
 	case uievent.SwitchState:
@@ -140,9 +182,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// handle list updates...
+	cmds = append(cmds, m.updateList(msg))
+
+	return m, tea.Batch(cmds...)
+}
+
+func (m *Model) updateList(msg any) tea.Cmd {
+	var cmds []tea.Cmd
 	wasFiltering := m.list.FilterState() == list.Filtering
 
-	// This will also call our delegate's update function.
+	// this will also call our delegate's update function.
 	newListModel, cmd := m.list.Update(msg)
 	m.list = newListModel
 	cmds = append(cmds, cmd)
@@ -150,12 +200,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	nowFiltering := m.list.FilterState() == list.Filtering
 
 	if nowFiltering != wasFiltering {
-		// If we just switched to filtering, we need to update the items
+		// if we just switched to filtering, we need to update the items
 		// to reflect the current filter state.
 		cmds = append(cmds, m.refreshReferences())
 	}
-
-	return m, tea.Batch(cmds...)
+	return tea.Batch(cmds...)
 }
 
 func (m *Model) onSwitchState(run state.DefinitionViewer) tea.Cmd {
@@ -216,7 +265,6 @@ func (m Model) filterToVisibleRefs(original []gotest.Reference, currentDefs stat
 
 	return refs
 }
-
 func (m Model) View() string {
 	return m.list.View()
 }

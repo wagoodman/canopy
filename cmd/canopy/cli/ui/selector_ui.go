@@ -40,7 +40,7 @@ func (s *SelectorUI) Setup(subscription partybus.Unsubscribable) error {
 	}
 	s.subscription = subscription
 	s.program = tea.NewProgram(
-		selector.New(s.config, s.running),
+		selector.New(s.config),
 		//tea.WithAltScreen(),       // use the full size of the terminal in its "alternate screen buffer"
 		tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
 		tea.WithoutSignalHandler(),
