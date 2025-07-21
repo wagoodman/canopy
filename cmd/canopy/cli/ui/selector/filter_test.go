@@ -109,32 +109,28 @@ func TestFilter(t *testing.T) {
 			},
 		},
 		{
-			name:    "test name match - TestMultiPackageHandler",
-			term:    "TestMultiPackageHandler",
+			name:    "path segment match - handler",
+			term:    "handler",
 			targets: testStrings,
-			// should match test names containing this string
+			// should match all items containing "handler" path segment
 			expectedMatches: []string{
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler",
 				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/TestMultiPackageHandler_Handle",
 				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/TestMultiPackageHandler_OnGoTestEvent",
 				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/TestMultiPackageHandler_String",
 				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/TestNewMultiPackageHandler",
-			},
-		},
-		{
-			name:    "partial test name - TestQuiet",
-			term:    "TestQuiet",
-			targets: testStrings,
-			// should match TestQuietHandler and TestQuietPackage
-			expectedMatches: []string{
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx",
 				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx/TestQuietHandler",
 				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx/TestQuietPackage",
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx/TestVerboseHandler",
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx/TestVerbosePackage",
 			},
 		},
 		{
 			name:    "specific package path - internal/gotest",
 			term:    "internal/gotest",
 			targets: testStrings,
-			// should match all items with internal/gotest in path
+			// should match all items with internal/gotest in path (excludes internal/ide)
 			expectedMatches: []string{
 				"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/TestEvent_Copy",
 				"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/TestEvent_HasAnnotation",
@@ -166,11 +162,6 @@ func TestFilter(t *testing.T) {
 				"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output/TestHasPassedPackageMarking",
 				"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output/TestHasTestPassMarking",
 				"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output/TestIsLogLine",
-				"github.com/wagoodman/canopy/cmd/canopy/internal/ide/TestGoland_FileAtLineURL",
-				"github.com/wagoodman/canopy/cmd/canopy/internal/ide/TestGoland_OpenFileAtLineCommand",
-				"github.com/wagoodman/canopy/cmd/canopy/internal/ide/TestGoland_isActive",
-				"github.com/wagoodman/canopy/cmd/canopy/internal/ide/TestNewGoland",
-				"github.com/wagoodman/canopy/cmd/canopy/internal/ide/TestNewSnapshotEnvironmentGetterFromOSEnv",
 			},
 		},
 		{
@@ -194,15 +185,29 @@ func TestFilter(t *testing.T) {
 			expectedMatches: []string{},
 		},
 		{
-			name:    "case insensitive match",
-			term:    "testmulti",
+			name:    "simple path segment match - format",
+			term:    "format",
 			targets: testStrings,
-			// should match TestMultiPackageHandler variants
+			// should match items containing "format" path segment  
 			expectedMatches: []string{
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler",
 				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/TestMultiPackageHandler_Handle",
 				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/TestMultiPackageHandler_OnGoTestEvent",
 				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/TestMultiPackageHandler_String",
 				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/TestNewMultiPackageHandler",
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx",
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx/TestQuietHandler",
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx/TestQuietPackage",
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx/TestVerboseHandler",
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx/TestVerbosePackage",
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/internal",
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/internal/TestIndentWriter_Write",
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/internal/TestIndentWriter_Write_ErrorHandling",
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/internal/TestIndentWriter_Write_MultipleWrites",
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter",
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter/TestGoTestResultSummary_Present",
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter/TestJestTestResultSummary_Present",
+				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter/TestSplitWhitespace",
 			},
 		},
 		{

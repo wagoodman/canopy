@@ -87,9 +87,10 @@ func runRoot(_ context.Context, app clio.Application, cfg rootConfig) error {
 		return fmt.Errorf("unable to replace UI: %w", err)
 	}
 
-	ux.Wait()
+	refs := ux.Prompt()
 
 	// TODO: run tests! get selection from model!
+	fmt.Printf("Selected references: %d\n", len(refs))
 
 	return nil
 }

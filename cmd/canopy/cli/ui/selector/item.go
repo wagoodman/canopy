@@ -3,46 +3,67 @@ package selector
 import (
 	"fmt"
 	"github.com/charmbracelet/bubbles/list"
-	zone "github.com/lrstanley/bubblezone"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
 
 const allTestsTitle = "(all available tests)"
 
 type item struct {
-	title string
-	ref   gotest.Reference
-	tRuns []string
+	title    string
+	ref      gotest.Reference
+	tRuns    []string
+	disabled bool // makes this not selectable
 }
 
-func (i item) Title() string       { return zone.Mark(i.title, i.title) }
-func (i item) Description() string { return "" }
-func (i item) FilterValue() string { return zone.Mark(i.title, i.title) }
+func (i item) Title() string {
+	return i.title
+	//zone.Mark(i.title, i.title) }
+}
+
+func (i item) Description() string {
+	return i.ref.Package
+}
+
+func (i item) FilterValue() string {
+	if i.disabled {
+		return "" // don't filter disabled items
+	}
+	return i.title
+	//zone.Mark(i.title, i.title) } // TODO: breaks filtering (when using in the filter value and not in the filter value... either messes with the lengths to select matched characters, or breaks rendering of patially matching ansi characters)
+}
 
 func newItems(filter bool, refs ...gotest.Reference) []list.Item {
 	var items []list.Item
-	var lastRef *gotest.Reference
-	var offset int
-	for i := 0; i+offset < len(refs); i++ {
-		ref := refs[i+offset]
+
+	for i := 0; i < len(refs); {
+		ref := refs[i]
+
+		// skip t.Run cases that don't have a preceding function reference
+		if ref.TRunName != "" {
+			i++
+			continue
+		}
 
 		var tRuns []string
-		// we don't include t.Run cases, instead they are pruned and the t.Run name is added to the func test item
-		if ref.TRunName != "" && lastRef != nil {
-			for j := i + offset; j < len(refs); j++ {
-				if samePkg(ref, *lastRef) && sameFunc(ref, *lastRef) && refs[j].TRunName != "" {
-					tRuns = append(tRuns, refs[j].TRunName)
-				} else {
-					// we have reached the end of the test runs for this function
-					break
-				}
-				offset++
+		// look ahead to collect any t.Run cases for this function
+		j := i + 1
+		for j < len(refs) {
+			nextRef := refs[j]
+			if samePkg(ref, nextRef) && sameFunc(ref, nextRef) && nextRef.TRunName != "" {
+				tRuns = append(tRuns, nextRef.TRunName)
+				j++
+			} else {
+				// we have reached the end of the test runs for this function
+				break
 			}
-		} else {
-			it := item{title: display(ref, tRuns, filter), ref: ref, tRuns: tRuns}
-			items = append(items, it)
-			lastRef = &it.ref
 		}
+
+		// create the item for the function (with collected t.Run names)
+		it := item{title: display(ref, tRuns, filter), ref: ref, tRuns: tRuns}
+		items = append(items, it)
+
+		// skip past the t.Run cases we just processed
+		i = j
 	}
 	return items
 }

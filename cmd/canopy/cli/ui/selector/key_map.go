@@ -8,6 +8,7 @@ import (
 type keyMap struct {
 	SelectTest     key.Binding
 	SelectAllTests key.Binding
+	Finish         key.Binding
 	NextPackage    key.Binding
 	PrevPackage    key.Binding
 }
@@ -21,6 +22,10 @@ func newKeyMap() keyMap {
 		SelectAllTests: key.NewBinding(
 			key.WithKeys("ctrl+a"),
 			key.WithHelp("^a", "all"),
+		),
+		Finish: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "run tests"),
 		),
 		NextPackage: key.NewBinding(
 			key.WithKeys(tea.KeyCtrlShiftDown.String()), // space

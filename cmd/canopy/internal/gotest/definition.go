@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
@@ -56,6 +57,7 @@ func (d Definitions) References() []Reference {
 			refs = append(refs, ref)
 		}
 	}
+	sort.Sort(References(refs))
 	return refs
 }
 

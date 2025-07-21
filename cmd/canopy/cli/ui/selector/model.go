@@ -5,11 +5,12 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
-	zone "github.com/lrstanley/bubblezone"
+	"github.com/charmbracelet/lipgloss"
 	uievent "github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/event"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/state"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"sort"
+	"strings"
 )
 
 type Config struct {
@@ -37,34 +38,48 @@ func init() {
 }
 
 type Model struct {
-	config Config
-
+	config      Config
+	size        tea.WindowSizeMsg
 	list        list.Model
 	state       state.DefinitionViewer
 	visibleRefs []gotest.Reference
 	keyMap      keyMap
+
+	titleStyle lipgloss.Style
+	auxStyle   lipgloss.Style
+
+	Selected []gotest.Reference // references that are selected by the user
 }
 
 func New(config Config) Model {
-	zone.NewGlobal()
+	//zone.NewGlobal()
 
 	km := newKeyMap()
 
 	l := list.New(
 		newItems(false), // empty, but will be populated later with an event
 		newItemDelegate(
-			km.NextPackage,
-			km.PrevPackage,
+			km.SelectTest,
+			[]key.Binding{
+				km.NextPackage,
+				km.PrevPackage,
+			},
 		),
 		0,
 		0,
 	)
+	// we reserve the right for 'q' for the user to start filtering results
+	l.KeyMap.Quit.SetKeys("esc")
+	l.KeyMap.Quit.SetHelp("esc", "quit")
+
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(true)
 	l.SetShowPagination(false)
-	l.Filter = filter
-	//l.FilterInput = filterInput()
+
+	// TODO: why isn't this working on test functions? only on packages?
+	//l.Filter = filter
+
 	l.AdditionalShortHelpKeys = func() []key.Binding {
 		return km.AdditionalShortHelp()
 	}
@@ -73,27 +88,16 @@ func New(config Config) Model {
 	}
 
 	return Model{
-		config: config,
-		list:   l,
-		keyMap: km,
+		config:     config,
+		list:       l,
+		keyMap:     km,
+		titleStyle: lipgloss.NewStyle().Bold(true),
+		auxStyle: lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{
+			Light: "#909090",
+			Dark:  "#626262",
+		}),
 	}
 }
-
-//func filterInput() textinput.Model {
-//	// 	s.FilterPrompt = lipgloss.NewStyle().
-//	//		Foreground(lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#ECFD65"})
-//	//
-//	//	s.FilterCursor = lipgloss.NewStyle().
-//	//		Foreground(lipgloss.AdaptiveColor{Light: "#EE6FF8", Dark: "#EE6FF8"})
-//
-//	filterInput := textinput.New()
-//	filterInput.Prompt = "Filter: "
-//	//filterInput.PromptStyle = styles.FilterPrompt
-//	//filterInput.Cursor.Style = styles.FilterCursor
-//	filterInput.CharLimit = 64
-//	filterInput.Focus()
-//	return filterInput
-//}
 
 func (m Model) Init() tea.Cmd {
 	return nil
@@ -105,7 +109,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		// TODO: what to do about the height?
+		m.size = msg
 		m.list.SetSize(msg.Width, msg.Height-4)
+
+	case uievent.SelectedTestReferences:
+		if msg.All {
+			m.Selected = m.state.References()
+		} else {
+			m.Selected = msg.Refs
+		}
 
 	case tea.MouseMsg:
 		switch msg.Button {
@@ -114,22 +126,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case tea.MouseButtonWheelDown:
 			m.list.CursorDown()
-		default:
-			if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
-				for i, listItem := range m.list.VisibleItems() {
-					v, _ := listItem.(item)
-					// check each item to see if it's in bounds
-					if zone.Get(v.title).InBounds(msg) {
-						// ...ff so, select it in the list
-						m.list.Select(i)
-						break
-					}
-				}
-			}
+			//default:
+			//	if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
+			//		for i, listItem := range m.list.VisibleItems() {
+			//			v, _ := listItem.(item)
+			//			// check each item to see if it's in bounds
+			//			if zone.Get(v.title).InBounds(msg) {
+			//				// ...ff so, select it in the list
+			//				m.list.Select(i)
+			//				break
+			//			}
+			//		}
+			//	}
 		}
 
 	case tea.KeyMsg:
-		// Don't match any of the keys below if we're actively filtering.
+		switch {
+		case key.Matches(msg, m.keyMap.NextPackage):
+			cmds = append(cmds, m.nextPkg())
+
+		case key.Matches(msg, m.keyMap.PrevPackage):
+			cmds = append(cmds, m.prevPkg())
+
+		}
+
+		// don't match any of the keys below if we're actively filtering.
 		if m.list.FilterState() == list.Filtering {
 			break
 		}
@@ -138,54 +159,63 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, filterKeyBindings...):
 			// if matches a-z, A-Z then we set the filter state to filtering
 			m.list.SetFilterState(list.Filtering)
-
-			//case key.Matches(msg, m.key.toggleSpinner):
-			//	cmd := m.list.ToggleSpinner()
-			//	return m, cmd
-			//
-			//case key.Matches(msg, m.keys.toggleTitleBar):
-			//	v := !m.list.ShowTitle()
-			//	m.list.SetShowTitle(v)
-			//	m.list.SetShowFilter(v)
-			//	m.list.SetFilteringEnabled(v)
-			//	return m, nil
-			//
-			//case key.Matches(msg, m.keys.toggleStatusBar):
-			//	m.list.SetShowStatusBar(!m.list.ShowStatusBar())
-			//	return m, nil
-			//
-			//case key.Matches(msg, m.keys.togglePagination):
-			//	m.list.SetShowPagination(!m.list.ShowPagination())
-			//	return m, nil
-			//
-			//case key.Matches(msg, m.keys.toggleHelpMenu):
-			//	m.list.SetShowHelp(!m.list.ShowHelp())
-			//	return m, nil
-			//
-			//case key.Matches(msg, m.keys.insertItem):
-			//	m.delegateKeys.remove.SetEnabled(true)
-			//	newItem := m.itemGenerator.next()
-			//	insCmd := m.list.InsertItem(0, newItem)
-			//	statusCmd := m.list.NewStatusMessage(statusMessageStyle("Added " + newItem.Title()))
-			//	return m, tea.Batch(insCmd, statusCmd)
 		}
 
 	// handle core interactions...
 	case uievent.SwitchState:
-		// TODO: make this work a little better....
-		if msg.TestRun != nil {
-			cmds = append(cmds, m.onSwitchState(state.NewRunViewer(msg.TestRun)))
-		} else if msg.Definitions != nil {
-			cmds = append(cmds, m.onSwitchState(state.NewDefinitionViewer(msg.Definitions)))
-		} else {
-			panic(fmt.Sprintf("unexpected switch state message: %#v", msg))
-		}
+		cmds = append(cmds, m.onSwitchState(state.NewDefinitionViewer(msg.Definitions)))
 	}
 
 	// handle list updates...
 	cmds = append(cmds, m.updateList(msg))
 
 	return m, tea.Batch(cmds...)
+}
+
+func (m *Model) nextPkg() tea.Cmd {
+	currentIdx := m.list.Index()
+	currentElement := m.list.SelectedItem()
+	if currentElement == nil {
+		return nil
+	}
+	currentItem := currentElement.(item)
+	curPkg := currentItem.ref.Package
+	for i := currentIdx; i < len(m.visibleRefs); i++ {
+		if m.visibleRefs[i].Package != curPkg {
+			m.list.Select(i)
+			break
+		}
+	}
+
+	return m.refreshReferences()
+}
+
+func (m *Model) prevPkg() tea.Cmd {
+	currentIdx := m.list.Index()
+	currentElement := m.list.SelectedItem()
+	if currentElement == nil {
+		return nil
+	}
+	currentItem := currentElement.(item)
+	curPkg := currentItem.ref.Package
+	targetPkg := ""
+	for i := currentIdx; i >= 0; i-- {
+		if targetPkg == "" {
+			if m.visibleRefs[i].Package != curPkg {
+				targetPkg = m.visibleRefs[i].Package
+				continue
+			}
+		} else {
+			// head to the top of the package
+			if m.visibleRefs[i].Package != targetPkg {
+				// select the previous reference...
+				m.list.Select(i + 1)
+				break
+			}
+		}
+	}
+
+	return m.refreshReferences()
 }
 
 func (m *Model) updateList(msg any) tea.Cmd {
@@ -208,16 +238,11 @@ func (m *Model) updateList(msg any) tea.Cmd {
 }
 
 func (m *Model) onSwitchState(run state.DefinitionViewer) tea.Cmd {
-	// TODO: we need to add and remove the difference of the new refs and the old refs
-	// then update the viewport selected indexes and cursor position
 	m.state = run
-
 	return m.refreshReferences()
 }
 
 func (m *Model) refreshReferences() tea.Cmd {
-	// This is called when the references change, but we don't have a new state.
-	// This can happen when the user switches to a different package or test.
 	if m.state == nil {
 		return nil
 	}
@@ -227,49 +252,107 @@ func (m *Model) refreshReferences() tea.Cmd {
 
 func (m *Model) setReferences(refs ...gotest.Reference) tea.Cmd {
 	sort.Sort(gotest.References(refs))
-	m.visibleRefs = m.filterToVisibleRefs(refs, m.state)
+	m.visibleRefs = m.filterToVisibleRefs(refs)
 
 	return tea.Batch(
 		m.list.SetItems(newItems(m.list.FilterState() == list.Filtering, m.visibleRefs...)),
 	)
 }
 
-func (m Model) filterToVisibleRefs(original []gotest.Reference, currentDefs state.DefinitionViewer) []gotest.Reference {
-	//showFailed := m.ShowFailedTests.Engaged()
-	//showPassed := m.ShowPassedTests.Engaged()
-	//showSkipped := m.ShowSkippedTests.Engaged()
-
-	//currentTestRun, hasRunInfo := currentDefs.(state.RunViewer)
-
+func (m Model) filterToVisibleRefs(original []gotest.Reference) []gotest.Reference {
 	var refs []gotest.Reference
 	refs = append(refs, gotest.Reference{Package: "*"})
-	for _, ref := range original {
-		//if hasRunInfo {
-		//	action := currentTestRun.ReferenceConclusiveAction(ref)
-		//
-		//	if action == gotest.FailAction && !showFailed {
-		//		continue
-		//	}
-		//
-		//	if action == gotest.PassAction && !showPassed {
-		//		continue
-		//	}
-		//
-		//	if action == gotest.SkipAction && !showSkipped {
-		//		continue
-		//	}
-		//}
-
-		refs = append(refs, ref)
-	}
+	refs = append(refs, original...)
 
 	return refs
 }
 
 func (m Model) View() string {
-	return zone.Scan(m.view())
+	return m.view()
+	//return zone.Scan(m.view())
 }
 
 func (m Model) view() string {
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		m.titleView(),
+		m.refrencesView(),
+	)
+}
+
+func (m Model) titleView() string {
+	left := m.titleStyle.Render("Search/Select tests to run")
+	right := m.auxStyle.Render(m.config.ID)
+
+	leftWidth := lipgloss.Width(left)
+	rightWidth := lipgloss.Width(right)
+
+	spacingWidth := m.size.Width - leftWidth - rightWidth
+	if spacingWidth < 0 {
+		// only render the left side if we don't have enough space
+		return left
+	}
+
+	spacing := strings.Repeat(" ", spacingWidth)
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, left, spacing, right)
+}
+
+//func (m Model) statsView() string {
+//	pkgTitle := "package"
+//
+//	pkgs := make(map[string]struct{})
+//	passedTests := 0
+//	skippedTests := 0
+//	failedTests := 0
+//	runningTests := 0
+//	tests := 0
+//	for _, ref := range m.selectedRefs {
+//		if _, ok := pkgs[ref.Package]; !ok {
+//			pkgs[ref.Package] = struct{}{}
+//		}
+//		if ref.IsPackage() {
+//			continue
+//		}
+//		tests++
+//		switch m.currentTestRun.ReferenceConclusiveAction(ref) {
+//		case gotest.PassAction:
+//			passedTests++
+//		case gotest.SkipAction:
+//			skippedTests++
+//		case gotest.FailAction:
+//			failedTests++
+//		case gotest.RunAction:
+//			runningTests++
+//		}
+//	}
+//
+//	selection := "no tests selected"
+//	if tests != 0 {
+//		if len(pkgs) > 1 || len(pkgs) == 0 {
+//			pkgTitle = "packages"
+//		}
+//
+//		testTitle := "tests"
+//		if tests == 1 {
+//			testTitle = "test"
+//		}
+//
+//		selection = fmt.Sprintf("selected %d %s across %d %s", tests, testTitle, len(pkgs), pkgTitle)
+//	}
+//
+//	var testsSummary string
+//	if !m.allSelected {
+//		testsSummary = m.testCountsView.View(passedTests, failedTests, skippedTests)
+//	}
+//
+//	width := m.viewport.Width
+//	left := lipgloss.JoinHorizontal(lipgloss.Top, testsSummary)
+//	right := m.config.SummaryLineStyle.Width(width - lipgloss.Width(left)).Align(lipgloss.Right).Render(selection)
+//	line := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+//	return m.config.BorderSummaryStyle.Width(width).Render(line)
+//}
+
+func (m Model) refrencesView() string {
 	return m.list.View()
 }
