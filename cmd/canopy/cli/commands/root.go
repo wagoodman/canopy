@@ -73,9 +73,8 @@ func runRoot(_ context.Context, app clio.Application, cfg rootConfig) error {
 	id := app.ID()
 
 	ux := ui.NewSelectorUI(selector.Config{
-		ID:              fmt.Sprintf("%s@%s", id.Name, id.Version),
-		Debug:           false,
-		FailedTestsOnly: false,
+		ID:    fmt.Sprintf("%s@%s", id.Name, id.Version),
+		Debug: false,
 	}, testDefs)
 
 	type Stater interface {

@@ -1,4 +1,4 @@
-package references
+package selector
 
 import (
 	"fmt"
@@ -11,6 +11,11 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"sort"
 )
+
+type Config struct {
+	ID    string
+	Debug bool
+}
 
 var filterKeyBindings []key.Binding
 
@@ -32,21 +37,22 @@ func init() {
 }
 
 type Model struct {
+	config Config
+
 	list        list.Model
 	state       state.DefinitionViewer
 	visibleRefs []gotest.Reference
-	keyMap      KeyMap
+	keyMap      keyMap
 }
 
-func New(km KeyMap) Model {
+func New(config Config) Model {
+	zone.NewGlobal()
+
+	km := newKeyMap()
+
 	l := list.New(
 		newItems(false), // empty, but will be populated later with an event
 		newItemDelegate(
-			km.ShowPassedTests.Binding,
-			km.ShowFailedTests.Binding,
-			km.ShowSkippedTests.Binding,
-			km.NextTestFunc,
-			km.PrevTestFunc,
 			km.NextPackage,
 			km.PrevPackage,
 		),
@@ -67,6 +73,7 @@ func New(km KeyMap) Model {
 	}
 
 	return Model{
+		config: config,
 		list:   l,
 		keyMap: km,
 	}
@@ -131,13 +138,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, filterKeyBindings...):
 			// if matches a-z, A-Z then we set the filter state to filtering
 			m.list.SetFilterState(list.Filtering)
-
-		case key.Matches(msg, m.keyMap.ShowPassedTests.Binding):
-			// TODO...
-		case key.Matches(msg, m.keyMap.ShowFailedTests.Binding):
-			// TODO...
-		case key.Matches(msg, m.keyMap.ShowSkippedTests.Binding):
-			// TODO...
 
 			//case key.Matches(msg, m.key.toggleSpinner):
 			//	cmd := m.list.ToggleSpinner()
@@ -265,6 +265,11 @@ func (m Model) filterToVisibleRefs(original []gotest.Reference, currentDefs stat
 
 	return refs
 }
+
 func (m Model) View() string {
+	return zone.Scan(m.view())
+}
+
+func (m Model) view() string {
 	return m.list.View()
 }
