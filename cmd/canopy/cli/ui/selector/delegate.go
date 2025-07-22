@@ -13,81 +13,79 @@ import (
 	"sort"
 )
 
+var (
+	hoverBorder        = lipgloss.Border{Left: "░"}
+	userSelectedBorder = lipgloss.Border{Left: "█"}
+	emptyBorder        = lipgloss.Border{Left: " "}
+)
+
 type listItemDelegate struct {
 	list.DefaultDelegate
 
 	keyMap keyMap
-
-	highlightedStyle lipgloss.Style
-	multiSelectStyle lipgloss.Style
-	allTestsStyle    lipgloss.Style
-	filterMatchStyle lipgloss.Style
-	normalStyle      lipgloss.Style
+	styles delegateStyles
 
 	wasFilterViewActive bool // used to determine if we were filtering before the last update
 
-	refState    referenceState
-	current     *gotest.Reference
-	cursorScope map[gotest.Reference]struct{}
-	multiSelect map[gotest.Reference]struct{}
+	refState        referenceState
+	current         *gotest.Reference
+	cursorScope     map[gotest.Reference]struct{}
+	cursorScopeSize int
+	userSelect      map[gotest.Reference]struct{}
+}
+
+type delegateStyles struct {
+	hoverLine        lipgloss.Style
+	hoverBullet      lipgloss.Style
+	cursorLine       lipgloss.Style
+	userSelectedLine lipgloss.Style
+	allTestsLine     lipgloss.Style
+	filterMatchStyle lipgloss.Style
+	normalStyle      lipgloss.Style
 }
 
 func newItemDelegate(keyMap keyMap) *listItemDelegate {
 	d := list.NewDefaultDelegate()
 	d.ShowDescription = false
-
-	filterMatchStyle := lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#ECFD65"})
-
 	d.SetHeight(1)
 	d.SetSpacing(0)
 
-	// d.Styles.SelectedTitle = lipgloss.NewStyle().
-	//	Border(lipgloss.HiddenBorder(), false, false, false, true).
-	//	BorderBackground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"}).
-	//	Foreground(lipgloss.AdaptiveColor{Light: "#EE6FF8", Dark: "#EE6FF8"}).
-	//	Padding(0, 0, 0, 1)
-
-	cursorBrd := lipgloss.NormalBorder()
-	cursorBrd.Left = "░" // ❯❱ ●• » ▚ [ "\U0001FB6A", this is a powerline glyph, but it doesn't work in all terminals, so we use a normal character instead )
-
-	highlightPadding := lipgloss.NewStyle().Padding(0, 0, 0, 1)
-
-	d.Styles.SelectedTitle = highlightPadding.
-		Border(cursorBrd, false, false, false, true).
-		BorderForeground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"}).
-		// BorderForeground(lipgloss.AdaptiveColor{Light: "#AD58B4", Dark: "#EEEEEE"}).
-		// BorderBackground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"}).
-		Foreground(lipgloss.AdaptiveColor{Light: "#EE6FF8", Dark: "#EE6FF8"})
-
-	scopeBrd := lipgloss.NormalBorder()
-	scopeBrd.Left = "░" // █ ░ ▎ ▚ │
-
-	highlightStyle := highlightPadding.
-		Border(scopeBrd, false, false, false, true).
-		BorderForeground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"})
-	// Foreground(lipgloss.AdaptiveColor{Light: "#EE6FF8", Dark: "#EE6FF8"})
-
-	multiSelectBrd := lipgloss.NormalBorder()
-	multiSelectBrd.Left = "█" // ✔
-
-	multiSelectStyle := highlightStyle.
-		Border(multiSelectBrd, false, false, false, true).
-		BorderForeground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"})
+	baseStyle := lipgloss.NewStyle().Padding(0, 0, 0, 1)
 
 	return &listItemDelegate{
 		DefaultDelegate: d,
-		keyMap:          keyMap,
-		multiSelect:     make(map[gotest.Reference]struct{}),
+		userSelect:      make(map[gotest.Reference]struct{}),
 		cursorScope:     make(map[gotest.Reference]struct{}),
-		//highlightedStyle: lipgloss.NewStyle().
-		//	Foreground(lipgloss.AdaptiveColor{Light: "#EE6FF8", Dark: "#EE6FF8"}).
-		//	Padding(0, 0, 0, 2),
-		filterMatchStyle: filterMatchStyle,
-		normalStyle:      lipgloss.NewStyle().Padding(0, 0, 0, 1),
-		highlightedStyle: highlightStyle,
-		multiSelectStyle: multiSelectStyle,
-		allTestsStyle:    lipgloss.NewStyle().Italic(true).Foreground(lipgloss.Color("#888888")).Padding(0, 0, 0, 2),
-		refState:         referenceState{},
+		refState:        referenceState{},
+		keyMap:          keyMap,
+
+		styles: delegateStyles{
+			//filterMatchStyle: lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#ECFD65"}),
+
+			normalStyle: lipgloss.NewStyle().
+				Padding(0, 0, 0, 2),
+
+			hoverLine: baseStyle.
+				BorderLeft(true).
+				BorderForeground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"}),
+
+			hoverBullet: lipgloss.NewStyle().
+				Foreground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"}),
+
+			cursorLine: baseStyle.
+				BorderLeft(true).
+				BorderForeground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"}).
+				Foreground(lipgloss.AdaptiveColor{Light: "#EE6FF8", Dark: "#EE6FF8"}),
+
+			userSelectedLine: baseStyle.
+				BorderLeft(true).
+				BorderForeground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"}),
+
+			allTestsLine: lipgloss.NewStyle().
+				Italic(true).
+				Foreground(lipgloss.Color("#888888")).
+				Padding(0, 0, 0, 2),
+		},
 	}
 }
 
@@ -231,7 +229,7 @@ func (d *listItemDelegate) onNavigate(m *list.Model) {
 	// TODO: maybe only on OnArrow or other keys?
 	d.cursorScope = make(map[gotest.Reference]struct{})
 	selectedIdx, selected := d.selectedItem(m)
-	markChildren(selected, selectedIdx, d.visibleItems(m), d.cursorScope, false)
+	d.cursorScopeSize = markChildren(selected, selectedIdx, d.visibleItems(m), d.cursorScope, false)
 }
 
 func (d *listItemDelegate) onToggleMultiselect(m *list.Model) {
@@ -239,14 +237,14 @@ func (d *listItemDelegate) onToggleMultiselect(m *list.Model) {
 
 	selectedIdx, selected := d.selectedItem(m)
 	var invert bool
-	if _, ok := d.multiSelect[selected.ref]; ok {
-		delete(d.multiSelect, selected.ref)
+	if _, ok := d.userSelect[selected.ref]; ok {
+		delete(d.userSelect, selected.ref)
 		invert = true
 	} else {
-		d.multiSelect[selected.ref] = struct{}{}
+		d.userSelect[selected.ref] = struct{}{}
 	}
 
-	markChildren(selected, selectedIdx, d.visibleItems(m), d.multiSelect, invert)
+	markChildren(selected, selectedIdx, d.visibleItems(m), d.userSelect, invert)
 }
 
 func (d listItemDelegate) visibleItems(m *list.Model) []item {
@@ -266,7 +264,7 @@ func (d listItemDelegate) selectedTestReferencesCmd(m *list.Model) tea.Cmd {
 	for ref := range d.cursorScope {
 		refs = append(refs, ref)
 	}
-	for ref := range d.multiSelect {
+	for ref := range d.userSelect {
 		refs = append(refs, ref)
 	}
 	sort.Sort(gotest.References(refs))
@@ -303,8 +301,9 @@ func isChild(ref, other *gotest.Reference) bool {
 	return ref.TRunName == other.TRunName
 }
 
-func markChildren(selected item, start int, visibleItems []item, marker map[gotest.Reference]struct{}, invert bool) {
+func markChildren(selected item, start int, visibleItems []item, marker map[gotest.Reference]struct{}, invert bool) int {
 	ref := selected.ref
+	count := 0
 	for i := start; i < len(visibleItems); i++ {
 		it := visibleItems[i]
 		other := it.ref
@@ -314,6 +313,7 @@ func markChildren(selected item, start int, visibleItems []item, marker map[gote
 				delete(marker, other)
 			} else {
 				marker[other] = struct{}{}
+				count++
 			}
 
 			continue
@@ -324,34 +324,47 @@ func markChildren(selected item, start int, visibleItems []item, marker map[gote
 				delete(marker, other)
 			} else {
 				marker[other] = struct{}{}
+				count++
 			}
 		} else {
 			break
 		}
 	}
+	return count
 }
 
 func (d listItemDelegate) Render(w io.Writer, m list.Model, idx int, i list.Item) {
 	it := i.(item)
 
+	_, isHovering := d.cursorScope[it.ref]
+	isHovering = isHovering && d.cursorScopeSize > 1
+	_, isUserSelected := d.userSelect[it.ref]
+
 	if m.Index() == idx {
-		// selected
-		w = internal.NewIndentWriter(w, " ❯ ")
+		// cursor is hovering on this exact item (the cursor line)
+		w = internal.NewIndentWriter(w, d.styles.hoverBullet.Render(" ❯"))
+		d.Styles.SelectedTitle = d.styles.cursorLine
+		switch {
+		case isUserSelected:
+			d.Styles.SelectedTitle = d.Styles.SelectedTitle.BorderStyle(userSelectedBorder)
+		case isHovering:
+			d.Styles.SelectedTitle = d.Styles.SelectedTitle.BorderStyle(hoverBorder)
+		default:
+			d.Styles.SelectedTitle = d.Styles.SelectedTitle.BorderStyle(emptyBorder)
+		}
 	} else {
-		w = internal.NewIndentWriter(w, "   ")
+		w = internal.NewIndentWriter(w, "  ")
 	}
 
 	if it.ref.Package == "*" {
-		d.Styles.NormalTitle = d.allTestsStyle
+		d.Styles.NormalTitle = d.styles.allTestsLine
 	}
 
-	if _, ok := d.multiSelect[it.ref]; ok {
-		// multi selected: the user has selected at least this item
-		d.Styles.NormalTitle = d.multiSelectStyle
-
-	} else if _, ok := d.cursorScope[it.ref]; ok {
-		// highlighted: the cursor is on this item
-		d.Styles.NormalTitle = d.highlightedStyle
+	if isUserSelected {
+		d.Styles.NormalTitle = d.styles.userSelectedLine.BorderStyle(userSelectedBorder)
+	} else if isHovering {
+		// cursor is hovering over this item or a parent of this item
+		d.Styles.NormalTitle = d.styles.hoverLine.BorderStyle(hoverBorder)
 	}
 
 	// don't show matched characters when filtering is not occurring (including when the filter has been applied)
@@ -366,78 +379,3 @@ func (d listItemDelegate) Render(w io.Writer, m list.Model, idx int, i list.Item
 		m, idx, i,
 	)
 }
-
-//func (d listItemDelegate) render(w io.Writer, m Model, index int, item list.Item) {
-//	var (
-//		title, desc  string
-//		matchedRunes []int
-//		s            = &d.Styles
-//	)
-//
-//	if i, ok := item.(list.DefaultItem); ok {
-//		title = i.Title()
-//		desc = i.Description()
-//	} else {
-//		return
-//	}
-//
-//	if m.width <= 0 {
-//		// short-circuit
-//		return
-//	}
-//
-//	// Prevent text from exceeding list width
-//	textwidth := m.width - s.NormalTitle.GetPaddingLeft() - s.NormalTitle.GetPaddingRight()
-//	title = ansi.Truncate(title, textwidth, ellipsis)
-//	if d.ShowDescription {
-//		var lines []string
-//		for i, line := range strings.Split(desc, "\n") {
-//			if i >= d.height-1 {
-//				break
-//			}
-//			lines = append(lines, ansi.Truncate(line, textwidth, ellipsis))
-//		}
-//		desc = strings.Join(lines, "\n")
-//	}
-//
-//	// Conditions
-//	var (
-//		isSelected  = index == m.Index()
-//		emptyFilter = m.FilterState() == Filtering && m.FilterValue() == ""
-//		isFiltered  = m.FilterState() == Filtering || m.FilterState() == FilterApplied
-//	)
-//
-//	if isFiltered && index < len(m.filteredItems) {
-//		// Get indices of matched characters
-//		matchedRunes = m.MatchesForItem(index)
-//	}
-//
-//	if emptyFilter {
-//		title = s.DimmedTitle.Render(title)
-//		desc = s.DimmedDesc.Render(desc)
-//	} else if isSelected && m.FilterState() != Filtering {
-//		if isFiltered {
-//			// Highlight matches
-//			unmatched := s.SelectedTitle.Inline(true)
-//			matched := unmatched.Inherit(s.FilterMatch)
-//			title = lipgloss.StyleRunes(title, matchedRunes, matched, unmatched)
-//		}
-//		title = s.SelectedTitle.Render(title)
-//		desc = s.SelectedDesc.Render(desc)
-//	} else {
-//		if isFiltered {
-//			// Highlight matches
-//			unmatched := s.NormalTitle.Inline(true)
-//			matched := unmatched.Inherit(s.FilterMatch)
-//			title = lipgloss.StyleRunes(title, matchedRunes, matched, unmatched)
-//		}
-//		title = s.NormalTitle.Render(title)
-//		desc = s.NormalDesc.Render(desc)
-//	}
-//
-//	if d.ShowDescription {
-//		fmt.Fprintf(w, "%s\n%s", title, desc) //nolint: errcheck
-//		return
-//	}
-//	fmt.Fprintf(w, "%s", title) //nolint: errcheck
-//}

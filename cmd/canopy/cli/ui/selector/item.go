@@ -3,10 +3,13 @@ package selector
 import (
 	"fmt"
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
 
 const allTestsTitle = "(all available tests)"
+
+var auxCasesStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
 
 type item struct {
 	title  string
@@ -89,7 +92,9 @@ func filterTitle(ref gotest.Reference) string {
 func treeTitle(ref gotest.Reference, tRuns []string) string {
 	var tRunsStr string
 	if len(tRuns) > 0 {
-		tRunsStr = fmt.Sprintf(" (%d cases)", len(tRuns))
+		tRunsStr = auxCasesStyle.Render(fmt.Sprintf(" (%d cases)", len(tRuns)))
+		//tRunsStr = fmt.Sprintf(" (%d cases)", len(tRuns))
+
 	}
 
 	if ref.FuncName != "" {
