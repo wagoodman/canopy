@@ -5,6 +5,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/internal"
 	uievent "github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/event"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/state"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
@@ -15,23 +16,28 @@ import (
 type listItemDelegate struct {
 	list.DefaultDelegate
 
-	selectBinding    key.Binding
-	navigateBindings []key.Binding
+	keyMap keyMap
 
 	highlightedStyle lipgloss.Style
 	multiSelectStyle lipgloss.Style
 	allTestsStyle    lipgloss.Style
+	filterMatchStyle lipgloss.Style
+	normalStyle      lipgloss.Style
 
+	wasFilterViewActive bool // used to determine if we were filtering before the last update
+
+	refState    referenceState
 	current     *gotest.Reference
 	cursorScope map[gotest.Reference]struct{}
 	multiSelect map[gotest.Reference]struct{}
-
-	state state.DefinitionViewer
 }
 
-func newItemDelegate(selectBinding key.Binding, navigateBindings []key.Binding) *listItemDelegate {
+func newItemDelegate(keyMap keyMap) *listItemDelegate {
 	d := list.NewDefaultDelegate()
 	d.ShowDescription = false
+
+	filterMatchStyle := lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#ECFD65"})
+
 	d.SetHeight(1)
 	d.SetSpacing(0)
 
@@ -42,7 +48,7 @@ func newItemDelegate(selectBinding key.Binding, navigateBindings []key.Binding) 
 	//	Padding(0, 0, 0, 1)
 
 	cursorBrd := lipgloss.NormalBorder()
-	cursorBrd.Left = "❯" // ❯❱ ●• » ▚ [ "\U0001FB6A", this is a powerline glyph, but it doesn't work in all terminals, so we use a normal character instead )
+	cursorBrd.Left = "░" // ❯❱ ●• » ▚ [ "\U0001FB6A", this is a powerline glyph, but it doesn't work in all terminals, so we use a normal character instead )
 
 	highlightPadding := lipgloss.NewStyle().Padding(0, 0, 0, 1)
 
@@ -69,21 +75,31 @@ func newItemDelegate(selectBinding key.Binding, navigateBindings []key.Binding) 
 		BorderForeground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"})
 
 	return &listItemDelegate{
-		DefaultDelegate:  d,
-		selectBinding:    selectBinding,
-		navigateBindings: navigateBindings,
-		multiSelect:      make(map[gotest.Reference]struct{}),
-		cursorScope:      make(map[gotest.Reference]struct{}),
+		DefaultDelegate: d,
+		keyMap:          keyMap,
+		multiSelect:     make(map[gotest.Reference]struct{}),
+		cursorScope:     make(map[gotest.Reference]struct{}),
 		//highlightedStyle: lipgloss.NewStyle().
 		//	Foreground(lipgloss.AdaptiveColor{Light: "#EE6FF8", Dark: "#EE6FF8"}).
 		//	Padding(0, 0, 0, 2),
+		filterMatchStyle: filterMatchStyle,
+		normalStyle:      lipgloss.NewStyle().Padding(0, 0, 0, 1),
 		highlightedStyle: highlightStyle,
 		multiSelectStyle: multiSelectStyle,
 		allTestsStyle:    lipgloss.NewStyle().Italic(true).Foreground(lipgloss.Color("#888888")).Padding(0, 0, 0, 2),
+		refState:         referenceState{},
 	}
 }
 
 func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
+	isFilterViewActive := m.FilterState() == list.Filtering
+
+	if isFilterViewActive != d.wasFilterViewActive {
+		// if we just switched to filtering, we need to update the items
+		// to reflect the current filter state.
+		d.refState.update(m)
+	}
+
 	var cmds []tea.Cmd
 	cmds = append(cmds, d.DefaultDelegate.Update(msg, m))
 
@@ -101,12 +117,17 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 			}
 		}
 
-		d.state = state.NewDefinitionViewer(msg.Definitions)
+		d.refState.state = state.NewDefinitionViewer(msg.Definitions)
+		d.refState.update(m)
 		d.onNavigate(m)
 
 	case tea.MouseMsg:
 		switch msg.Button {
-		case tea.MouseButtonWheelUp, tea.MouseButtonWheelDown:
+		case tea.MouseButtonWheelUp:
+			m.CursorUp()
+			d.onNavigate(m)
+		case tea.MouseButtonWheelDown:
+			m.CursorDown()
 			d.onNavigate(m)
 		default:
 			if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
@@ -115,15 +136,83 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 		}
 
 	case tea.KeyMsg:
+		// note: delegates do not receive key messages regarding filtering
 		switch {
-		case key.Matches(msg, d.selectBinding):
+		case key.Matches(msg, d.keyMap.SelectTest):
 			d.onToggleMultiselect(m)
-		case key.Matches(msg, d.navigateBindings...) || key.Matches(msg, m.KeyMap.CursorDown, m.KeyMap.CursorUp, m.KeyMap.PrevPage, m.KeyMap.NextPage, m.KeyMap.AcceptWhileFiltering, m.KeyMap.CancelWhileFiltering, m.KeyMap.Filter):
+		case key.Matches(msg, d.keyMap.NextPackage):
+			cmds = append(cmds, d.nextPkg(m))
 			d.onNavigate(m)
+		case key.Matches(msg, d.keyMap.PrevPackage):
+			cmds = append(cmds, d.prevPkg(m))
+			d.onNavigate(m)
+		case key.Matches(msg, m.KeyMap.CursorDown, m.KeyMap.CursorUp, m.KeyMap.PrevPage, m.KeyMap.NextPage):
+			d.onNavigate(m)
+		}
+
+		// don't match any of the keys below if we're actively filtering.
+		if m.FilterState() == list.Filtering {
+			break
+		}
+
+		switch {
+		case key.Matches(msg, filterKeyBindings...):
+			// if matches a-z, A-Z then we set the filter state to filtering. We should account for the missing input
+			// character that the user just entered (as well as anything else that already may be applied in the filter text)
+			m.SetFilterText(m.FilterInput.Value() + msg.String())
+			m.SetFilterState(list.Filtering)
 		}
 	}
 
+	d.wasFilterViewActive = isFilterViewActive
+
 	return tea.Batch(cmds...)
+}
+
+func (d *listItemDelegate) nextPkg(m *list.Model) tea.Cmd {
+	currentIdx := m.Index()
+	currentElement := m.SelectedItem()
+	if currentElement == nil {
+		return nil
+	}
+	currentItem := currentElement.(item)
+	curPkg := currentItem.ref.Package
+	for i := currentIdx; i < len(d.refState.visibleRefs); i++ {
+		if d.refState.visibleRefs[i].Package != curPkg {
+			m.Select(i)
+			break
+		}
+	}
+
+	return d.refState.update(m)
+}
+
+func (d *listItemDelegate) prevPkg(m *list.Model) tea.Cmd {
+	currentIdx := m.Index()
+	currentElement := m.SelectedItem()
+	if currentElement == nil {
+		return nil
+	}
+	currentItem := currentElement.(item)
+	curPkg := currentItem.ref.Package
+	targetPkg := ""
+	for i := currentIdx; i >= 0; i-- {
+		if targetPkg == "" {
+			if d.refState.visibleRefs[i].Package != curPkg {
+				targetPkg = d.refState.visibleRefs[i].Package
+				continue
+			}
+		} else {
+			// head to the top of the package
+			if d.refState.visibleRefs[i].Package != targetPkg {
+				// select the previous reference...
+				m.Select(i + 1)
+				break
+			}
+		}
+	}
+
+	return d.refState.update(m)
 }
 
 func (d *listItemDelegate) onNavigate(m *list.Model) {
@@ -245,6 +334,13 @@ func markChildren(selected item, start int, visibleItems []item, marker map[gote
 func (d listItemDelegate) Render(w io.Writer, m list.Model, idx int, i list.Item) {
 	it := i.(item)
 
+	if m.Index() == idx {
+		// selected
+		w = internal.NewIndentWriter(w, " ❯ ")
+	} else {
+		w = internal.NewIndentWriter(w, "   ")
+	}
+
 	if it.ref.Package == "*" {
 		d.Styles.NormalTitle = d.allTestsStyle
 	}
@@ -258,8 +354,17 @@ func (d listItemDelegate) Render(w io.Writer, m list.Model, idx int, i list.Item
 		d.Styles.NormalTitle = d.highlightedStyle
 	}
 
-	//d.render(w, m, idx, it)
-	d.DefaultDelegate.Render(w, m, idx, i)
+	// don't show matched characters when filtering is not occurring (including when the filter has been applied)
+	//if m.FilterState() == list.Filtering {
+	//	d.DefaultDelegate.Styles.FilterMatch = d.filterMatchStyle
+	//} else {
+	//	d.DefaultDelegate.Styles.FilterMatch = d.normalStyle
+	//}
+
+	d.DefaultDelegate.Render(
+		w,
+		m, idx, i,
+	)
 }
 
 //func (d listItemDelegate) render(w io.Writer, m Model, index int, item list.Item) {

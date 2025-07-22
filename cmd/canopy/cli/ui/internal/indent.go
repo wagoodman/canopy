@@ -13,17 +13,21 @@ type indentWriter struct {
 	atLineStart bool
 }
 
-func NewIndentWriter(w io.Writer, ref gotest.Reference) io.Writer {
+func NewIndentWriter(w io.Writer, indent string) io.Writer {
+	return &indentWriter{
+		w:           w,
+		indent:      indent,
+		atLineStart: true,
+	}
+}
+
+func NewIndentWriterForReference(w io.Writer, ref gotest.Reference) io.Writer {
 	var count int
 	if ref.IsSubTest() {
 		count = strings.Count(ref.TRunName, "/") + 1
 	}
 
-	return &indentWriter{
-		w:           w,
-		indent:      strings.Repeat("    ", count),
-		atLineStart: true,
-	}
+	return NewIndentWriter(w, strings.Repeat("    ", count))
 }
 
 func (iw *indentWriter) Write(p []byte) (int, error) {

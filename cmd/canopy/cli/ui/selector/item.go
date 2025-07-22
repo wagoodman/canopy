@@ -9,10 +9,10 @@ import (
 const allTestsTitle = "(all available tests)"
 
 type item struct {
-	title    string
-	ref      gotest.Reference
-	tRuns    []string
-	disabled bool // makes this not selectable
+	title  string
+	filter string
+	ref    gotest.Reference
+	tRuns  []string
 }
 
 func (i item) Title() string {
@@ -25,18 +25,20 @@ func (i item) Description() string {
 }
 
 func (i item) FilterValue() string {
-	if i.disabled {
-		return "" // don't filter disabled items
-	}
-	return i.title
+	return i.filter
 	//zone.Mark(i.title, i.title) } // TODO: breaks filtering (when using in the filter value and not in the filter value... either messes with the lengths to select matched characters, or breaks rendering of patially matching ansi characters)
 }
 
-func newItems(filter bool, refs ...gotest.Reference) []list.Item {
+func newItems(filtering bool, refs ...gotest.Reference) []list.Item {
 	var items []list.Item
 
 	for i := 0; i < len(refs); {
 		ref := refs[i]
+
+		if filtering && ref.Package == "*" {
+			i++
+			continue
+		}
 
 		// skip t.Run cases that don't have a preceding function reference
 		if ref.TRunName != "" {
@@ -59,7 +61,7 @@ func newItems(filter bool, refs ...gotest.Reference) []list.Item {
 		}
 
 		// create the item for the function (with collected t.Run names)
-		it := item{title: display(ref, tRuns, filter), ref: ref, tRuns: tRuns}
+		it := item{title: display(ref, tRuns, filtering), filter: filterTitle(ref), ref: ref, tRuns: tRuns}
 		items = append(items, it)
 
 		// skip past the t.Run cases we just processed

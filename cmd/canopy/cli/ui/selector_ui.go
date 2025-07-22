@@ -40,7 +40,7 @@ func (s *SelectorUI) Setup(subscription partybus.Unsubscribable) error {
 	s.program = tea.NewProgram(
 		s.model,
 		// disabling zone support since it does not work well with bubbletea table filtering
-		//tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
+		tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
 		tea.WithoutSignalHandler(),
 	)
 

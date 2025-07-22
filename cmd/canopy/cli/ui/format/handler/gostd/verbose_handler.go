@@ -2,6 +2,7 @@ package gostd
 
 import (
 	"fmt"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/internal"
 	"io"
 	"sort"
 	"strings"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/lindell/go-ordered-set/orderedset"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/internal"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
@@ -153,7 +153,7 @@ func (h *verboseHandler) outputTest(testRef gotest.Reference, indent bool, inclu
 	for _, e := range outputEvents {
 		writer := h.writer
 		if indent {
-			writer = internal.NewIndentWriter(writer, e.Reference)
+			writer = internal.NewIndentWriterForReference(writer, e.Reference)
 		}
 		fmtr := h.formatter(e, h.panic[e.Reference])
 		if strings.TrimSpace(e.Output) != "" {
