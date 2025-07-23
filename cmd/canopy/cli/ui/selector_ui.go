@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"github.com/anchore/clio"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector"
@@ -75,6 +76,8 @@ func (s *SelectorUI) Setup(subscription partybus.Unsubscribable) error {
 
 func (s *SelectorUI) Prompt() []gotest.Reference {
 	s.running.Wait()
+	// TODO: is there a better way to do this? should this go to stderr?
+	fmt.Println(s.model.View())
 	return s.model.Selected()
 }
 

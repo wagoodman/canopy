@@ -7,14 +7,10 @@ type SwitchState struct {
 }
 
 type SelectedTestReferences struct {
-	//All  bool
-	Refs []gotest.Reference
+	Finished bool
+	Refs     []gotest.Reference
 }
 
 type RefreshReferences struct {
 	AboutToFilter bool
-}
-
-type SetFiltering struct {
-	Enabled bool
 }

@@ -20,6 +20,16 @@ func (r References) Swap(i, j int) {
 	r[i], r[j] = r[j], r[i]
 }
 
+func (r References) TestFunctionsCount() int {
+	count := 0
+	for _, ref := range r {
+		if ref.FuncName != "" && ref.TRunName == "" {
+			count++
+		}
+	}
+	return count
+}
+
 func NewReferencesFromDefinition(def Definition) []Reference {
 	fnName := def.FnName
 	pkgName := def.ImportPath

@@ -12,7 +12,7 @@ type referenceState struct {
 	state          state.DefinitionViewer
 	children       map[gotest.Reference][]gotest.Reference
 	stateCount     int
-	selected       []gotest.Reference
+	visible        []gotest.Reference
 	preferLongForm bool
 	hideTests      bool
 }
@@ -29,7 +29,7 @@ func newReferenceState(state state.DefinitionViewer, others ...referenceState) r
 		state:          state,
 		children:       mapAllChildren(refs),
 		stateCount:     len(refs),
-		selected:       []gotest.Reference{},
+		visible:        []gotest.Reference{},
 		preferLongForm: preferLongForm,
 		hideTests:      hideTests,
 	}
@@ -56,27 +56,37 @@ func (d *referenceState) update(m *list.Model, aboutToFilters ...bool) tea.Cmd {
 		aboutToFilter = aboutToFilters[0]
 	}
 
-	return d.setReferences(m, aboutToFilter, d.state.References()...)
+	return d.setReferences(m, aboutToFilter, false, d.state.References()...)
 }
 
-func (d *referenceState) setReferences(m *list.Model, aboutToFilter bool, refs ...gotest.Reference) tea.Cmd {
+func (d *referenceState) finish(m *list.Model, refs []gotest.Reference) tea.Cmd {
+	if d.state == nil {
+		return nil
+	}
+
+	return d.setReferences(m, false, true, refs...)
+}
+
+func (d *referenceState) setReferences(m *list.Model, aboutToFilter, finished bool, refs ...gotest.Reference) tea.Cmd {
 	sort.Sort(gotest.References(refs))
-	d.selected = filterToVisibleRefs(refs)
+	d.visible = filterToVisibleRefs(finished, refs)
 
 	return tea.Batch(
 		m.SetItems(
 			newItems(
-				aboutToFilter || d.preferLongForm || m.IsFiltered() || m.SettingFilter(),
+				finished || aboutToFilter || d.preferLongForm || m.IsFiltered() || m.SettingFilter(),
 				d.hideTests,
-				d.selected...,
+				d.visible...,
 			),
 		),
 	)
 }
 
-func filterToVisibleRefs(original []gotest.Reference) []gotest.Reference {
+func filterToVisibleRefs(finished bool, original []gotest.Reference) []gotest.Reference {
 	var refs []gotest.Reference
-	refs = append(refs, gotest.Reference{Package: "*"})
+	if !finished {
+		refs = append(refs, gotest.Reference{Package: "*"})
+	}
 	refs = append(refs, original...)
 
 	return refs

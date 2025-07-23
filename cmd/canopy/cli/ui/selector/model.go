@@ -42,8 +42,8 @@ type Model struct {
 	list   list.Model
 	keyMap keyMap
 
-	//refState referenceState // the current state of the references
-	selected []gotest.Reference // the currently selected references
+	selected gotest.References // the currently selected references
+	finished bool
 
 	titleStyle       lipgloss.Style
 	auxStyle         lipgloss.Style
@@ -83,11 +83,10 @@ func New(config Config) Model {
 	}
 
 	return Model{
-		config: config,
-		list:   l,
-		//refState:   referenceState{},
+		config:     config,
+		list:       l,
 		keyMap:     km,
-		titleStyle: lipgloss.NewStyle().Bold(true).Italic(true),
+		titleStyle: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#04B5F7")),
 		auxStyle: lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{
 			Light: "#909090",
 			Dark:  "#626262",
@@ -98,7 +97,6 @@ func New(config Config) Model {
 }
 
 func (m Model) Selected() []gotest.Reference {
-	//return m.refState.selected
 	return m.selected
 }
 
@@ -115,12 +113,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.size = msg
 		m.list.SetSize(msg.Width, msg.Height-4)
 
-	//case uievent.SwitchState:
-	//	m.refState = newReferenceState(state.NewDefinitionViewer(msg.Definitions), m.refState)
-
 	case uievent.SelectedTestReferences:
-		//m.refState.selected = msg.Refs
 		m.selected = msg.Refs
+		m.finished = msg.Finished
+		if m.finished {
+			cmds = append(cmds, tea.Quit)
+		}
 	}
 
 	// handle list updates...
@@ -185,11 +183,17 @@ func (m Model) View() string {
 }
 
 func (m Model) view() string {
+	views := []string{
+		m.topView(),
+	}
+
+	if !m.finished {
+		views = append(views, m.refrencesView(), m.bottomView())
+	}
+
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		m.topView(),
-		m.refrencesView(),
-		m.bottomView(),
+		views...,
 	)
 }
 
@@ -209,13 +213,25 @@ func (m Model) joinedView(left, right string) string {
 }
 
 func (m Model) topView() string {
-	left := m.titleStyle.Render("Search/Select tests to run")
+	msg := "Search/Select tests to run"
+	if m.finished {
+		if len(m.selected) == 0 {
+			msg = `¯\_(ツ)_/¯`
+		} else {
+			msg = fmt.Sprintf("Running %d tests...", m.selected.TestFunctionsCount())
+		}
+	}
+	title := m.titleStyle.Render(msg)
 
-	if m.list.SettingFilter() || m.list.IsFiltered() {
-		left += m.filterTitleStyle.Render(" [filter]") + ": " + m.list.FilterValue()
+	if !m.finished && (m.list.SettingFilter() || m.list.IsFiltered()) {
+		title += m.filterTitleStyle.Render(" [filter]") + ": " + m.list.FilterValue()
 	}
 
-	return m.joinedView(left, m.statsView())
+	if !m.finished {
+		return m.joinedView(title, m.statsView())
+	}
+
+	return m.auxStyle.Render(m.config.ID) + " " + title
 }
 
 func (m Model) bottomView() string {
@@ -230,38 +246,23 @@ func (m Model) bottomView() string {
 }
 
 func (m Model) statsView() string {
-	//pkgTitle := "package"
-	//pkgs := make(map[string]struct{})
-
 	tests := 0
 	for _, ref := range m.selected {
-		//if _, ok := pkgs[ref.Package]; !ok {
-		//	pkgs[ref.Package] = struct{}{}
-		//}
 		if ref.IsPackage() {
 			continue
 		}
 		tests++
 	}
 
-	selection := "no tests selected"
-	trailer := ""
+	selection := "(no tests selected)"
 	if tests != 0 {
-		//if len(pkgs) > 1 || len(pkgs) == 0 {
-		//	pkgTitle = "packages"
-		//}
 
 		testTitle := "tests"
 		if tests == 1 {
 			testTitle = "test"
 		}
 
-		if len(m.selected) == len(m.list.Items()) {
-			trailer = " (all)"
-		}
-
-		//selection = fmt.Sprintf("selected %d %s across %d %s", tests, testTitle, len(pkgs), pkgTitle)
-		selection = fmt.Sprintf("selected %d %s%s", tests, testTitle, trailer)
+		selection = fmt.Sprintf("selected %d %s", tests, testTitle)
 	}
 
 	return m.auxStyle.Render(selection)

@@ -22,10 +22,9 @@ var (
 type listItemDelegate struct {
 	list.DefaultDelegate
 
-	keyMap keyMap
-	styles delegateStyles
-
-	//wasFilterViewActive bool // used to determine if we were filtering before the last update
+	keyMap   keyMap
+	styles   delegateStyles
+	finished bool
 
 	refState        referenceState
 	current         *gotest.Reference
@@ -40,7 +39,6 @@ type delegateStyles struct {
 	cursorLine       lipgloss.Style
 	userSelectedLine lipgloss.Style
 	allTestsLine     lipgloss.Style
-	filterMatchStyle lipgloss.Style
 	normalStyle      lipgloss.Style
 }
 
@@ -49,6 +47,7 @@ func newItemDelegate(keyMap keyMap) *listItemDelegate {
 	d.ShowDescription = false
 	d.SetHeight(1)
 	d.SetSpacing(0)
+	d.Styles.FilterMatch = lipgloss.NewStyle().Underline(true).Foreground(lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#ECFD65"})
 
 	baseStyle := lipgloss.NewStyle().Padding(0, 0, 0, 1)
 
@@ -60,8 +59,6 @@ func newItemDelegate(keyMap keyMap) *listItemDelegate {
 		keyMap:          keyMap,
 
 		styles: delegateStyles{
-			//filterMatchStyle: lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#ECFD65"}),
-
 			normalStyle: lipgloss.NewStyle().
 				Padding(0, 0, 0, 2),
 
@@ -90,14 +87,6 @@ func newItemDelegate(keyMap keyMap) *listItemDelegate {
 }
 
 func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
-	//isFilterViewActive := m.FilterState() == list.Filtering
-	//
-	//if isFilterViewActive != d.wasFilterViewActive {
-	//	// if we just switched to filtering, we need to update the items
-	//	// to reflect the current filter state.
-	//	d.refState.update(m)
-	//}
-
 	var cmds []tea.Cmd
 	cmds = append(cmds, d.DefaultDelegate.Update(msg, m))
 
@@ -136,13 +125,6 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 			}
 		}
 
-	//case uievent.SetFiltering:
-	//	if msg.Enabled {
-	//		m.SetFilterState(list.Filtering)
-	//		cmds = append(cmds, d.refState.update(m))
-	//	}
-	//	// we dont do anything for cancelling or applying the filter here
-
 	case tea.KeyMsg:
 		// note: delegates do not receive key messages regarding filtering
 		switch {
@@ -173,6 +155,10 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 			// toggle the long form view
 			d.refState.hideTests = !d.refState.hideTests
 			cmds = append(cmds, d.refState.update(m))
+
+		case key.Matches(msg, d.keyMap.Finish):
+			d.finished = true
+			cmds = append(cmds, d.selectedTestReferences(m, true))
 		}
 
 		// don't match any of the keys below if we're actively filtering.
@@ -191,8 +177,6 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 		}
 	}
 
-	//d.wasFilterViewActive = isFilterViewActive
-
 	return tea.Batch(cmds...)
 }
 
@@ -204,8 +188,8 @@ func (d *listItemDelegate) nextPkg(m *list.Model) tea.Cmd {
 	}
 	currentItem := currentElement.(item)
 	curPkg := currentItem.ref.Package
-	for i := currentIdx; i < len(d.refState.selected); i++ {
-		if d.refState.selected[i].Package != curPkg {
+	for i := currentIdx; i < len(d.refState.visible); i++ {
+		if d.refState.visible[i].Package != curPkg {
 			m.Select(i)
 			break
 		}
@@ -225,13 +209,13 @@ func (d *listItemDelegate) prevPkg(m *list.Model) tea.Cmd {
 	targetPkg := ""
 	for i := currentIdx; i >= 0; i-- {
 		if targetPkg == "" {
-			if d.refState.selected[i].Package != curPkg {
-				targetPkg = d.refState.selected[i].Package
+			if d.refState.visible[i].Package != curPkg {
+				targetPkg = d.refState.visible[i].Package
 				continue
 			}
 		} else {
 			// head to the top of the package
-			if d.refState.selected[i].Package != targetPkg {
+			if d.refState.visible[i].Package != targetPkg {
 				// select the previous reference...
 				m.Select(i + 1)
 				break
@@ -267,7 +251,7 @@ func (d *listItemDelegate) onSelectAll(m *list.Model, isAllAlreadySelected bool)
 
 	markAll(d.visibleItems(m), d.userSelect, isAllAlreadySelected)
 
-	return d.selectedTestReferencesCmd()
+	return d.selectedTestReferences(m, false)
 }
 
 func (d *listItemDelegate) onToggleMultiselect(m *list.Model) tea.Cmd {
@@ -284,7 +268,7 @@ func (d *listItemDelegate) onToggleMultiselect(m *list.Model) tea.Cmd {
 
 	markChildren(selected, selectedIdx, d.visibleItems(m), d.userSelect, invert, d.refState.children)
 
-	return d.selectedTestReferencesCmd()
+	return d.selectedTestReferences(m, false)
 }
 
 func (d listItemDelegate) visibleItems(m *list.Model) []item {
@@ -299,12 +283,25 @@ func (d listItemDelegate) selectedItem(m *list.Model) (int, item) {
 	return m.Index(), m.SelectedItem().(item)
 }
 
-func (d listItemDelegate) selectedTestReferencesCmd() tea.Cmd {
+func (d listItemDelegate) selectedTestReferences(m *list.Model, finished bool) tea.Cmd {
+	var cmds []tea.Cmd
+	refs := d.selectedReferences()
+	//if finished {
+	//	cmds = append(cmds, d.refState.finish(m, refs))
+	//}
+	cmds = append(cmds, func() tea.Msg {
+		return uievent.SelectedTestReferences{
+			Finished: finished,
+			Refs:     refs,
+		}
+	})
+
+	return tea.Batch(cmds...)
+}
+
+func (d listItemDelegate) selectedReferences() []gotest.Reference {
 	var refs []gotest.Reference
 
-	//isAllSelected := len(d.userSelect) == len(m.Items()) || m.SelectedItem().(item).ref.Package == "*"
-	//
-	//if !isAllSelected {
 	for ref := range d.userSelect {
 		refs = append(refs, ref)
 	}
@@ -317,14 +314,8 @@ func (d listItemDelegate) selectedTestReferencesCmd() tea.Cmd {
 	}
 
 	sort.Sort(gotest.References(refs))
-	//}
 
-	return func() tea.Msg {
-		return uievent.SelectedTestReferences{
-			//All:  isAllSelected,
-			Refs: refs,
-		}
-	}
+	return refs
 }
 
 func markChildren(selected item, start int, items []item, marker map[gotest.Reference]struct{}, invert bool, children map[gotest.Reference][]gotest.Reference) int {
@@ -412,7 +403,7 @@ func (d listItemDelegate) Render(w io.Writer, m list.Model, idx int, i list.Item
 	isHovering = isHovering && d.cursorScopeSize > 1
 	_, isUserSelected := d.userSelect[it.ref]
 
-	if m.Index() == idx {
+	if m.Index() == idx && !d.finished {
 		// cursor is hovering on this exact item (the cursor line)
 		w = internal.NewIndentWriter(w, d.styles.hoverBullet.Render(" ❯"))
 		d.Styles.SelectedTitle = d.styles.cursorLine
@@ -432,11 +423,17 @@ func (d listItemDelegate) Render(w io.Writer, m list.Model, idx int, i list.Item
 		d.Styles.NormalTitle = d.styles.allTestsLine
 	}
 
-	if isUserSelected {
-		d.Styles.NormalTitle = d.styles.userSelectedLine.BorderStyle(userSelectedBorder)
-	} else if isHovering {
-		// cursor is hovering over this item or a parent of this item
-		d.Styles.NormalTitle = d.styles.hoverLine.BorderStyle(hoverBorder)
+	if d.finished {
+		d.Styles.NormalTitle = d.styles.normalStyle
+		d.Styles.SelectedTitle = d.styles.normalStyle
+	} else {
+		if isUserSelected {
+			d.Styles.NormalTitle = d.styles.userSelectedLine.BorderStyle(userSelectedBorder)
+		} else if isHovering {
+			// cursor is hovering over this item or a parent of this item
+			d.Styles.NormalTitle = d.styles.hoverLine.BorderStyle(hoverBorder)
+		}
+
 	}
 
 	// don't show matched characters when filtering is not occurring (including when the filter has been applied)
