@@ -44,6 +44,9 @@ func (d Definition) References() []Reference {
 type Definitions []Definition
 
 func (d Definitions) References() []Reference {
+	if len(d) == 0 {
+		return nil
+	}
 	var refs []Reference
 	pkgs := strset.New()
 	for _, def := range d {

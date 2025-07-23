@@ -25,7 +25,7 @@ type listItemDelegate struct {
 	keyMap keyMap
 	styles delegateStyles
 
-	wasFilterViewActive bool // used to determine if we were filtering before the last update
+	//wasFilterViewActive bool // used to determine if we were filtering before the last update
 
 	refState        referenceState
 	current         *gotest.Reference
@@ -90,18 +90,21 @@ func newItemDelegate(keyMap keyMap) *listItemDelegate {
 }
 
 func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
-	isFilterViewActive := m.FilterState() == list.Filtering
-
-	if isFilterViewActive != d.wasFilterViewActive {
-		// if we just switched to filtering, we need to update the items
-		// to reflect the current filter state.
-		d.refState.update(m)
-	}
+	//isFilterViewActive := m.FilterState() == list.Filtering
+	//
+	//if isFilterViewActive != d.wasFilterViewActive {
+	//	// if we just switched to filtering, we need to update the items
+	//	// to reflect the current filter state.
+	//	d.refState.update(m)
+	//}
 
 	var cmds []tea.Cmd
 	cmds = append(cmds, d.DefaultDelegate.Update(msg, m))
 
 	switch msg := msg.(type) {
+
+	case uievent.RefreshReferences:
+		cmds = append(cmds, d.refState.update(m, msg.AboutToFilter))
 
 	case uievent.SwitchState:
 		// select the last item that was selected in the list
@@ -115,8 +118,8 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 			}
 		}
 
-		d.refState.state = state.NewDefinitionViewer(msg.Definitions)
-		d.refState.update(m)
+		d.refState = newReferenceState(state.NewDefinitionViewer(msg.Definitions), d.refState)
+		cmds = append(cmds, d.refState.update(m))
 		d.onNavigate(m)
 
 	case tea.MouseMsg:
@@ -133,23 +136,47 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 			}
 		}
 
+	//case uievent.SetFiltering:
+	//	if msg.Enabled {
+	//		m.SetFilterState(list.Filtering)
+	//		cmds = append(cmds, d.refState.update(m))
+	//	}
+	//	// we dont do anything for cancelling or applying the filter here
+
 	case tea.KeyMsg:
 		// note: delegates do not receive key messages regarding filtering
 		switch {
 		case key.Matches(msg, d.keyMap.SelectTest):
-			d.onToggleMultiselect(m)
+			cmds = append(cmds, d.onToggleMultiselect(m))
+
+		case key.Matches(msg, d.keyMap.SelectAllTests):
+			isAllAlreadySelected := len(d.userSelect) == len(m.Items())
+			cmds = append(cmds, d.onSelectAll(m, isAllAlreadySelected))
+
 		case key.Matches(msg, d.keyMap.NextPackage):
 			cmds = append(cmds, d.nextPkg(m))
 			d.onNavigate(m)
+
 		case key.Matches(msg, d.keyMap.PrevPackage):
 			cmds = append(cmds, d.prevPkg(m))
 			d.onNavigate(m)
+
 		case key.Matches(msg, m.KeyMap.CursorDown, m.KeyMap.CursorUp, m.KeyMap.PrevPage, m.KeyMap.NextPage):
 			d.onNavigate(m)
+
+		case key.Matches(msg, d.keyMap.ToggleReferenceLongForm):
+			// toggle the long form view
+			d.refState.preferLongForm = !d.refState.preferLongForm
+			cmds = append(cmds, d.refState.update(m))
+
+		case key.Matches(msg, d.keyMap.ToggleTests):
+			// toggle the long form view
+			d.refState.hideTests = !d.refState.hideTests
+			cmds = append(cmds, d.refState.update(m))
 		}
 
 		// don't match any of the keys below if we're actively filtering.
-		if m.FilterState() == list.Filtering {
+		if m.SettingFilter() {
 			break
 		}
 
@@ -159,10 +186,12 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 			// character that the user just entered (as well as anything else that already may be applied in the filter text)
 			m.SetFilterText(m.FilterInput.Value() + msg.String())
 			m.SetFilterState(list.Filtering)
+			cmds = append(cmds, d.refState.update(m))
+
 		}
 	}
 
-	d.wasFilterViewActive = isFilterViewActive
+	//d.wasFilterViewActive = isFilterViewActive
 
 	return tea.Batch(cmds...)
 }
@@ -175,8 +204,8 @@ func (d *listItemDelegate) nextPkg(m *list.Model) tea.Cmd {
 	}
 	currentItem := currentElement.(item)
 	curPkg := currentItem.ref.Package
-	for i := currentIdx; i < len(d.refState.visibleRefs); i++ {
-		if d.refState.visibleRefs[i].Package != curPkg {
+	for i := currentIdx; i < len(d.refState.selected); i++ {
+		if d.refState.selected[i].Package != curPkg {
 			m.Select(i)
 			break
 		}
@@ -196,13 +225,13 @@ func (d *listItemDelegate) prevPkg(m *list.Model) tea.Cmd {
 	targetPkg := ""
 	for i := currentIdx; i >= 0; i-- {
 		if targetPkg == "" {
-			if d.refState.visibleRefs[i].Package != curPkg {
-				targetPkg = d.refState.visibleRefs[i].Package
+			if d.refState.selected[i].Package != curPkg {
+				targetPkg = d.refState.selected[i].Package
 				continue
 			}
 		} else {
 			// head to the top of the package
-			if d.refState.visibleRefs[i].Package != targetPkg {
+			if d.refState.selected[i].Package != targetPkg {
 				// select the previous reference...
 				m.Select(i + 1)
 				break
@@ -229,10 +258,19 @@ func (d *listItemDelegate) onNavigate(m *list.Model) {
 	// TODO: maybe only on OnArrow or other keys?
 	d.cursorScope = make(map[gotest.Reference]struct{})
 	selectedIdx, selected := d.selectedItem(m)
-	d.cursorScopeSize = markChildren(selected, selectedIdx, d.visibleItems(m), d.cursorScope, false)
+	d.cursorScopeSize = markChildren(selected, selectedIdx, d.visibleItems(m), d.cursorScope, false, d.refState.children)
 }
 
-func (d *listItemDelegate) onToggleMultiselect(m *list.Model) {
+func (d *listItemDelegate) onSelectAll(m *list.Model, isAllAlreadySelected bool) tea.Cmd {
+	// select all items that can be seen in the list (on all pages)
+	// or if they are already all selected, then unselect them all
+
+	markAll(d.visibleItems(m), d.userSelect, isAllAlreadySelected)
+
+	return d.selectedTestReferencesCmd()
+}
+
+func (d *listItemDelegate) onToggleMultiselect(m *list.Model) tea.Cmd {
 	d.cursorScope = make(map[gotest.Reference]struct{}) // reset!
 
 	selectedIdx, selected := d.selectedItem(m)
@@ -244,7 +282,9 @@ func (d *listItemDelegate) onToggleMultiselect(m *list.Model) {
 		d.userSelect[selected.ref] = struct{}{}
 	}
 
-	markChildren(selected, selectedIdx, d.visibleItems(m), d.userSelect, invert)
+	markChildren(selected, selectedIdx, d.visibleItems(m), d.userSelect, invert, d.refState.children)
+
+	return d.selectedTestReferencesCmd()
 }
 
 func (d listItemDelegate) visibleItems(m *list.Model) []item {
@@ -259,21 +299,69 @@ func (d listItemDelegate) selectedItem(m *list.Model) (int, item) {
 	return m.Index(), m.SelectedItem().(item)
 }
 
-func (d listItemDelegate) selectedTestReferencesCmd(m *list.Model) tea.Cmd {
+func (d listItemDelegate) selectedTestReferencesCmd() tea.Cmd {
 	var refs []gotest.Reference
-	for ref := range d.cursorScope {
-		refs = append(refs, ref)
-	}
+
+	//isAllSelected := len(d.userSelect) == len(m.Items()) || m.SelectedItem().(item).ref.Package == "*"
+	//
+	//if !isAllSelected {
 	for ref := range d.userSelect {
 		refs = append(refs, ref)
 	}
+
+	if len(refs) == 0 {
+		// the user hasn't selected anything, but is hovering over something... we'll use that
+		for ref := range d.cursorScope {
+			refs = append(refs, ref)
+		}
+	}
+
 	sort.Sort(gotest.References(refs))
+	//}
+
 	return func() tea.Msg {
 		return uievent.SelectedTestReferences{
-			All:  m.SelectedItem().(item).ref.Package == "*",
+			//All:  isAllSelected,
 			Refs: refs,
 		}
 	}
+}
+
+func markChildren(selected item, start int, items []item, marker map[gotest.Reference]struct{}, invert bool, children map[gotest.Reference][]gotest.Reference) int {
+	if selected.ref.Package == "*" {
+		return markAll(items, marker, invert)
+	}
+	count := 0
+	for i := start; i < len(items); i++ {
+		it := items[i]
+
+		if it.ref.IsPackage() {
+			if isChild(&selected.ref, &it.ref) {
+				// mark by what is defined within the package (not by what is visible)
+				for _, child := range children[it.ref] {
+					if invert {
+						delete(marker, child)
+					} else {
+						marker[child] = struct{}{}
+						count++
+					}
+				}
+			}
+		} else {
+			// mark by what is visible, since this is a test function
+			if isChild(&selected.ref, &it.ref) {
+				if invert {
+					delete(marker, it.ref)
+				} else {
+					marker[it.ref] = struct{}{}
+					count++
+				}
+			} else {
+				break
+			}
+		}
+	}
+	return count
 }
 
 func isChild(ref, other *gotest.Reference) bool {
@@ -284,7 +372,7 @@ func isChild(ref, other *gotest.Reference) bool {
 		return false
 	}
 
-	if ref.FuncName == "" {
+	if ref.IsPackage() {
 		// all items are children of the package
 		return true
 	}
@@ -301,34 +389,18 @@ func isChild(ref, other *gotest.Reference) bool {
 	return ref.TRunName == other.TRunName
 }
 
-func markChildren(selected item, start int, visibleItems []item, marker map[gotest.Reference]struct{}, invert bool) int {
-	ref := selected.ref
+func markAll(items []item, marker map[gotest.Reference]struct{}, invert bool) int {
 	count := 0
-	for i := start; i < len(visibleItems); i++ {
-		it := visibleItems[i]
-		other := it.ref
+	for i := 0; i < len(items); i++ {
+		it := items[i]
 
-		if ref.Package == "*" {
-			if invert {
-				delete(marker, other)
-			} else {
-				marker[other] = struct{}{}
-				count++
-			}
-
-			continue
-		}
-
-		if isChild(&ref, &other) {
-			if invert {
-				delete(marker, other)
-			} else {
-				marker[other] = struct{}{}
-				count++
-			}
+		if invert {
+			delete(marker, it.ref)
 		} else {
-			break
+			marker[it.ref] = struct{}{}
+			count++
 		}
+
 	}
 	return count
 }

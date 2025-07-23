@@ -20,6 +20,8 @@ type SelectorUI struct {
 	subscription partybus.Unsubscribable
 	initialState gotest.Definitions // what is displayed in the UI when it starts
 	model        selector.Model     // the current state of the UI model
+
+	references []gotest.References
 }
 
 func NewSelectorUI(cfg selector.Config, testDefs []gotest.Definition) *SelectorUI {
@@ -54,18 +56,26 @@ func (s *SelectorUI) Setup(subscription partybus.Unsubscribable) error {
 	// run the application
 	go func() {
 		defer s.running.Done()
-		if _, err := s.program.Run(); err != nil {
+		finalModel, err := s.program.Run()
+		if err != nil {
 			log.Errorf("unable to start UI: %+v", err)
 			bus.ExitWithInterrupt()
 		}
+
+		if m, ok := finalModel.(selector.Model); ok {
+			s.model = m
+		} else {
+			log.Errorf("unexpected final model type: %T", finalModel)
+		}
+
 	}()
 
 	return nil
 }
 
-func (s SelectorUI) Prompt() []gotest.Reference {
+func (s *SelectorUI) Prompt() []gotest.Reference {
 	s.running.Wait()
-	return s.model.Selected
+	return s.model.Selected()
 }
 
 func (s *SelectorUI) Handle(e partybus.Event) error {

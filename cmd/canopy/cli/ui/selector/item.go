@@ -9,6 +9,7 @@ import (
 
 const allTestsTitle = "(all available tests)"
 
+// TODO: no global please...
 var auxCasesStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
 
 type item struct {
@@ -32,19 +33,20 @@ func (i item) FilterValue() string {
 	//zone.Mark(i.title, i.title) } // TODO: breaks filtering (when using in the filter value and not in the filter value... either messes with the lengths to select matched characters, or breaks rendering of patially matching ansi characters)
 }
 
-func newItems(filtering bool, refs ...gotest.Reference) []list.Item {
+func newItems(showFullReference bool, pkgsOnly bool, refs ...gotest.Reference) []list.Item {
 	var items []list.Item
 
 	for i := 0; i < len(refs); {
 		ref := refs[i]
 
-		if filtering && ref.Package == "*" {
+		if ref.TRunName != "" {
+			// skip t.Run cases that don't have a preceding function reference
 			i++
 			continue
 		}
 
-		// skip t.Run cases that don't have a preceding function reference
-		if ref.TRunName != "" {
+		if pkgsOnly && !ref.IsPackage() {
+			// if we are only showing packages, skip any function references
 			i++
 			continue
 		}
@@ -64,7 +66,7 @@ func newItems(filtering bool, refs ...gotest.Reference) []list.Item {
 		}
 
 		// create the item for the function (with collected t.Run names)
-		it := item{title: display(ref, tRuns, filtering), filter: filterTitle(ref), ref: ref, tRuns: tRuns}
+		it := item{title: display(ref, tRuns, showFullReference), filter: fullReferenceTitle(ref, tRuns), ref: ref, tRuns: tRuns}
 		items = append(items, it)
 
 		// skip past the t.Run cases we just processed
@@ -73,20 +75,25 @@ func newItems(filtering bool, refs ...gotest.Reference) []list.Item {
 	return items
 }
 
-func display(ref gotest.Reference, tRuns []string, filtering bool) string {
+func display(ref gotest.Reference, tRuns []string, showFullReference bool) string {
 	if ref.Package == "*" {
 		return allTestsTitle
 	}
 
-	if filtering {
-		return filterTitle(ref)
+	if showFullReference {
+		return fullReferenceTitle(ref, tRuns)
 	}
 
 	return treeTitle(ref, tRuns)
 }
 
-func filterTitle(ref gotest.Reference) string {
-	return ref.String(true)
+func fullReferenceTitle(ref gotest.Reference, tRuns []string) string {
+	var tRunsStr string
+	if len(tRuns) > 0 {
+		tRunsStr = auxCasesStyle.Render(fmt.Sprintf(" (%d cases)", len(tRuns)))
+		//tRunsStr = fmt.Sprintf(" (%d cases)", len(tRuns))
+	}
+	return ref.String(true) + tRunsStr
 }
 
 func treeTitle(ref gotest.Reference, tRuns []string) string {
@@ -94,7 +101,6 @@ func treeTitle(ref gotest.Reference, tRuns []string) string {
 	if len(tRuns) > 0 {
 		tRunsStr = auxCasesStyle.Render(fmt.Sprintf(" (%d cases)", len(tRuns)))
 		//tRunsStr = fmt.Sprintf(" (%d cases)", len(tRuns))
-
 	}
 
 	if ref.FuncName != "" {
