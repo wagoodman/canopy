@@ -74,7 +74,7 @@ func (s *SelectorUI) Setup(subscription partybus.Unsubscribable) error {
 	return nil
 }
 
-func (s *SelectorUI) Prompt() []gotest.Reference {
+func (s *SelectorUI) Prompt() gotest.References {
 	s.running.Wait()
 	// TODO: is there a better way to do this? should this go to stderr?
 	fmt.Println(s.model.View())

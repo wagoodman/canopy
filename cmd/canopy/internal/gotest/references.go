@@ -1,5 +1,7 @@
 package gotest
 
+import "github.com/lindell/go-ordered-set/orderedset"
+
 type References []Reference
 
 func (r References) Len() int {
@@ -28,6 +30,17 @@ func (r References) TestFunctionsCount() int {
 		}
 	}
 	return count
+}
+
+func (r References) Packages() []string {
+	pkgs := orderedset.New[string]()
+	for _, ref := range r {
+		if ref.Package != "" {
+			pkgs.Add(ref.Package)
+		}
+	}
+
+	return pkgs.Values()
 }
 
 func NewReferencesFromDefinition(def Definition) []Reference {

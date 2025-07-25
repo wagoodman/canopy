@@ -12,31 +12,20 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/syncspinner"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
-	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
 
 	"github.com/anchore/clio"
 )
 
-func NewTestGoUI(testPkgs *golist.PackageCollection, cfg TestUIConfig) clio.UI {
+func NewTestGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
 	if cfg.IsTTY && cfg.Writer == nil {
-		return newDynamicGoUI(testPkgs, cfg)
+		return newDynamicGoUI(cfg, maxPkgNameLength)
 	}
-	return newSafeGoUI(testPkgs, cfg)
+	return newSafeGoUI(cfg, maxPkgNameLength)
 }
 
-func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg TestUIConfig) clio.UI { //nolint:funlen
+func newDynamicGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI { //nolint:funlen
 	var pkgCount int
-	maxPkgName := 30
-	if testPkgs != nil {
-		pkgs := testPkgs.Packages()
-		for _, pkg := range pkgs {
-			if len(pkg.ImportPath) > maxPkgName {
-				maxPkgName = len(pkg.ImportPath)
-			}
-		}
-		pkgCount = len(pkgs)
-	}
 
 	spin := syncspinner.New()
 
@@ -55,7 +44,7 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg TestUIConfig) clio.U
 		h = gostd.NewVerboseHandler(
 			reportWriter,
 			gostd.PackageConfig{
-				PackageNameWidth:            maxPkgName,
+				PackageNameWidth:            maxPkgNameLength,
 				Color:                       cfg.Color,
 				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
 				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
@@ -67,7 +56,7 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg TestUIConfig) clio.U
 		h = gostd.NewQuietHandler(
 			reportWriter,
 			gostd.PackageConfig{
-				PackageNameWidth:            maxPkgName,
+				PackageNameWidth:            maxPkgNameLength,
 				Color:                       cfg.Color,
 				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
 				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
@@ -86,7 +75,7 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg TestUIConfig) clio.U
 
 	summaryHandler := gosummary.NewFactory(
 		presenter.DefaultGoTestResultSummaryConfig().
-			WithColor(cfg.Color).WithPackageNameWidth(maxPkgName).
+			WithColor(cfg.Color).WithPackageNameWidth(maxPkgNameLength).
 			WithPackageCount(pkgCount).
 			WithStalePackageDuration(stalePackageDuration).
 			WithLoosePackageOrder(loosePackageOrder).
@@ -103,19 +92,9 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg TestUIConfig) clio.U
 	return NewTeaUI(c)
 }
 
-func newSafeGoUI(testPkgs *golist.PackageCollection, cfg TestUIConfig) clio.UI {
+func newSafeGoUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 	var writeToStderr bool
 	var pkgCount int
-	maxPkgName := 30
-	if testPkgs != nil {
-		pkgs := testPkgs.Packages()
-		for _, pkg := range pkgs {
-			if len(pkg.ImportPath) > maxPkgName {
-				maxPkgName = len(pkg.ImportPath)
-			}
-		}
-		pkgCount = len(pkgs)
-	}
 
 	var reportWriter io.WriteCloser
 	if cfg.Writer != nil {

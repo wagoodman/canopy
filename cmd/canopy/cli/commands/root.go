@@ -11,15 +11,21 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/test"
+	"strings"
 )
 
 type rootConfig struct {
-	*testCoreConfig `yaml:",inline" json:",inline" mapstructure:",squash"`
+	*TestCoreConfig `yaml:",inline" json:",inline" mapstructure:",squash"`
 }
 
 func defaultRootOptions() *rootConfig {
 	c := rootConfig{
-		testCoreConfig: defaultTestOptions(),
+		TestCoreConfig: defaultTestOptions(
+			withoutCoverageOpts(),
+			withoutOpenOpts(),
+			//withoutRunOptsRendered(),
+		),
 	}
 
 	c.Test.Packages.Specifiers = []string{"./..."} // default to all project packages
@@ -32,9 +38,16 @@ func Root(app clio.Application) *cobra.Command {
 
 	var runErr error
 	return app.SetupRootCommand(&cobra.Command{
-		Use:   fmt.Sprintf("%s [SOURCE]", app.ID().Name),
+		Use:   fmt.Sprintf("%s GO-PKG-SPECIFIER...", app.ID().Name),
 		Short: "select and run go tests",
-		Args:  cobra.NoArgs, // TODO: should be the same as -run ? or should be package subselection? (the latter, also have --run flag)
+		Long:  "This is a wrapper around the 'go test' command that provides additional value. See 'go help test' and 'go help build' for detailed flag information.",
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				opts.Test.Specifiers = args
+			}
+
+			return nil
+		},
 		//Example: // TODO
 		PreRunE: func(_ *cobra.Command, _ []string) error {
 			// get the final set of packages to use
@@ -57,17 +70,27 @@ func Root(app clio.Application) *cobra.Command {
 				}
 			}()
 
-			runErr = runRoot(cmd.Context(), app, *opts)
-
-			return nil
+			return runRoot(cmd.Context(), app, *opts)
+		},
+		PostRunE: func(_ *cobra.Command, _ []string) error {
+			// this runs after the UI, so we can safely print to stdout/stderr now if we need to
+			if runErr != nil {
+				showTestFailure(runErr)
+			}
+			return runErr
 		},
 	}, opts)
 }
 
-func runRoot(_ context.Context, app clio.Application, cfg rootConfig) error {
-	testDefs, err := gotest.FindDefinitions(cfg.Test.Runtime.Packages)
+func runRoot(ctx context.Context, app clio.Application, rootCfg rootConfig) error {
+	// we want to narrow the available selectable tests based on the user input, including package specifiers as well as any run patterns
+	testDefs, err := gotest.FindDefinitions(rootCfg.Test.Runtime.Packages, rootCfg.Test.Run)
 	if err != nil {
 		return err
+	}
+
+	if len(testDefs) == 0 {
+		return fmt.Errorf("no tests found in packages %q (with run options %q)", rootCfg.Test.Specifiers, rootCfg.Test.Run)
 	}
 
 	id := app.ID()
@@ -89,8 +112,143 @@ func runRoot(_ context.Context, app clio.Application, cfg rootConfig) error {
 
 	refs := ux.Prompt()
 
-	// TODO: run tests! get selection from model!
-	fmt.Printf("Selected references: %d\n", len(refs))
+	// set the UI dynamically
+	maxPkgName := maxPkgNameLength(refs.Packages())
+	logTestFailuresAsErrors, err := setupTestUIs(app, rootCfg.Test.Writers, rootCfg.Test.Appearance, maxPkgName)
+	if err != nil {
+		return fmt.Errorf("unable to setup test UIs: %w", err)
+	}
 
-	return nil
+	runGroups := gotest.GroupIntoRuns(gotest.MinimalSelection(testDefs, refs))
+
+	if len(runGroups) == 0 {
+		fmt.Println("No tests selected to run, exiting...")
+		return nil
+	}
+
+	log.WithFields("references", refs.TestFunctionsCount()).Info("running selected tests")
+	log.WithFields("runGroups", len(runGroups)).Debug("selected test run groups")
+	for i, group := range runGroups {
+		log.WithFields("group", i+1, "refs", len(group)).Trace("test run group")
+		for j, ref := range group {
+			branch := "├── "
+			if j == len(group)-1 {
+				branch = "└── "
+			}
+			log.Trace(branch + ref.String(true))
+		}
+	}
+
+	coreCfg := rootCfg.TestCoreConfig
+	cfg := coreCfg.Test
+
+	s, err := test.NewManager(
+		test.Config{
+			DBRoot:    coreCfg.Root,
+			Ephemeral: coreCfg.Ephemeral,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("unable to create test session: %w", err)
+	}
+	defer func() {
+		if err := s.Close(); err != nil {
+			log.WithFields("error", err).Error("unable to close test session")
+		}
+	}()
+
+	var runs []*gotest.Run
+	for _, group := range runGroups {
+		var args []string
+		args = append(args, group.Packages()...)
+		args = append(args, cfg.GoBuild.RenderedFlags...)
+		args = append(args, cfg.GoTest.RenderedFlags...)
+		args = append(args, cfg.ExtraFlags...)
+
+		rArgs := runArgs(group)
+		if rArgs != "" {
+			args = append(args, rArgs)
+		}
+
+		runConfig := gotest.RunnerConfig{
+			OnlyRefs: group,
+			Coverage: false, // coverage is not supported in this command
+			NoCache:  cfg.NoCache,
+			UserArgs: args,
+		}
+
+		run, err := s.RunTests(
+			ctx,
+			test.RunConfig{
+				LogTestFailuresAsErrors: logTestFailuresAsErrors,
+				Runner:                  runConfig,
+				Result: gotest.ResultConfig{
+					TrackOtherOutput:   false,
+					TrackFailingOutput: false,
+				},
+			},
+		)
+
+		if err != nil {
+			return fmt.Errorf("unable to run tests: %w", err)
+		}
+
+		if run == nil {
+			return fmt.Errorf("test run returned nil, this is unexpected")
+		}
+
+		runs = append(runs, run)
+	}
+
+	_, resultErr := evaluateResults(runs, logTestFailuresAsErrors)
+
+	return resultErr
+}
+
+func runArgs(refs gotest.References) string {
+	var funcs []string
+	for _, ref := range refs {
+		if ref.FuncName != "" {
+			funcs = append(funcs, ref.FuncName)
+		}
+	}
+	if len(funcs) == 0 {
+		return ""
+	}
+	return "-run='" + strings.Join(funcs, "|") + "'"
+}
+
+func evaluateResults(runs []*gotest.Run, logTestFailuresAsErrors bool) (bool, error) {
+	var elapsed float64
+	var resultStr = "passed"
+	var passed = true
+	var resultErr error
+	for _, run := range runs {
+		result := run.Result
+		runPassed, _ := result.Passed()
+		passed = passed && runPassed
+
+		if !runPassed {
+			resultStr = "failed"
+
+			if len(result.References()) == 0 {
+				resultErr = multierror.Append(resultErr, ErrTestSuiteFailed{Reasons: []string{"no test events observed"}})
+			} else {
+				// if tests simply failed, let the UI show this as a failure, no need to show an additional message
+				resultErr = multierror.Append(resultErr, ErrTestSuiteFailed{})
+			}
+		}
+
+		elapsed += result.Elapsed(false).Seconds()
+	}
+
+	nested := log.WithFields("result", resultStr, "elapsed", fmt.Sprintf("%2.2fs", elapsed))
+
+	if !passed && logTestFailuresAsErrors {
+		nested.Error("completed test suite")
+	} else {
+		nested.Info("completed test suite")
+	}
+
+	return passed, resultErr
 }

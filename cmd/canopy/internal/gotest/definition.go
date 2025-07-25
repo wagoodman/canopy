@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -64,13 +65,18 @@ func (d Definitions) References() []Reference {
 	return refs
 }
 
-func FindDefinitions(collection *golist.PackageCollection) ([]Definition, error) {
+func FindDefinitions(collection *golist.PackageCollection, runsStatements ...string) ([]Definition, error) {
 	// find and parse all '_test.go' files in given directory and subdirectories
 	fileSet := token.NewFileSet()
 	var tests []Definition
 
+	runPatterns, err := makeRegexes(runsStatements)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compile '-run' patterns: %w", err)
+	}
+
 	process := func(path string) error {
-		log.WithFields("path", path).Debug("parsing test file")
+		log.WithFields("path", path).Trace("parsing test file")
 
 		f, err := parser.ParseFile(fileSet, path, nil, 0)
 		if err != nil {
@@ -88,6 +94,11 @@ func FindDefinitions(collection *golist.PackageCollection) ([]Definition, error)
 			importPath = curPkg.ImportPath
 		}
 		for _, fnDecl := range findTestsInFile(f) {
+			if !matchesAny(fnDecl.Name.Name, runPatterns) {
+				log.WithFields("fn", fnDecl.Name.Name, "importPath", importPath).Trace("skipping test function that does not match run patterns")
+				continue
+			}
+
 			_, _, cases := getTableTestCases(fnDecl)
 			tests = append(tests, Definition{
 				ImportPath: importPath,
@@ -117,6 +128,33 @@ func FindDefinitions(collection *golist.PackageCollection) ([]Definition, error)
 	}
 
 	return tests, nil
+}
+
+func matchesAny(statement string, runPatterns []*regexp.Regexp) bool {
+	if len(runPatterns) == 0 {
+		return true // no run patterns means all statements match
+	}
+	for _, run := range runPatterns {
+		if run.MatchString(statement) {
+			return true
+		}
+	}
+	return false
+}
+
+func makeRegexes(runStatements []string) ([]*regexp.Regexp, error) {
+	var regexes []*regexp.Regexp
+	for _, run := range runStatements {
+		if run == "" {
+			continue
+		}
+		re, err := regexp.Compile(run)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compile regex %q: %w", run, err)
+		}
+		regexes = append(regexes, re)
+	}
+	return regexes, nil
 }
 
 // findTestsInFile returns a slice of all test functions in the given file AST

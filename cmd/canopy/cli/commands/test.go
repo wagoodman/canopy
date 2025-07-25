@@ -26,8 +26,8 @@ import (
 )
 
 var (
-	_ fangs.FlagAdder  = (*testCoreConfig)(nil)
-	_ fangs.PostLoader = (*testCoreConfig)(nil)
+	_ fangs.FlagAdder  = (*TestCoreConfig)(nil)
+	_ fangs.PostLoader = (*TestCoreConfig)(nil)
 )
 
 var _ SilentError = (*ErrTestSuiteFailed)(nil)
@@ -52,7 +52,7 @@ func (e ErrTestSuiteFailed) Error() string {
 	return fmt.Sprintf("test suite failed: %s", render)
 }
 
-type testCoreConfig struct {
+type TestCoreConfig struct {
 	options.Config `yaml:",inline" mapstructure:",squash"`
 	options.Store  `yaml:"store" json:"store" mapstructure:"store"`
 
@@ -80,15 +80,33 @@ type testRuntimeConfig struct {
 	Packages *golist.PackageCollection
 }
 
-func (t *testCoreConfig) AddFlags(flags fangs.FlagSet) {
+func (t *TestCoreConfig) AddFlags(flags fangs.FlagSet) {
 	t.NamedFlagSet = xflagset.NewNamed()
 	t.tracker = xflagset.NewDecorator(flags, t.NamedFlagSet.FlagSet("State"))
 	flags = t.tracker
 	flags.BoolVarP(&t.Test.NoCache, "no-cache", "", "do not use cached test results")
 }
 
-func defaultTestOptions() *testCoreConfig {
-	return &testCoreConfig{
+func withoutCoverageOpts() func(*TestCoreConfig) {
+	return func(cfg *TestCoreConfig) {
+		cfg.Test.Coverage.Disabled = true
+	}
+}
+
+func withoutOpenOpts() func(*TestCoreConfig) {
+	return func(cfg *TestCoreConfig) {
+		cfg.Test.Open.Disabled = true
+	}
+}
+
+func withoutRunOptsRendered() func(*TestCoreConfig) {
+	return func(cfg *TestCoreConfig) {
+		cfg.Test.GoTest.IgnoreRenderingFlags = append(cfg.Test.GoTest.IgnoreRenderingFlags, "run")
+	}
+}
+
+func defaultTestOptions(opts ...func(*TestCoreConfig)) *TestCoreConfig {
+	t := &TestCoreConfig{
 		Store: options.DefaultStore(),
 		Test: testConfig{
 			Packages:   options.DefaultPackages(),
@@ -100,6 +118,12 @@ func defaultTestOptions() *testCoreConfig {
 			Appearance: options.DefaultAppearance(),
 		},
 	}
+
+	for _, fn := range opts {
+		fn(t)
+	}
+
+	return t
 }
 
 func Test(app clio.Application) *cobra.Command {
@@ -131,7 +155,8 @@ func Test(app clio.Application) *cobra.Command {
 			opts.Test.Runtime.Packages = testPkgs
 
 			// set the UI dynamically
-			logTestFailuresAsErrors, err = setupTestUIs(app, opts.Test.Writers, opts.Test.Appearance, testPkgs)
+			maxPkgName := maxPkgNameLength(testPkgs.ImportPaths())
+			logTestFailuresAsErrors, err = setupTestUIs(app, opts.Test.Writers, opts.Test.Appearance, maxPkgName)
 			return err
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -175,7 +200,7 @@ func Test(app clio.Application) *cobra.Command {
 	return app.SetupCommand(cmd, opts)
 }
 
-func runTest(ctx context.Context, app clio.Application, coreCfg testCoreConfig, logTestFailuresAsErrors bool) error {
+func runTest(ctx context.Context, app clio.Application, coreCfg TestCoreConfig, logTestFailuresAsErrors bool) error {
 	cfg := coreCfg.Test
 
 	log.WithFields("pkgs", cfg.Specifiers).Info("running test suite")
@@ -271,12 +296,12 @@ func evaluateResult(run *gotest.Run, logTestFailuresAsErrors bool, coverMin floa
 	return passed, resultErr
 }
 
-func setupTestUIs(app clio.Application, writers []options.FormatWriter, appearance options.Appearance, testPkgs *golist.PackageCollection) (bool, error) {
+func setupTestUIs(app clio.Application, writers []options.FormatWriter, appearance options.Appearance, maxPkgName int) (bool, error) {
 	var logTestFailuresAsErrors bool
 
 	var uxs []clio.UI
 	for _, writer := range writers {
-		ux, ltaf, err := setupTestUI(app, writer, appearance, testPkgs)
+		ux, ltaf, err := setupTestUI(app, writer, appearance, maxPkgName)
 		if err != nil {
 			return false, fmt.Errorf("unable to setup UI %q: %w", writer.Name, err)
 		}
@@ -299,7 +324,7 @@ func setupTestUIs(app clio.Application, writers []options.FormatWriter, appearan
 	return logTestFailuresAsErrors, nil
 }
 
-func setupTestUI(app clio.Application, format options.FormatWriter, appearance options.Appearance, testPkgs *golist.PackageCollection) (clio.UI, bool, error) {
+func setupTestUI(app clio.Application, format options.FormatWriter, appearance options.Appearance, maxPkgName int) (clio.UI, bool, error) {
 	var ux clio.UI
 
 	fields := logger.Fields{
@@ -321,9 +346,9 @@ func setupTestUI(app clio.Application, format options.FormatWriter, appearance o
 	var logTestFailuresAsErrors bool
 	switch format.Name {
 	// case "go++":
-	//	ux = ui.NewGoxxUI(testPkgs, uiConfig)
+	//	ux = ui.NewGoxxUI(uiConfig, maxPkgName)
 	case "go":
-		ux = ui.NewTestGoUI(testPkgs, uiConfig)
+		ux = ui.NewTestGoUI(uiConfig, maxPkgName)
 	case "json":
 		// TODO: we're not passing testPkgs intentionally?
 		ux = ui.NewTestJSONUI(uiConfig)
@@ -430,4 +455,16 @@ func renderTestSuiteFailure(err ErrTestSuiteFailed) string {
 		render += fmt.Sprintf("\n  • %s", reason)
 	}
 	return fmt.Sprintf("Test suite failed: %s", render)
+}
+
+func maxPkgNameLength(testPkgs []string) int {
+	maxPkgName := 30
+	if testPkgs != nil {
+		for _, pkg := range testPkgs {
+			if len(pkg) > maxPkgName {
+				maxPkgName = len(pkg)
+			}
+		}
+	}
+	return maxPkgName
 }

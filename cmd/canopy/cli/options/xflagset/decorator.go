@@ -2,6 +2,7 @@ package xflagset
 
 import (
 	"fmt"
+	"github.com/scylladb/go-set/strset"
 
 	"github.com/spf13/pflag"
 
@@ -37,10 +38,15 @@ func NewDecorator(upstream fangs.FlagSet, group *pflag.FlagSet) *Decorator {
 	}
 }
 
-func (f Decorator) RenderFlags() []string {
+func (f Decorator) RenderFlags(ignore ...string) []string {
 	var flags []string
 
+	ignoreSet := strset.New(ignore...)
+
 	for p, name := range f.intFlags {
+		if ignoreSet.Has(name) {
+			continue
+		}
 		if *p == 0 {
 			continue
 		}
@@ -48,6 +54,9 @@ func (f Decorator) RenderFlags() []string {
 	}
 
 	for p, name := range f.boolFlags {
+		if ignoreSet.Has(name) {
+			continue
+		}
 		if !*p {
 			continue
 		}
@@ -55,6 +64,9 @@ func (f Decorator) RenderFlags() []string {
 	}
 
 	for p, name := range f.boolRefFlags {
+		if ignoreSet.Has(name) {
+			continue
+		}
 		if *p == nil || !**p {
 			continue
 		}
@@ -62,6 +74,9 @@ func (f Decorator) RenderFlags() []string {
 	}
 
 	for p, name := range f.stringFlags {
+		if ignoreSet.Has(name) {
+			continue
+		}
 		if *p == "" {
 			continue
 		}
@@ -69,6 +84,9 @@ func (f Decorator) RenderFlags() []string {
 	}
 
 	for p, name := range f.stringArrayFlags {
+		if ignoreSet.Has(name) {
+			continue
+		}
 		if len(*p) == 0 {
 			continue
 		}
@@ -78,6 +96,9 @@ func (f Decorator) RenderFlags() []string {
 	}
 
 	for p, name := range f.float64Flags {
+		if ignoreSet.Has(name) {
+			continue
+		}
 		if *p == 0 {
 			continue
 		}

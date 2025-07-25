@@ -26,9 +26,10 @@ type GoTest struct {
 	Vet       string `yaml:"vet" json:"vet" mapstructure:"vet"`
 
 	// after post-load, these are the flags to be passed to the go test command
-	RenderedFlags []string `yaml:"-" json:"-" mapstructure:"-"`
-	tracker       *xflagset.Decorator
-	NamedFlagSet  *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
+	RenderedFlags        []string `yaml:"-" json:"-" mapstructure:"-"`
+	IgnoreRenderingFlags []string `yaml:"-" json:"-" mapstructure:"-"`
+	tracker              *xflagset.Decorator
+	NamedFlagSet         *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 func DefaultGoTest() GoTest {
@@ -36,7 +37,7 @@ func DefaultGoTest() GoTest {
 }
 
 func (o *GoTest) PostLoad() error {
-	o.RenderedFlags = o.tracker.RenderFlags()
+	o.RenderedFlags = o.tracker.RenderFlags(o.IgnoreRenderingFlags...)
 	return nil
 }
 
