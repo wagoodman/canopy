@@ -303,12 +303,18 @@ func (d listItemDelegate) selectedReferences() []gotest.Reference {
 	var refs []gotest.Reference
 
 	for ref := range d.userSelect {
+		if ref.Package == "*" {
+			continue // don't include the all tests package
+		}
 		refs = append(refs, ref)
 	}
 
 	if len(refs) == 0 {
 		// the user hasn't selected anything, but is hovering over something... we'll use that
 		for ref := range d.cursorScope {
+			if ref.Package == "*" {
+				continue // don't include the all tests package
+			}
 			refs = append(refs, ref)
 		}
 	}
