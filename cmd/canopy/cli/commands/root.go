@@ -4,15 +4,18 @@ import (
 	"context"
 	"fmt"
 	"github.com/anchore/clio"
+	"github.com/anchore/go-sync"
 	"github.com/hashicorp/go-multierror"
 	"github.com/spf13/cobra"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector"
+	"github.com/wagoodman/canopy/cmd/canopy/internal"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/test"
 	"strings"
+	"time"
 )
 
 type rootConfig struct {
@@ -158,50 +161,54 @@ func runRoot(ctx context.Context, app clio.Application, rootCfg rootConfig) erro
 		}
 	}()
 
-	var runs []*gotest.Run
+	var commonArgs []string
+	commonArgs = append(commonArgs, cfg.GoBuild.RenderedFlags...)
+	commonArgs = append(commonArgs, cfg.GoTest.RenderedFlags...)
+	commonArgs = append(commonArgs, cfg.ExtraFlags...)
+
+	var runCfgs []test.RunConfig
 	for _, group := range runGroups {
 		var args []string
+		args = append(args, commonArgs...)
 		args = append(args, group.Packages()...)
-		args = append(args, cfg.GoBuild.RenderedFlags...)
-		args = append(args, cfg.GoTest.RenderedFlags...)
-		args = append(args, cfg.ExtraFlags...)
 
 		rArgs := runArgs(group)
 		if rArgs != "" {
 			args = append(args, rArgs)
 		}
 
-		runConfig := gotest.RunnerConfig{
-			OnlyRefs: group,
-			Coverage: false, // coverage is not supported in this command
-			NoCache:  cfg.NoCache,
-			UserArgs: args,
-		}
-
-		run, err := s.RunTests(
-			ctx,
+		runCfgs = append(runCfgs,
 			test.RunConfig{
 				LogTestFailuresAsErrors: logTestFailuresAsErrors,
-				Runner:                  runConfig,
+				Runner: gotest.RunnerConfig{
+					OnlyRefs: group,
+					Coverage: false, // coverage is not supported in this command
+					NoCache:  cfg.NoCache,
+					UserArgs: args,
+				},
 				Result: gotest.ResultConfig{
 					TrackOtherOutput:   false,
 					TrackFailingOutput: false,
 				},
 			},
 		)
-
-		if err != nil {
-			return fmt.Errorf("unable to run tests: %w", err)
-		}
-
-		if run == nil {
-			return fmt.Errorf("test run returned nil, this is unexpected")
-		}
-
-		runs = append(runs, run)
 	}
 
-	_, resultErr := evaluateResults(runs, logTestFailuresAsErrors)
+	start := time.Now()
+	var runs []*gotest.Run
+	err = sync.CollectSlice(&ctx, internal.ExecutorTestRunner,
+		sync.ToSeq(runCfgs),
+		func(runConfig test.RunConfig) (*gotest.Run, error) {
+			return s.RunTests(ctx, runConfig)
+		},
+		&runs,
+	)
+
+	if err != nil {
+		return fmt.Errorf("unable to run tests: %w", err)
+	}
+
+	_, resultErr := evaluateResults(runs, time.Now().Sub(start), logTestFailuresAsErrors)
 
 	return resultErr
 }
@@ -219,8 +226,7 @@ func runArgs(refs gotest.References) string {
 	return "-run='" + strings.Join(funcs, "|") + "'"
 }
 
-func evaluateResults(runs []*gotest.Run, logTestFailuresAsErrors bool) (bool, error) {
-	var elapsed float64
+func evaluateResults(runs []*gotest.Run, elapsed time.Duration, logTestFailuresAsErrors bool) (bool, error) {
 	var resultStr = "passed"
 	var passed = true
 	var resultErr error
@@ -239,11 +245,9 @@ func evaluateResults(runs []*gotest.Run, logTestFailuresAsErrors bool) (bool, er
 				resultErr = multierror.Append(resultErr, ErrTestSuiteFailed{})
 			}
 		}
-
-		elapsed += result.Elapsed(false).Seconds()
 	}
 
-	nested := log.WithFields("result", resultStr, "elapsed", fmt.Sprintf("%2.2fs", elapsed))
+	nested := log.WithFields("result", resultStr, "elapsed", fmt.Sprintf("%2.2fs", elapsed.Seconds()))
 
 	if !passed && logTestFailuresAsErrors {
 		nested.Error("completed test suite")

@@ -26,7 +26,6 @@ func TestGoTestResultSummary_Present(t *testing.T) {
 					Color:              false,
 					WriteToStderr:      true,
 					PackageNameWidth:   100,
-					PackageCount:       50,
 					DurationFromEvents: true,
 				},
 				style: style.NewGo(false),
@@ -40,7 +39,6 @@ func TestGoTestResultSummary_Present(t *testing.T) {
 					Color:              false,
 					WriteToStderr:      true,
 					PackageNameWidth:   100,
-					PackageCount:       50,
 					DurationFromEvents: true,
 				},
 				style: style.NewGo(false),
@@ -54,7 +52,6 @@ func TestGoTestResultSummary_Present(t *testing.T) {
 					Color:              false,
 					WriteToStderr:      true,
 					PackageNameWidth:   100,
-					PackageCount:       50,
 					DurationFromEvents: true,
 				},
 				style: style.NewGo(false),
@@ -67,7 +64,8 @@ func TestGoTestResultSummary_Present(t *testing.T) {
 			sb := strings.Builder{}
 
 			subject := tt.presenter
-			subject.run = *fixtureRun(t, tt.fixture)
+			subject.runs = []gotest.Run{*fixtureRun(t, tt.fixture)}
+			subject.results = newJoinedResults(subject.runs...)
 
 			err := subject.Present(&sb, &sb)
 			require.NoError(t, err)

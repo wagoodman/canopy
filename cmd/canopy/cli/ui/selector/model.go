@@ -218,7 +218,7 @@ func (m Model) topView() string {
 		if len(m.selected) == 0 {
 			msg = `¯\_(ツ)_/¯`
 		} else {
-			msg = fmt.Sprintf("Running %d tests...", m.selected.TestFunctionsCount())
+			msg = fmt.Sprintf("Running %d test functions", m.selected.TestFunctionsCount())
 		}
 	}
 	title := m.titleStyle.Render(msg)

@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/anchore/go-sync"
 	"os"
 	"os/signal"
+	"runtime"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/wagoodman/canopy/cmd/canopy/cli"
@@ -37,6 +39,12 @@ func main() {
 
 	// drive application control from a single context which can be cancelled (notifying the event loop to stop)
 	ctx, cancel := context.WithCancel(context.Background())
+
+	// set up executors for each dimension we want to coordinate CPU bounds for
+	if !sync.HasContextExecutor(ctx, internal.ExecutorTestRunner) {
+		ctx = sync.SetContextExecutor(ctx, internal.ExecutorTestRunner, sync.NewExecutor(runtime.NumCPU()*4))
+	}
+
 	cmd.SetContext(ctx)
 
 	// note: it is important to always do signal handling from the main package. In this way if quill is used
