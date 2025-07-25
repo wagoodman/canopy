@@ -22,9 +22,10 @@ type rootConfig struct {
 func defaultRootOptions() *rootConfig {
 	c := rootConfig{
 		TestCoreConfig: defaultTestOptions(
-			withoutCoverageOpts(),
-			withoutOpenOpts(),
-			//withoutRunOptsRendered(),
+			withoutCoverageOpts(),     // we cannot determine coverage for multiple sessions, so we disable it here
+			withoutOpenOpts(),         // we cannot open failed results as this may be for multiple sessions
+			withoutRunOptsRendered(),  // -run is being rendered based on the user selection, thus does not need to be rendered to be passed to 'go test'
+			withCombineMultipleRuns(), // we want a single summary for multiple running sessions
 		),
 	}
 

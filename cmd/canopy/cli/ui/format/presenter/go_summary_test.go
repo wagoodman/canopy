@@ -22,7 +22,7 @@ func TestGoTestResultSummary_Present(t *testing.T) {
 			name:    "failing package",
 			fixture: "mixed-verbose.json",
 			presenter: GoTestResultSummary{
-				config: GoTestResultSummaryConfig{
+				config: GoSummaryConfig{
 					Color:              false,
 					WriteToStderr:      true,
 					PackageNameWidth:   100,
@@ -36,7 +36,7 @@ func TestGoTestResultSummary_Present(t *testing.T) {
 			name:    "passing package",
 			fixture: "mixed-verbose.json",
 			presenter: GoTestResultSummary{
-				config: GoTestResultSummaryConfig{
+				config: GoSummaryConfig{
 					Color:              false,
 					WriteToStderr:      true,
 					PackageNameWidth:   100,
@@ -50,7 +50,7 @@ func TestGoTestResultSummary_Present(t *testing.T) {
 			name:    "panic package",
 			fixture: "panic-verbose.json",
 			presenter: GoTestResultSummary{
-				config: GoTestResultSummaryConfig{
+				config: GoSummaryConfig{
 					Color:              false,
 					WriteToStderr:      true,
 					PackageNameWidth:   100,

@@ -45,12 +45,12 @@ func (s ResultStats) Total() int {
 	return s.Passed + s.Failed + s.Skipped
 }
 
-func (s ResultStats) Merge(other ResultStats) ResultStats {
-	return ResultStats{
-		Passed:  s.Passed + other.Passed,
-		Failed:  s.Failed + other.Failed,
-		Skipped: s.Skipped + other.Skipped,
-		Running: s.Running + other.Running,
+func (s *ResultStats) Merge(others ...ResultStats) {
+	for _, other := range others {
+		s.Passed += other.Passed
+		s.Failed += other.Failed
+		s.Skipped += other.Skipped
+		s.Running += other.Running
 	}
 }
 

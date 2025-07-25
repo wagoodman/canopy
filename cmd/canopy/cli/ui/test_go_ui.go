@@ -25,8 +25,6 @@ func NewTestGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
 }
 
 func newDynamicGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI { //nolint:funlen
-	var pkgCount int
-
 	spin := syncspinner.New()
 
 	common := state.Common{
@@ -76,9 +74,9 @@ func newDynamicGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI { //nolint:f
 	summaryHandler := gosummary.NewFactory(
 		presenter.DefaultGoTestResultSummaryConfig().
 			WithColor(cfg.Color).WithPackageNameWidth(maxPkgNameLength).
-			WithPackageCount(pkgCount).
 			WithStalePackageDuration(stalePackageDuration).
 			WithLoosePackageOrder(loosePackageOrder).
+			WithCombineMultipleRuns(cfg.CombineMultipleRuns).
 			WithDurationFromEvents(false), //  we're running with a true wall clock, so we want to use that. Otherwise you'll see the timers jitter, only updating when there is a test event that arrives.
 		common,
 	)
@@ -94,7 +92,6 @@ func newDynamicGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI { //nolint:f
 
 func newSafeGoUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 	var writeToStderr bool
-	var pkgCount int
 
 	var reportWriter io.WriteCloser
 	if cfg.Writer != nil {
@@ -134,10 +131,9 @@ func newSafeGoUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 		withStdout(reportWriter).
 		withStderr(notificationWriter).
 		withHandledPresenters(
-			adapter.NewTestRun(presenter.GoTestResultSummaryConfig{
+			adapter.NewTestRun(presenter.GoSummaryConfig{
 				WriteToStderr:    writeToStderr,
 				PackageNameWidth: maxPkgName,
-				PackageCount:     pkgCount,
 				Color:            cfg.Color,
 				// we're running with a true wall clock, so we want to use that. Otherwise you'll see the timers jitter,
 				// only updating when there is a test event that arrives.
@@ -145,6 +141,7 @@ func newSafeGoUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 				ShowElapsedForRunningPackages:    true,
 				ShowSummaryForUnrenderedPackages: true,
 				ShowRunningTests:                 false, // it's safer to not thrash the number of lines we're writing to the terminal
+				CombineMultipleRuns:              cfg.CombineMultipleRuns,
 			}.New),
 		)
 

@@ -8,6 +8,7 @@ type TestUIConfig struct {
 	ShowPackagesWithNoTests bool
 	Writer                  io.WriteCloser
 	IsTTY                   bool
+	CombineMultipleRuns     bool
 }
 
 func DefaultTestUIConfig() TestUIConfig {

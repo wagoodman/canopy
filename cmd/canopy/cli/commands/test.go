@@ -105,6 +105,12 @@ func withoutRunOptsRendered() func(*TestCoreConfig) {
 	}
 }
 
+func withCombineMultipleRuns() func(*TestCoreConfig) {
+	return func(cfg *TestCoreConfig) {
+		cfg.Test.Appearance.CombineMultipleRuns = true
+	}
+}
+
 func defaultTestOptions(opts ...func(*TestCoreConfig)) *TestCoreConfig {
 	t := &TestCoreConfig{
 		Store: options.DefaultStore(),
@@ -394,6 +400,7 @@ func getUIConfig(appearance options.Appearance, clioCfg clio.Config, format opti
 		ShowPackagesWithNoTests: appearance.ShowPackagesWithNoTests,
 		Writer:                  format.Writer,
 		IsTTY:                   format.IsTTY,
+		CombineMultipleRuns:     appearance.CombineMultipleRuns,
 	}
 }
 

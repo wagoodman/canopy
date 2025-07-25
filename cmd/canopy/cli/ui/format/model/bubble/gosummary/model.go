@@ -1,6 +1,7 @@
 package gosummary
 
 import (
+	mapset "github.com/deckarep/golang-set/v2"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -22,12 +23,12 @@ var (
 )
 
 type Factory struct {
-	config presenter.GoTestResultSummaryConfig
+	config presenter.GoSummaryConfig
 	seen   map[uuid.UUID]struct{}
 	common state.Common
 }
 
-func NewFactory(cfg presenter.GoTestResultSummaryConfig, common state.Common) *Factory {
+func NewFactory(cfg presenter.GoSummaryConfig, common state.Common) *Factory {
 	return &Factory{
 		config: cfg,
 		seen:   make(map[uuid.UUID]struct{}),
@@ -56,18 +57,25 @@ func (j Factory) Handle(e partybus.Event) ([]tea.Model, tea.Cmd) {
 		return nil, nil
 	}
 
+	if j.config.CombineMultipleRuns && len(j.seen) > 0 {
+		// if we are combining multiple runs, we only want to show the first run
+		// so we skip this one if we've already seen a run
+		return nil, nil
+	}
+
 	j.seen[idVal] = struct{}{}
 	return []tea.Model{NewModel(j.config, j.common, idVal, *cfg)}, nil
 }
 
 type Model struct {
-	config  presenter.GoTestResultSummaryConfig
+	config  presenter.GoSummaryConfig
 	started bool
-	run     gotest.Run
+	runs    []gotest.Run
+	ids     mapset.Set[uuid.UUID]
 	common  state.Common
 }
 
-func NewModel(config presenter.GoTestResultSummaryConfig, common state.Common, runID uuid.UUID, runCfg gotest.RunnerConfig) *Model {
+func NewModel(config presenter.GoSummaryConfig, common state.Common, runID uuid.UUID, runCfg gotest.RunnerConfig) *Model {
 	run := gotest.NewRun(gotest.RunnerConfig{}) // we only need the cumulative state, not the run config
 	run.Result = *gotest.NewResult(gotest.ResultConfig{
 		TrackFailingOutput: true,
@@ -77,7 +85,8 @@ func NewModel(config presenter.GoTestResultSummaryConfig, common state.Common, r
 	run.Config = runCfg
 	return &Model{
 		config: config,
-		run:    *run,
+		runs:   []gotest.Run{*run},
+		ids:    mapset.NewSet[uuid.UUID](runID),
 		common: common,
 	}
 }
@@ -101,7 +110,7 @@ func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				panic("TODO")
 			}
 
-			if j.run.ID != testEvent.RunID {
+			if !j.config.CombineMultipleRuns && !j.ids.Contains(testEvent.RunID) {
 				break
 			}
 
@@ -109,7 +118,12 @@ func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				j.started = true
 			}
 
-			j.run.Result.Update(testEvent)
+			for i := range j.runs {
+				if j.runs[i].ID == testEvent.RunID {
+					j.runs[i].Result.Update(testEvent)
+					break
+				}
+			}
 
 		case event.GoTestRunType:
 			runEvent, err := parser.ParseGoTestRunType(msg)
@@ -118,11 +132,15 @@ func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				panic("TODO")
 			}
 
-			if j.run.ID != runEvent.ID {
+			if (!j.config.CombineMultipleRuns && !j.ids.Contains(runEvent.ID)) || runEvent == nil {
 				break
 			}
 
-			j.run = *runEvent
+			if !j.ids.Contains(runEvent.ID) {
+				j.runs = append(j.runs, *runEvent)
+				j.ids.Add(runEvent.ID)
+			}
+
 		}
 	}
 
@@ -132,7 +150,7 @@ func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (j Model) View() string {
 	sb := strings.Builder{}
 	j.config.RunningState = j.common.Spinner.View
-	err := j.config.New(j.run).Present(&sb, &sb)
+	err := j.config.New(j.runs...).Present(&sb, &sb)
 	if err != nil {
 		// TODO
 		panic(err)
