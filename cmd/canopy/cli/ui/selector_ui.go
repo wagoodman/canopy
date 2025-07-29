@@ -16,22 +16,24 @@ import (
 var _ clio.UI = (*SelectorUI)(nil)
 
 type SelectorUI struct {
-	program      *tea.Program
-	running      *sync.WaitGroup
-	subscription partybus.Unsubscribable
-	initialState gotest.Definitions // what is displayed in the UI when it starts
-	model        selector.Model     // the current state of the UI model
+	program          *tea.Program
+	running          *sync.WaitGroup
+	subscription     partybus.Unsubscribable
+	testDefinitions  gotest.Definitions // what is displayed as an option in the UI when it starts
+	initialSelection gotest.References  // the initial selection of tests to run, if any
+	model            selector.Model     // the current state of the UI model
 
 	references []gotest.References
 }
 
-func NewSelectorUI(cfg selector.Config, testDefs []gotest.Definition) *SelectorUI {
+func NewSelectorUI(cfg selector.Config, testDefs gotest.Definitions, selected gotest.References) *SelectorUI {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	return &SelectorUI{
-		running:      wg,
-		initialState: testDefs,
-		model:        selector.New(cfg),
+		running:          wg,
+		testDefinitions:  testDefs,
+		initialSelection: selected,
+		model:            selector.New(cfg),
 	}
 }
 
@@ -50,7 +52,8 @@ func (s *SelectorUI) Setup(subscription partybus.Unsubscribable) error {
 	// setup initial state
 	go func() {
 		s.program.Send(uievent.SwitchState{
-			Definitions: s.initialState,
+			Definitions: s.testDefinitions,
+			Selected:    s.initialSelection,
 		})
 	}()
 

@@ -87,8 +87,11 @@ func Root(app clio.Application) *cobra.Command {
 }
 
 func runRoot(ctx context.Context, app clio.Application, rootCfg rootConfig) error {
-	// we want to narrow the available selectable tests based on the user input, including package specifiers as well as any run patterns
-	testDefs, err := gotest.FindDefinitions(rootCfg.Test.Runtime.Packages, rootCfg.Test.Run)
+	// we can't narrow down the definitions based on the run statements, instead we want to capture from the definitions,
+	// which references would be selected from those definitions. If we fitler the definitions based on the run statements,
+	// then we're at risk of claiming that the minimal test selection can select a full package, when in fact it cannot
+	// (since we may have removed some tests from the package definitions). Thus we never filter the test definitions.
+	testDefs, err := gotest.FindDefinitions(rootCfg.Test.Runtime.Packages)
 	if err != nil {
 		return err
 	}
@@ -99,10 +102,36 @@ func runRoot(ctx context.Context, app clio.Application, rootCfg rootConfig) erro
 
 	id := app.ID()
 
+	var selected gotest.References
+
+	if len(rootCfg.Test.Run) > 0 {
+		runPatterns, err := internal.MakeRegexes(rootCfg.Test.Run)
+		if err != nil {
+			return fmt.Errorf("failed to compile '-run' patterns: %w", err)
+		}
+
+		patternRemoveFilter := func(ref gotest.Reference) bool {
+			if !internal.MatchesAny(ref.FuncName, runPatterns) {
+				log.WithFields("fn", ref.FuncName, "package", ref.Package).Trace("skipping test function that does not match run patterns")
+				return true
+			}
+			return false
+		}
+
+		pkgRemoveFilter := func(ref gotest.Reference) bool {
+			if ref.IsPackage() {
+				return true
+			}
+			return false
+		}
+
+		selected = testDefs.References(patternRemoveFilter, pkgRemoveFilter)
+	}
+
 	ux := ui.NewSelectorUI(selector.Config{
 		ID:    fmt.Sprintf("%s@%s", id.Name, id.Version),
 		Debug: false,
-	}, testDefs)
+	}, testDefs, selected)
 
 	type Stater interface {
 		State() *clio.State
@@ -126,7 +155,6 @@ func runRoot(ctx context.Context, app clio.Application, rootCfg rootConfig) erro
 	runGroups := gotest.GroupIntoRuns(gotest.MinimalSelection(testDefs, refs))
 
 	if len(runGroups) == 0 {
-		fmt.Println("No tests selected to run, exiting...")
 		return nil
 	}
 

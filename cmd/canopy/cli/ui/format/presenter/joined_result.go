@@ -12,7 +12,7 @@ type result interface {
 	ReferenceElapsed(ref gotest.Reference, live bool) time.Duration
 	Elapsed(live bool) time.Duration
 	Update(e gotest.Event)
-	References() []gotest.Reference
+	References(removeFilters ...func(gotest.Reference) bool) []gotest.Reference
 	Packages() []gotest.Reference
 	Children(ref gotest.Reference) []gotest.Reference
 	ReferenceEvents(ref gotest.Reference) []gotest.Event
@@ -67,10 +67,10 @@ func (j joinedResult) Update(e gotest.Event) {
 	}
 }
 
-func (j joinedResult) References() []gotest.Reference {
+func (j joinedResult) References(removeFilters ...func(gotest.Reference) bool) []gotest.Reference {
 	var refs []gotest.Reference
 	for _, run := range j.runs {
-		refs = append(refs, run.Result.References()...)
+		refs = append(refs, run.Result.References(removeFilters...)...)
 	}
 	// TODO: deduplicate references?
 	return refs

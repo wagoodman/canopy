@@ -42,10 +42,12 @@ type Model struct {
 	list   list.Model
 	keyMap keyMap
 
-	selected gotest.References // the currently selected references
-	finished bool
+	selected  gotest.References // the currently selected references
+	finished  bool
+	cancelled bool
 
 	titleStyle       lipgloss.Style
+	cancelledStyle   lipgloss.Style
 	auxStyle         lipgloss.Style
 	filterTitleStyle lipgloss.Style
 }
@@ -86,7 +88,9 @@ func New(config Config) Model {
 		config:     config,
 		list:       l,
 		keyMap:     km,
-		titleStyle: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#04B5F7")),
+		titleStyle: lipgloss.NewStyle().Italic(true).Foreground(lipgloss.Color("#04B5F7")),
+		cancelledStyle: lipgloss.NewStyle().Italic(true).
+			Foreground(lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#ECFD65"}),
 		auxStyle: lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{
 			Light: "#909090",
 			Dark:  "#626262",
@@ -97,6 +101,10 @@ func New(config Config) Model {
 }
 
 func (m Model) Selected() []gotest.Reference {
+	if !m.finished || m.cancelled {
+		return nil
+	}
+
 	return m.selected
 }
 
@@ -116,8 +124,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case uievent.SelectedTestReferences:
 		m.selected = msg.Refs
 		m.finished = msg.Finished
-		if m.finished {
+		if msg.Finished {
 			cmds = append(cmds, tea.Quit)
+		}
+	case tea.KeyMsg:
+		switch {
+		case key.Matches(msg, m.list.KeyMap.ForceQuit):
+			m.cancelled = true
+		case key.Matches(msg, m.list.KeyMap.Quit):
+			// if we are not filtering, then treat this as a cancel
+			if !m.list.SettingFilter() && !m.list.IsFiltered() {
+				m.cancelled = true
+			}
 		}
 	}
 
@@ -177,6 +195,10 @@ func (m *Model) updateList(msg any) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+func (m Model) completed() bool {
+	return m.finished || m.cancelled
+}
+
 func (m Model) View() string {
 	return m.view()
 	//return zone.Scan(m.view())
@@ -187,7 +209,7 @@ func (m Model) view() string {
 		m.topView(),
 	}
 
-	if !m.finished {
+	if !m.completed() {
 		views = append(views, m.refrencesView(), m.bottomView())
 	}
 
@@ -214,20 +236,27 @@ func (m Model) joinedView(left, right string) string {
 
 func (m Model) topView() string {
 	msg := "Search/Select tests to run"
-	if m.finished {
-		if len(m.selected) == 0 {
+	st := m.titleStyle
+	if m.completed() {
+
+		switch {
+		case m.cancelled:
+			msg = "Test run cancelled"
+			st = m.cancelledStyle
+		case len(m.selected) == 0:
 			msg = `¯\_(ツ)_/¯`
-		} else {
+		default:
 			msg = fmt.Sprintf("Running %d test functions", m.selected.TestFunctionsCount())
+
 		}
 	}
-	title := m.titleStyle.Render(msg)
+	title := st.Render(msg)
 
-	if !m.finished && (m.list.SettingFilter() || m.list.IsFiltered()) {
+	if !m.completed() && (m.list.SettingFilter() || m.list.IsFiltered()) {
 		title += m.filterTitleStyle.Render(" [filter]") + ": " + m.list.FilterValue()
 	}
 
-	if !m.finished {
+	if !m.completed() {
 		return m.joinedView(title, m.statsView())
 	}
 

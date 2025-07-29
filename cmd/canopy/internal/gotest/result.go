@@ -200,11 +200,28 @@ func (r *Result) Update(e Event) {
 	}
 }
 
-func (r Result) References() []Reference {
+func (r Result) References(removeFilters ...func(Reference) bool) []Reference {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	return r.references.Values()
+	if len(removeFilters) == 0 {
+		return r.references.Values()
+	}
+
+	var values []Reference
+all:
+	for _, ref := range r.references.Values() {
+		// apply filters to references
+		for _, filter := range removeFilters {
+			if filter(ref) {
+				continue all
+			}
+		}
+
+		values = append(values, ref)
+	}
+
+	return values
 }
 
 func (r Result) Packages() []Reference {

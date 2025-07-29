@@ -3,11 +3,11 @@ package gotest
 import (
 	"fmt"
 	"github.com/scylladb/go-set/strset"
+	"github.com/wagoodman/canopy/cmd/canopy/internal"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -44,19 +44,28 @@ func (d Definition) References() []Reference {
 
 type Definitions []Definition
 
-func (d Definitions) References() []Reference {
+func (d Definitions) References(removeFilters ...func(Reference) bool) []Reference {
 	if len(d) == 0 {
 		return nil
 	}
+
 	var refs []Reference
 	pkgs := strset.New()
 	for _, def := range d {
+	all:
 		for _, ref := range def.References() {
+			// apply filters to the reference
+			if evaluateFilters(ref, removeFilters) {
+				log.WithFields("ref", ref).Trace("skipping reference due to filter")
+				continue all
+			}
+
 			if !pkgs.Has(ref.Package) {
 				pkgs.Add(ref.Package)
-				refs = append(refs, Reference{
-					Package: ref.Package,
-				})
+				pkgRef := ref.PackageRef()
+				if !evaluateFilters(pkgRef, removeFilters) {
+					refs = append(refs, pkgRef)
+				}
 			}
 			refs = append(refs, ref)
 		}
@@ -65,12 +74,21 @@ func (d Definitions) References() []Reference {
 	return refs
 }
 
-func FindDefinitions(collection *golist.PackageCollection, runsStatements ...string) ([]Definition, error) {
+func evaluateFilters(ref Reference, removeFilters []func(Reference) bool) bool {
+	for _, filter := range removeFilters {
+		if filter(ref) {
+			return true
+		}
+	}
+	return false
+}
+
+func FindDefinitions(collection *golist.PackageCollection, runsStatements ...string) (Definitions, error) {
 	// find and parse all '_test.go' files in given directory and subdirectories
 	fileSet := token.NewFileSet()
 	var tests []Definition
 
-	runPatterns, err := makeRegexes(runsStatements)
+	runPatterns, err := internal.MakeRegexes(runsStatements...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compile '-run' patterns: %w", err)
 	}
@@ -94,7 +112,7 @@ func FindDefinitions(collection *golist.PackageCollection, runsStatements ...str
 			importPath = curPkg.ImportPath
 		}
 		for _, fnDecl := range findTestsInFile(f) {
-			if !matchesAny(fnDecl.Name.Name, runPatterns) {
+			if !internal.MatchesAny(fnDecl.Name.Name, runPatterns) {
 				log.WithFields("fn", fnDecl.Name.Name, "importPath", importPath).Trace("skipping test function that does not match run patterns")
 				continue
 			}
@@ -128,33 +146,6 @@ func FindDefinitions(collection *golist.PackageCollection, runsStatements ...str
 	}
 
 	return tests, nil
-}
-
-func matchesAny(statement string, runPatterns []*regexp.Regexp) bool {
-	if len(runPatterns) == 0 {
-		return true // no run patterns means all statements match
-	}
-	for _, run := range runPatterns {
-		if run.MatchString(statement) {
-			return true
-		}
-	}
-	return false
-}
-
-func makeRegexes(runStatements []string) ([]*regexp.Regexp, error) {
-	var regexes []*regexp.Regexp
-	for _, run := range runStatements {
-		if run == "" {
-			continue
-		}
-		re, err := regexp.Compile(run)
-		if err != nil {
-			return nil, fmt.Errorf("failed to compile regex %q: %w", run, err)
-		}
-		regexes = append(regexes, re)
-	}
-	return regexes, nil
 }
 
 // findTestsInFile returns a slice of all test functions in the given file AST

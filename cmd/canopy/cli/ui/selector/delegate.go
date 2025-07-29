@@ -107,21 +107,42 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 			}
 		}
 
+		// set the initial test definitions
 		d.refState = newReferenceState(state.NewDefinitionViewer(msg.Definitions), d.refState)
 		cmds = append(cmds, d.refState.update(m))
-		d.onNavigate(m)
+
+		// select any items that were selected by the user with -run statements...
+		selectedSet := make(map[gotest.Reference]struct{})
+		for _, ref := range msg.Selected {
+			d.userSelect[ref] = struct{}{}
+			selectedSet[ref] = struct{}{}
+		}
+
+		firstSelectedIdx := -1
+		for candidateIdx, candidate := range m.Items() {
+			it := candidate.(item)
+			if _, ok := selectedSet[it.ref]; ok {
+				markChildren(it, candidateIdx, d.visibleItems(m), d.userSelect, false, d.refState.children)
+				firstSelectedIdx = candidateIdx // remember the first selected item
+			}
+		}
+
+		if firstSelectedIdx >= 0 {
+			m.Select(firstSelectedIdx) // move the cursor to the last selected item
+		}
+		cmds = append(cmds, d.onNavigate(m))
 
 	case tea.MouseMsg:
 		switch msg.Button {
 		case tea.MouseButtonWheelUp:
 			m.CursorUp()
-			d.onNavigate(m)
+			cmds = append(cmds, d.onNavigate(m))
 		case tea.MouseButtonWheelDown:
 			m.CursorDown()
-			d.onNavigate(m)
+			cmds = append(cmds, d.onNavigate(m))
 		default:
 			if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
-				d.onNavigate(m)
+				cmds = append(cmds, d.onNavigate(m))
 			}
 		}
 
@@ -130,6 +151,7 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 		switch {
 		case key.Matches(msg, d.keyMap.SelectTest):
 			cmds = append(cmds, d.onToggleMultiselect(m))
+			cmds = append(cmds, d.onNavigate(m))
 
 		case key.Matches(msg, d.keyMap.SelectAllTests):
 			isAllAlreadySelected := len(d.userSelect) == len(m.Items())
@@ -137,14 +159,14 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 
 		case key.Matches(msg, d.keyMap.NextPackage):
 			cmds = append(cmds, d.nextPkg(m))
-			d.onNavigate(m)
+			cmds = append(cmds, d.onNavigate(m))
 
 		case key.Matches(msg, d.keyMap.PrevPackage):
 			cmds = append(cmds, d.prevPkg(m))
-			d.onNavigate(m)
+			cmds = append(cmds, d.onNavigate(m))
 
 		case key.Matches(msg, m.KeyMap.CursorDown, m.KeyMap.CursorUp, m.KeyMap.PrevPage, m.KeyMap.NextPage):
-			d.onNavigate(m)
+			cmds = append(cmds, d.onNavigate(m))
 
 		case key.Matches(msg, d.keyMap.ToggleReferenceLongForm):
 			// toggle the long form view
@@ -226,7 +248,7 @@ func (d *listItemDelegate) prevPkg(m *list.Model) tea.Cmd {
 	return d.refState.update(m)
 }
 
-func (d *listItemDelegate) onNavigate(m *list.Model) {
+func (d *listItemDelegate) onNavigate(m *list.Model) tea.Cmd {
 	currentItem := m.SelectedItem()
 	if currentItem == nil {
 		// we have changed the view in a way that invalidates the selection (we're outside of the bounds)
@@ -243,6 +265,13 @@ func (d *listItemDelegate) onNavigate(m *list.Model) {
 	d.cursorScope = make(map[gotest.Reference]struct{})
 	selectedIdx, selected := d.selectedItem(m)
 	d.cursorScopeSize = markChildren(selected, selectedIdx, d.visibleItems(m), d.cursorScope, false, d.refState.children)
+
+	if len(d.cursorScope) > 0 && len(d.userSelect) == 0 {
+		// special case: if the user is hovering over an item, but has not selected any items, then these are implicitly selected
+		// in case the user hits "enter".
+		return d.selectedTestReferences(m, false)
+	}
+	return nil
 }
 
 func (d *listItemDelegate) onSelectAll(m *list.Model, isAllAlreadySelected bool) tea.Cmd {
@@ -333,7 +362,14 @@ func markChildren(selected item, start int, items []item, marker map[gotest.Refe
 		it := items[i]
 
 		if it.ref.IsPackage() {
+
 			if isChild(&selected.ref, &it.ref) {
+				if invert {
+					delete(marker, it.ref)
+				} else {
+					marker[it.ref] = struct{}{}
+					count++
+				}
 				// mark by what is defined within the package (not by what is visible)
 				for _, child := range children[it.ref] {
 					if invert {

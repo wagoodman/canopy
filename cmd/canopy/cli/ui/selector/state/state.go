@@ -5,7 +5,7 @@ import (
 )
 
 type DefinitionViewer interface {
-	References() []gotest.Reference
+	References(removeFilters ...func(gotest.Reference) bool) []gotest.Reference
 }
 
 func NewDefinitionViewer(defs gotest.Definitions) DefinitionViewer {
