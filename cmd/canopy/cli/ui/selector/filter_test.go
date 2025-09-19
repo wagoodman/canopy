@@ -188,7 +188,7 @@ func TestFilter(t *testing.T) {
 			name:    "simple path segment match - format",
 			term:    "format",
 			targets: testStrings,
-			// should match items containing "format" path segment  
+			// should match items containing "format" path segment
 			expectedMatches: []string{
 				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler",
 				"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/TestMultiPackageHandler_Handle",

@@ -124,9 +124,9 @@ func TestMinimalSelection(t *testing.T) {
 			},
 		},
 		{
-			name: "empty inputs",
-			defs: Definitions{},
-			refs: References{},
+			name:     "empty inputs",
+			defs:     Definitions{},
+			refs:     References{},
 			expected: nil,
 		},
 		{

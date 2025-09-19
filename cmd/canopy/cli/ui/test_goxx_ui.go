@@ -83,7 +83,7 @@ func readerWriterPair() (io.Reader, io.WriteCloser) {
 	return r, w
 }
 
-func newDefaultDynamicGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI { //nolint:funlen
+func newDefaultDynamicGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 	spin := syncspinner.New()
 
 	pkgConfig := goxx.QuietPackageConfig{

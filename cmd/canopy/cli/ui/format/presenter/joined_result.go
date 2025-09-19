@@ -1,9 +1,10 @@
 package presenter
 
 import (
-	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"io"
 	"time"
+
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
 
 var _ result = (*joinedResult)(nil)

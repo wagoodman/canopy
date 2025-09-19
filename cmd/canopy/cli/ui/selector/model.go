@@ -2,6 +2,8 @@ package selector
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/paginator"
@@ -9,7 +11,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	uievent "github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
-	"strings"
 )
 
 type Config struct {
@@ -53,7 +54,7 @@ type Model struct {
 }
 
 func New(config Config) Model {
-	//zone.NewGlobal()
+	// zone.NewGlobal()
 
 	km := newKeyMap()
 
@@ -75,7 +76,7 @@ func New(config Config) Model {
 	l.SetShowFilter(false) // we will handle this
 
 	// TODO: why isn't this working on test functions? only on packages?
-	//l.Filter = filter
+	// l.Filter = filter
 
 	l.AdditionalShortHelpKeys = func() []key.Binding {
 		return km.AdditionalShortHelp()
@@ -201,7 +202,7 @@ func (m Model) completed() bool {
 
 func (m Model) View() string {
 	return m.view()
-	//return zone.Scan(m.view())
+	// return zone.Scan(m.view())
 }
 
 func (m Model) view() string {
@@ -238,7 +239,6 @@ func (m Model) topView() string {
 	msg := "Search/Select tests to run"
 	st := m.titleStyle
 	if m.completed() {
-
 		switch {
 		case m.cancelled:
 			msg = "Test run cancelled"
@@ -247,7 +247,6 @@ func (m Model) topView() string {
 			msg = `¯\_(ツ)_/¯`
 		default:
 			msg = fmt.Sprintf("Running %d test functions", m.selected.TestFunctionsCount())
-
 		}
 	}
 	title := st.Render(msg)
@@ -285,7 +284,6 @@ func (m Model) statsView() string {
 
 	selection := "(no tests selected)"
 	if tests != 0 {
-
 		testTitle := "tests"
 		if tests == 1 {
 			testTitle = "test"

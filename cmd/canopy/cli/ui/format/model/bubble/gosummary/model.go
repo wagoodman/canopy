@@ -1,10 +1,10 @@
 package gosummary
 
 import (
-	mapset "github.com/deckarep/golang-set/v2"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/google/uuid"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
@@ -140,7 +140,6 @@ func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				j.runs = append(j.runs, *runEvent)
 				j.ids.Add(runEvent.ID)
 			}
-
 		}
 	}
 

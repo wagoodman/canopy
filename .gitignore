@@ -8,6 +8,7 @@
 .tool
 .tmp
 .task
+CLAUDE.md
 
 # builds
 snapshot

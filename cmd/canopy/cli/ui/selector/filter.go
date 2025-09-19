@@ -1,10 +1,11 @@
 package selector
 
 import (
+	"sort"
+
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/junegunn/fzf/src/algo"
 	"github.com/junegunn/fzf/src/util"
-	"sort"
 )
 
 func init() {

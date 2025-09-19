@@ -2,6 +2,7 @@ package selector
 
 import (
 	"fmt"
+
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
@@ -21,7 +22,7 @@ type item struct {
 
 func (i item) Title() string {
 	return i.title
-	//zone.Mark(i.title, i.title) }
+	// zone.Mark(i.title, i.title) }
 }
 
 func (i item) Description() string {
@@ -30,7 +31,7 @@ func (i item) Description() string {
 
 func (i item) FilterValue() string {
 	return i.filter
-	//zone.Mark(i.title, i.title) } // TODO: breaks filtering (when using in the filter value and not in the filter value... either messes with the lengths to select matched characters, or breaks rendering of patially matching ansi characters)
+	// zone.Mark(i.title, i.title) } // TODO: breaks filtering (when using in the filter value and not in the filter value... either messes with the lengths to select matched characters, or breaks rendering of patially matching ansi characters)
 }
 
 func newItems(showFullReference bool, pkgsOnly bool, refs ...gotest.Reference) []list.Item {
@@ -91,7 +92,7 @@ func fullReferenceTitle(ref gotest.Reference, tRuns []string) string {
 	var tRunsStr string
 	if len(tRuns) > 0 {
 		tRunsStr = auxCasesStyle.Render(fmt.Sprintf(" (%d cases)", len(tRuns)))
-		//tRunsStr = fmt.Sprintf(" (%d cases)", len(tRuns))
+		// tRunsStr = fmt.Sprintf(" (%d cases)", len(tRuns))
 	}
 	return ref.String(true) + tRunsStr
 }
@@ -100,7 +101,7 @@ func treeTitle(ref gotest.Reference, tRuns []string) string {
 	var tRunsStr string
 	if len(tRuns) > 0 {
 		tRunsStr = auxCasesStyle.Render(fmt.Sprintf(" (%d cases)", len(tRuns)))
-		//tRunsStr = fmt.Sprintf(" (%d cases)", len(tRuns))
+		// tRunsStr = fmt.Sprintf(" (%d cases)", len(tRuns))
 	}
 
 	if ref.FuncName != "" {

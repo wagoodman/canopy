@@ -1,11 +1,11 @@
 package gotest
 
 import (
-	"github.com/stretchr/testify/assert"
 	"go/token"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 )

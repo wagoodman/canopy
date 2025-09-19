@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/anchore/go-sync"
 	"os"
 	"os/signal"
 	"runtime"
@@ -16,6 +15,7 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 
 	"github.com/anchore/clio"
+	"github.com/anchore/go-sync"
 )
 
 const valueNotProvided = "[not provided]"

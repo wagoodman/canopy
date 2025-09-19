@@ -24,7 +24,7 @@ func NewTestGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
 	return newSafeGoUI(cfg, maxPkgNameLength)
 }
 
-func newDynamicGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI { //nolint:funlen
+func newDynamicGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
 	spin := syncspinner.New()
 
 	common := state.Common{

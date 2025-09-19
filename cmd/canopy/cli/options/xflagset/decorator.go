@@ -2,8 +2,8 @@ package xflagset
 
 import (
 	"fmt"
-	"github.com/scylladb/go-set/strset"
 
+	"github.com/scylladb/go-set/strset"
 	"github.com/spf13/pflag"
 
 	"github.com/anchore/fangs"

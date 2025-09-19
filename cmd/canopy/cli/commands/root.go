@@ -3,8 +3,9 @@ package commands
 import (
 	"context"
 	"fmt"
-	"github.com/anchore/clio"
-	"github.com/anchore/go-sync"
+	"strings"
+	"time"
+
 	"github.com/hashicorp/go-multierror"
 	"github.com/spf13/cobra"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui"
@@ -14,8 +15,9 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/test"
-	"strings"
-	"time"
+
+	"github.com/anchore/clio"
+	"github.com/anchore/go-sync"
 )
 
 type rootConfig struct {
@@ -32,7 +34,7 @@ func defaultRootOptions() *rootConfig {
 		),
 	}
 
-	c.Test.Packages.Specifiers = []string{"./..."} // default to all project packages
+	c.Test.Specifiers = []string{"./..."} // default to all project packages
 
 	return &c
 }
@@ -236,7 +238,7 @@ func runRoot(ctx context.Context, app clio.Application, rootCfg rootConfig) erro
 		return fmt.Errorf("unable to run tests: %w", err)
 	}
 
-	_, resultErr := evaluateResults(runs, time.Now().Sub(start), logTestFailuresAsErrors)
+	_, resultErr := evaluateResults(runs, time.Since(start), logTestFailuresAsErrors)
 
 	return resultErr
 }

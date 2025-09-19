@@ -1,12 +1,12 @@
 package presenter
 
 import (
-	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"strings"
 	"testing"
 
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/require"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
 
 func TestJestTestResultSummary_Present(t *testing.T) {

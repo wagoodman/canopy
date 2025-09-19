@@ -1,6 +1,9 @@
 package selector
 
 import (
+	"io"
+	"sort"
+
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -9,8 +12,6 @@ import (
 	uievent "github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/event"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/state"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
-	"io"
-	"sort"
 )
 
 var (
@@ -91,7 +92,6 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 	cmds = append(cmds, d.DefaultDelegate.Update(msg, m))
 
 	switch msg := msg.(type) {
-
 	case uievent.RefreshReferences:
 		cmds = append(cmds, d.refState.update(m, msg.AboutToFilter))
 
@@ -195,7 +195,6 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 			m.SetFilterText(m.FilterInput.Value() + msg.String())
 			m.SetFilterState(list.Filtering)
 			cmds = append(cmds, d.refState.update(m))
-
 		}
 	}
 
@@ -315,7 +314,7 @@ func (d listItemDelegate) selectedItem(m *list.Model) (int, item) {
 func (d listItemDelegate) selectedTestReferences(m *list.Model, finished bool) tea.Cmd {
 	var cmds []tea.Cmd
 	refs := d.selectedReferences()
-	//if finished {
+	// if finished {
 	//	cmds = append(cmds, d.refState.finish(m, refs))
 	//}
 	cmds = append(cmds, func() tea.Msg {
@@ -362,7 +361,6 @@ func markChildren(selected item, start int, items []item, marker map[gotest.Refe
 		it := items[i]
 
 		if it.ref.IsPackage() {
-
 			if isChild(&selected.ref, &it.ref) {
 				if invert {
 					delete(marker, it.ref)
@@ -433,7 +431,6 @@ func markAll(items []item, marker map[gotest.Reference]struct{}, invert bool) in
 			marker[it.ref] = struct{}{}
 			count++
 		}
-
 	}
 	return count
 }
@@ -475,11 +472,10 @@ func (d listItemDelegate) Render(w io.Writer, m list.Model, idx int, i list.Item
 			// cursor is hovering over this item or a parent of this item
 			d.Styles.NormalTitle = d.styles.hoverLine.BorderStyle(hoverBorder)
 		}
-
 	}
 
 	// don't show matched characters when filtering is not occurring (including when the filter has been applied)
-	//if m.FilterState() == list.Filtering {
+	// if m.FilterState() == list.Filtering {
 	//	d.DefaultDelegate.Styles.FilterMatch = d.filterMatchStyle
 	//} else {
 	//	d.DefaultDelegate.Styles.FilterMatch = d.normalStyle

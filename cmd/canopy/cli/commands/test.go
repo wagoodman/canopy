@@ -101,13 +101,13 @@ func withoutOpenOpts() func(*TestCoreConfig) {
 
 func withoutRunOptsRendered() func(*TestCoreConfig) {
 	return func(cfg *TestCoreConfig) {
-		cfg.Test.GoTest.IgnoreRenderingFlags = append(cfg.Test.GoTest.IgnoreRenderingFlags, "run")
+		cfg.Test.IgnoreRenderingFlags = append(cfg.Test.IgnoreRenderingFlags, "run")
 	}
 }
 
 func withCombineMultipleRuns() func(*TestCoreConfig) {
 	return func(cfg *TestCoreConfig) {
-		cfg.Test.Appearance.CombineMultipleRuns = true
+		cfg.Test.CombineMultipleRuns = true
 	}
 }
 

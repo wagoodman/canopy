@@ -2,7 +2,8 @@ package ui
 
 import (
 	"fmt"
-	"github.com/anchore/clio"
+	"sync"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector"
 	uievent "github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/event"
@@ -10,7 +11,8 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
-	"sync"
+
+	"github.com/anchore/clio"
 )
 
 var _ clio.UI = (*SelectorUI)(nil)
@@ -71,7 +73,6 @@ func (s *SelectorUI) Setup(subscription partybus.Unsubscribable) error {
 		} else {
 			log.Errorf("unexpected final model type: %T", finalModel)
 		}
-
 	}()
 
 	return nil

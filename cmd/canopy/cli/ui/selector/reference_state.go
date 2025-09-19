@@ -1,11 +1,12 @@
 package selector
 
 import (
+	"sort"
+
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector/state"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
-	"sort"
 )
 
 type referenceState struct {

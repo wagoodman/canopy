@@ -1,8 +1,9 @@
 package gotest
 
 import (
-	"github.com/lindell/go-ordered-set/orderedset"
 	"sort"
+
+	"github.com/lindell/go-ordered-set/orderedset"
 )
 
 // MinimalSelection returns a minimal set of references that can be used to run tests relative to the provided definitions.
@@ -37,7 +38,6 @@ import (
 // References that have t.Run cases should be ignored entirely, however, if there is no function reference for a package,
 // then the function reference with no t.Run cases should be used or created.
 func MinimalSelection(defs Definitions, refs References) References {
-
 	// create a map of package -> set of all test functions defined in that package
 	packageFunctions := make(map[string]map[string]bool)
 	for _, def := range defs {

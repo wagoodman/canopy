@@ -2,7 +2,6 @@ package gostd
 
 import (
 	"fmt"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/internal"
 	"io"
 	"sort"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/internal"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
