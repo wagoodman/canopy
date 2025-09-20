@@ -477,7 +477,7 @@ func (d listItemDelegate) Render(w io.Writer, m list.Model, idx int, i list.Item
 	// don't show matched characters when filtering is not occurring (including when the filter has been applied)
 	// if m.FilterState() == list.Filtering {
 	//	d.DefaultDelegate.Styles.FilterMatch = d.filterMatchStyle
-	//} else {
+	// } else {
 	//	d.DefaultDelegate.Styles.FilterMatch = d.normalStyle
 	//}
 

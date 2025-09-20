@@ -12,49 +12,9 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
-
-	"github.com/anchore/bubbly"
 )
 
-var (
-	_ bubbly.EventHandler = (*Factory)(nil)
-	_ tea.Model           = (*Model)(nil)
-)
-
-type Factory struct {
-	config presenter.JestTestResultSummaryConfig
-	seen   map[uuid.UUID]struct{}
-}
-
-func NewFactory(cfg presenter.JestTestResultSummaryConfig) *Factory {
-	return &Factory{
-		config: cfg,
-		seen:   make(map[uuid.UUID]struct{}),
-	}
-}
-
-func (j Factory) RespondsTo() []partybus.EventType {
-	return []partybus.EventType{event.GoTestType, event.GoTestRunType}
-}
-
-func (j Factory) Handle(e partybus.Event) ([]tea.Model, tea.Cmd) {
-	if e.Type != event.GoTestType {
-		return nil, nil
-	}
-
-	gt, err := parser.ParseGoTestType(e)
-	if err != nil {
-		log.WithFields("error", err).Error("unable to parse go test event")
-		return nil, nil
-	}
-
-	if _, ok := j.seen[gt.RunID]; ok {
-		return nil, nil
-	}
-
-	j.seen[gt.RunID] = struct{}{}
-	return []tea.Model{NewModel(j.config, gt.RunID)}, nil
-}
+var _ tea.Model = (*Model)(nil)
 
 type Model struct {
 	config  presenter.JestTestResultSummaryConfig
@@ -77,19 +37,19 @@ func NewModel(config presenter.JestTestResultSummaryConfig, runID uuid.UUID) *Mo
 	}
 }
 
-func (j Model) Init() tea.Cmd {
-	return j.timer.tick()
+func (m Model) Init() tea.Cmd {
+	return m.timer.tick()
 }
 
-func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case timerTickMessage:
-		if msg.id != j.timer.id {
+		if msg.id != m.timer.id {
 			break
 		}
 
-		cmd = j.timer.tick()
+		cmd = m.timer.tick()
 
 	case partybus.Event:
 
@@ -101,15 +61,15 @@ func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				panic("TODO")
 			}
 
-			if j.run.ID != testEvent.RunID {
+			if m.run.ID != testEvent.RunID {
 				break
 			}
 
-			if !j.started {
-				j.started = true
+			if !m.started {
+				m.started = true
 			}
 
-			j.run.Result.Update(testEvent)
+			m.run.Result.Update(testEvent)
 
 		case event.GoTestRunType:
 			runEvent, err := parser.ParseGoTestRunType(msg)
@@ -118,20 +78,20 @@ func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				panic("TODO")
 			}
 
-			if j.run.ID != runEvent.ID {
+			if m.run.ID != runEvent.ID {
 				break
 			}
 
-			j.run = *runEvent
+			m.run = *runEvent
 		}
 	}
 
-	return j, cmd
+	return m, cmd
 }
 
-func (j Model) View() string {
+func (m Model) View() string {
 	sb := strings.Builder{}
-	err := j.config.New(j.run).Present(&sb, &sb)
+	err := m.config.New(m.run).Present(&sb, &sb)
 	if err != nil {
 		// TODO
 		panic(err)
