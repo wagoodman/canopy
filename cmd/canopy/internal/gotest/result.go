@@ -117,9 +117,9 @@ func (r *Result) Elapsed(live bool) time.Duration {
 
 	// we want to use the timestamps as the source of truth for calculating elapsed, however, we also need to ensure
 	// this is always relative to time.Now() so that subsequent calls will result in updated (non-static) values.
-	replayStart := time.Now().Add(-r.startOffset)
-	return replayStart.Add(r.totalElapsed).Sub(r.start)
-	// return time.Now().Add(-r.startOffset).Sub(r.start)
+	// Note: don't use r.totalElapsed as input into determining this since we don't know if there is a single
+	// track of tests being run or if t.Parallel() is being used.
+	return time.Now().Add(-r.startOffset).Sub(r.start)
 }
 
 func (r *Result) Update(e Event) {
