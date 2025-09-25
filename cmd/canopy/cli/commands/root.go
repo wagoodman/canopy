@@ -20,6 +20,24 @@ import (
 	"github.com/anchore/go-sync"
 )
 
+//const prettyTitle = `
+//▛▘▀▌▛▌▛▌▛▌▌▌
+//▙▖█▌▌▌▙▌▙▌▙▌
+//        ▌ ▄▌
+//`
+
+//const prettyTitle = `
+//░█▀▀░█▀█░█▀█░█▀█░█▀█░█░█
+//░█░░░█▀█░█░█░█░█░█▀▀░░█░
+//░▀▀▀░▀░▀░▀░▀░▀▀▀░▀░░░░▀░
+//`
+
+const prettyTitle = `
+█▀▀ ▄▀▀▄ █▀▀▄ █▀▀█ █▀▀█ █  █
+█░░ █▄▄█ █░░█ █░░█ █░░█ █░░█
+▀▀▀ ▀  ▀ ▀  ▀ ▀▀▀▀ █▀▀▀ ▀▀▀█
+                   ▀     ▀▀`
+
 type rootConfig struct {
 	*TestCoreConfig `yaml:",inline" json:",inline" mapstructure:",squash"`
 }
@@ -46,7 +64,7 @@ func Root(app clio.Application) *cobra.Command {
 	return app.SetupRootCommand(&cobra.Command{
 		Use:   fmt.Sprintf("%s GO-PKG-SPECIFIER...", app.ID().Name),
 		Short: "select and run go tests",
-		Long:  "This is a wrapper around the 'go test' command that provides additional value. See 'go help test' and 'go help build' for detailed flag information.",
+		Long:  "This is a wrapper around the 'go test' command that provides additional value. See 'go help test' and 'go help build' for detailed flag information." + "\n" + prettyTitle,
 		Args: func(_ *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				opts.Test.Specifiers = args
