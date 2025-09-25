@@ -2,6 +2,7 @@ package selector
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/junegunn/fzf/src/algo"
@@ -41,6 +42,8 @@ func filter(term string, targets []string) []list.Rank {
 		return result
 	}
 
+	term = strings.ToLower(strings.TrimSpace(term))
+
 	pattern := []rune(term)
 	var slab util.Slab
 	var results []rankResult
@@ -50,7 +53,7 @@ func filter(term string, targets []string) []list.Rank {
 		result, positions := algo.FuzzyMatchV2(
 			false, // consider input as case-insensitive
 			true,  // non ascii characters are equated to similar ascii characters
-			true,  // forward search
+			false, // backwards search will bias the test and cases over the directory structure
 			&chars,
 			pattern,
 			true, // keep positions

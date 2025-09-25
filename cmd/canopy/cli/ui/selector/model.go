@@ -75,8 +75,8 @@ func New(config Config) Model {
 	l.Paginator.Type = paginator.Arabic
 	l.SetShowFilter(false) // we will handle this
 
-	// TODO: why isn't this working on test functions? only on packages?
-	// l.Filter = filter
+	// we want a little more control over how filtering works, so we provide our own filter function
+	l.Filter = filter
 
 	l.AdditionalShortHelpKeys = func() []key.Binding {
 		return km.AdditionalShortHelp()
