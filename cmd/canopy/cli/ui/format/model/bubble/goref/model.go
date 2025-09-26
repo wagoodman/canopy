@@ -62,103 +62,103 @@ func NewModel(ref gotest.Reference, common state.Common, viewer Viewer, rowFacto
 	}
 }
 
-func (j Model) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-func (j Model) ShouldImprint() bool {
-	return j.isExpired(true)
+func (m Model) ShouldImprint() bool {
+	return m.isExpired(true)
 }
 
-func (j Model) isExpired(enabled bool) bool {
+func (m Model) isExpired(enabled bool) bool {
 	if !enabled {
 		return false
 	}
-	switch j.action {
+	switch m.action {
 	case gotest.PassAction, gotest.FailAction, gotest.SkipAction:
 		return true
 	}
 	return false
 }
 
-func (j Model) IsAlive() bool {
+func (m Model) IsAlive() bool {
 	return true
 }
 
-func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	j.common.OnMessage(msg)
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m.common.OnMessage(msg)
 	switch msg := msg.(type) {
 	case partybus.Event:
-		return j.handlePartybusEvent(msg)
+		return m.handlePartybusEvent(msg)
 	}
-	return j, nil
+	return m, nil
 }
 
-func (j Model) handlePartybusEvent(e partybus.Event) (tea.Model, tea.Cmd) {
+func (m Model) handlePartybusEvent(e partybus.Event) (tea.Model, tea.Cmd) {
 	if e.Type != event.GoTestType {
-		return j, nil
+		return m, nil
 	}
 
 	gt, err := parser.ParseGoTestType(e)
 	if err != nil {
 		log.WithFields("error", err).Error("unable to parse go test event")
-		return j, nil
+		return m, nil
 	}
 
-	if gt.Reference.Package != j.ref.Package {
-		return j, nil
+	if gt.Reference.Package != m.ref.Package {
+		return m, nil
 	}
 
-	j.trackRunningTests(gt)
+	m.trackRunningTests(gt)
 
-	if j.start == nil {
-		j.start = &gt.Time
+	if m.start == nil {
+		m.start = &gt.Time
 	}
 
-	if gt.Reference == j.ref {
-		j.action = gt.Action
+	if gt.Reference == m.ref {
+		m.action = gt.Action
 	}
 
-	err = j.fragment.OnGoTestEvent(gt)
+	err = m.fragment.OnGoTestEvent(gt)
 	switch {
 	case err == nil:
 		break
 	case errors.Is(err, handler.ErrPackageComplete):
-		return j, nil
+		return m, nil
 	default:
 		panic("TODO: gostdref error: " + err.Error())
 	}
 
-	return j, nil
+	return m, nil
 }
 
-func (j *Model) trackRunningTests(e gotest.Event) {
+func (m *Model) trackRunningTests(e gotest.Event) {
 	if e.Reference.IsPackage() {
 		return
 	}
 	switch e.Action {
 	case gotest.RunAction:
-		j.running[e.Reference] = struct{}{}
+		m.running[e.Reference] = struct{}{}
 	case gotest.PassAction, gotest.FailAction, gotest.SkipAction:
-		delete(j.running, e.Reference)
-		j.completed[e.Reference] = struct{}{}
+		delete(m.running, e.Reference)
+		m.completed[e.Reference] = struct{}{}
 	}
 }
 
-func (j Model) View() string {
-	if buffer := j.buffer.String(); buffer != "" {
+func (m Model) View() string {
+	if buffer := m.buffer.String(); buffer != "" {
 		return strings.TrimSpace(buffer)
 	}
 
-	render := strings.TrimSpace(j.fragment.String())
+	render := strings.TrimSpace(m.fragment.String())
 	if render != "" {
 		return render
 	}
 
 	var elapsed time.Duration
-	if j.start != nil {
-		elapsed = time.Since(*j.start).Truncate(time.Millisecond)
+	if m.start != nil {
+		elapsed = time.Since(*m.start).Truncate(time.Millisecond)
 	}
 
-	return j.viewer(j.ref, j.common, j.completed, elapsed)
+	return m.viewer(m.ref, m.common, m.completed, elapsed)
 }

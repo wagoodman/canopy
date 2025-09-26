@@ -15,7 +15,7 @@ import (
 
 var _ Presenter = (*GoTestResultSummary)(nil)
 
-type GoTestResultSummaryConfig struct {
+type GoSummaryConfig struct {
 	// Color enables/ disables color output
 	Color bool
 
@@ -24,9 +24,6 @@ type GoTestResultSummaryConfig struct {
 
 	// PackageNameWidth is the width of the package name in the summary (controls where the aux component column starts)
 	PackageNameWidth int
-
-	// PackageCount is the number of packages in the test run
-	PackageCount int
 
 	// ShowPackageCount toggles whether the package count is shown in the summary
 	ShowPackageCount bool
@@ -54,10 +51,12 @@ type GoTestResultSummaryConfig struct {
 	// or allow for skipping ahead across packages that are taking a long time to complete (based on the stale duration).
 	LoosePackageOrder    bool
 	StalePackageDuration time.Duration
+
+	CombineMultipleRuns bool
 }
 
-func DefaultGoTestResultSummaryConfig() GoTestResultSummaryConfig {
-	return GoTestResultSummaryConfig{
+func DefaultGoTestResultSummaryConfig() GoSummaryConfig {
+	return GoSummaryConfig{
 		Color:                            true,
 		ShowRunningTests:                 true,
 		ShowElapsedForRunningPackages:    true,
@@ -71,88 +70,90 @@ func DefaultGoTestResultSummaryConfig() GoTestResultSummaryConfig {
 	}
 }
 
-func (c GoTestResultSummaryConfig) WithColor(color bool) GoTestResultSummaryConfig {
+func (c GoSummaryConfig) WithColor(color bool) GoSummaryConfig {
 	c.Color = color
 	return c
 }
 
-func (c GoTestResultSummaryConfig) WithWriteToStderr(writeToStderr bool) GoTestResultSummaryConfig {
+func (c GoSummaryConfig) WithWriteToStderr(writeToStderr bool) GoSummaryConfig {
 	c.WriteToStderr = writeToStderr
 	return c
 }
 
-func (c GoTestResultSummaryConfig) WithPackageNameWidth(width int) GoTestResultSummaryConfig {
+func (c GoSummaryConfig) WithPackageNameWidth(width int) GoSummaryConfig {
 	c.PackageNameWidth = width
 	return c
 }
 
-func (c GoTestResultSummaryConfig) WithPackageCount(count int) GoTestResultSummaryConfig {
-	c.PackageCount = count
-	return c
-}
-
-func (c GoTestResultSummaryConfig) WithShowPackageCount(show bool) GoTestResultSummaryConfig {
+func (c GoSummaryConfig) WithShowPackageCount(show bool) GoSummaryConfig {
 	c.ShowPackageCount = show
 	return c
 }
 
-func (c GoTestResultSummaryConfig) WithShowTotalTestCount(show bool) GoTestResultSummaryConfig {
+func (c GoSummaryConfig) WithShowTotalTestCount(show bool) GoSummaryConfig {
 	c.ShowTotalTestCount = show
 	return c
 }
 
-func (c GoTestResultSummaryConfig) WithRunningState(state string) GoTestResultSummaryConfig {
+func (c GoSummaryConfig) WithRunningState(state string) GoSummaryConfig {
 	c.RunningState = state
 	return c
 }
 
-func (c GoTestResultSummaryConfig) WithDurationFromEvents(durationFromEvents bool) GoTestResultSummaryConfig {
+func (c GoSummaryConfig) WithDurationFromEvents(durationFromEvents bool) GoSummaryConfig {
 	c.DurationFromEvents = durationFromEvents
 	return c
 }
 
-func (c GoTestResultSummaryConfig) WithShowRunningTests(show bool) GoTestResultSummaryConfig {
+func (c GoSummaryConfig) WithShowRunningTests(show bool) GoSummaryConfig {
 	c.ShowRunningTests = show
 	return c
 }
 
-func (c GoTestResultSummaryConfig) WithShowElapsedForRunningPackages(show bool) GoTestResultSummaryConfig {
+func (c GoSummaryConfig) WithShowElapsedForRunningPackages(show bool) GoSummaryConfig {
 	c.ShowElapsedForRunningPackages = show
 	return c
 }
 
-func (c GoTestResultSummaryConfig) WithShowTestStatsForRunningPackages(show bool) GoTestResultSummaryConfig {
+func (c GoSummaryConfig) WithShowTestStatsForRunningPackages(show bool) GoSummaryConfig {
 	c.ShowTestStatsForRunningPackages = show
 	return c
 }
 
-func (c GoTestResultSummaryConfig) WithShowSummaryForUnrenderedPackages(show bool) GoTestResultSummaryConfig {
+func (c GoSummaryConfig) WithShowSummaryForUnrenderedPackages(show bool) GoSummaryConfig {
 	c.ShowSummaryForUnrenderedPackages = show
 	return c
 }
 
-func (c GoTestResultSummaryConfig) WithLoosePackageOrder(loose bool) GoTestResultSummaryConfig {
+func (c GoSummaryConfig) WithLoosePackageOrder(loose bool) GoSummaryConfig {
 	c.LoosePackageOrder = loose
 	return c
 }
 
-func (c GoTestResultSummaryConfig) WithStalePackageDuration(duration time.Duration) GoTestResultSummaryConfig {
+func (c GoSummaryConfig) WithStalePackageDuration(duration time.Duration) GoSummaryConfig {
 	c.StalePackageDuration = duration
 	return c
 }
 
-func (c GoTestResultSummaryConfig) New(run gotest.Run) Presenter {
+func (c GoSummaryConfig) WithCombineMultipleRuns(combine bool) GoSummaryConfig {
+	c.CombineMultipleRuns = combine
+	return c
+}
+
+func (c GoSummaryConfig) New(runs ...gotest.Run) Presenter {
 	return GoTestResultSummary{
-		config: c,
-		style:  style.NewGo(c.Color),
-		run:    run,
+		config:  c,
+		style:   style.NewGo(c.Color),
+		runs:    runs,
+		results: newJoinedResults(runs...),
 	}
 }
 
 type GoTestResultSummary struct {
-	config GoTestResultSummaryConfig
-	style  style.Go
-	run    gotest.Run
+	config  GoSummaryConfig
+	style   style.Go
+	runs    []gotest.Run
+	results result
 }
 
 func (s GoTestResultSummary) Present(stdout, stderr io.Writer) error {
@@ -176,7 +177,7 @@ func (s GoTestResultSummary) Present(stdout, stderr io.Writer) error {
 }
 
 func (s GoTestResultSummary) runningFooter() string { //nolint:funlen
-	runningRefs := s.run.Result.ReferencesByAction(gotest.RunAction)
+	runningRefs := s.results.ReferencesByAction(gotest.RunAction)
 
 	// these references are in started order... but that doesn't mean they are in the logical topological order if t.Parallel() is used across tests / subtests
 	sort.Sort(gotest.References(runningRefs))
@@ -193,7 +194,7 @@ func (s GoTestResultSummary) runningFooter() string { //nolint:funlen
 		if !pkgsSet.Has(ref.Package) {
 			pkgsSet.Add(ref.Package)
 			runningPkgRefs = append(runningPkgRefs, ref.PackageRef())
-			statsByPackage[ref.Package] = s.run.Result.ReferenceTestStats(ref.PackageRef(), false)
+			statsByPackage[ref.Package] = s.results.ReferenceTestStats(ref.PackageRef(), false)
 		}
 
 		if ref.IsSubTest() {
@@ -241,7 +242,7 @@ func (s GoTestResultSummary) runningFooter() string { //nolint:funlen
 			includeRollupLine()
 		}
 
-		elapsed := s.run.Result.ReferenceElapsed(runningPkgRef, !s.config.DurationFromEvents)
+		elapsed := s.results.ReferenceElapsed(runningPkgRef, !s.config.DurationFromEvents)
 		if elapsed < 1*time.Second {
 			// low pass filter for events... otherwise we'll see a jitter of a lot of packages that show up briefly
 			// as running, but may be removed when completed without printing the final result in cases where
@@ -289,7 +290,7 @@ func (s GoTestResultSummary) firstNonStaleRunningRef(runningPkgRefs []gotest.Ref
 	// find the first non-stale running package reference
 	for i := range runningPkgRefs {
 		ref := runningPkgRefs[i]
-		elapsed := s.run.Result.ReferenceElapsed(ref, true)
+		elapsed := s.results.ReferenceElapsed(ref, true)
 		if elapsed <= s.config.StalePackageDuration {
 			return &ref
 		}
@@ -300,7 +301,7 @@ func (s GoTestResultSummary) firstNonStaleRunningRef(runningPkgRefs []gotest.Ref
 func (s GoTestResultSummary) mergeStats(statsByRef map[gotest.Reference]gotest.ResultStats) gotest.ResultStats {
 	var mergedStats gotest.ResultStats
 	for _, stats := range statsByRef {
-		mergedStats = mergedStats.Merge(stats)
+		mergedStats.Merge(stats)
 	}
 	return mergedStats
 }
@@ -308,7 +309,7 @@ func (s GoTestResultSummary) mergeStats(statsByRef map[gotest.Reference]gotest.R
 func (s GoTestResultSummary) completedPkgsAfter(startRunningPkgRef *gotest.Reference) ([]gotest.Reference, map[gotest.Reference]gotest.ResultStats) {
 	// add one more line that represents the stats for all unrendered packages (packages after the last running package, that are completed)
 	// the order should be compared to the presentation order, which is alphabetical order (not order of started/finished)
-	pkgRefs := s.run.Result.Packages()
+	pkgRefs := s.results.Packages()
 
 	sort.Sort(gotest.References(pkgRefs))
 	refIdx := -1
@@ -330,18 +331,18 @@ func (s GoTestResultSummary) completedPkgsAfter(startRunningPkgRef *gotest.Refer
 	var completedPkgsAfter []gotest.Reference
 	pkgStats := make(map[gotest.Reference]gotest.ResultStats)
 	for _, pkgRef := range pkgRefs[refIdx+1:] {
-		action := s.run.Result.ReferenceConclusiveAction(pkgRef)
+		action := s.results.ReferenceConclusiveAction(pkgRef)
 		if action.Completed() {
 			// only include packages that are completed
 			completedPkgsAfter = append(completedPkgsAfter, pkgRef)
-			pkgStats[pkgRef] = s.run.Result.ReferenceTestStats(pkgRef, false)
+			pkgStats[pkgRef] = s.results.ReferenceTestStats(pkgRef, false)
 		}
 	}
 	return completedPkgsAfter, pkgStats
 }
 
 func (s GoTestResultSummary) summaryFooter() string {
-	passed, isRunning := s.run.Result.Passed()
+	passed, isRunning := s.results.Passed()
 
 	var status string
 	switch {
@@ -371,24 +372,24 @@ func (s GoTestResultSummary) summaryFooter() string {
 	var sections []string
 
 	if s.config.ShowPackageCount {
-		sections = append(sections, fmt.Sprintf("%d packages", s.config.PackageCount))
+		sections = append(sections, fmt.Sprintf("%d packages", len(s.results.Packages())))
 	}
 
-	sections = append(sections, s.renderStats(s.run.Result.TestStats(), false))
+	sections = append(sections, s.renderStats(s.results.TestStats(), false))
 
 	summary := strings.Join(sections, ", ")
 	wideSummary := lipgloss.NewStyle().Width(s.config.PackageNameWidth).Render(summary)
 
 	result += wideSummary
 
-	elapsed := s.run.Result.Elapsed(!s.config.DurationFromEvents)
+	elapsed := s.results.Elapsed(!s.config.DurationFromEvents)
 	if elapsed > 0 {
 		result += "\t" + s.style.Aux.Render(formatElapsed(elapsed, false))
 	} else {
 		result += "\t" + s.style.Aux.Render("compiling...")
 	}
 
-	if coverage, ok := s.run.Result.Coverage(); ok {
+	if coverage, ok := s.results.Coverage(); ok {
 		// match the same format changes used in the gostd handlers
 		result += "\t" + s.style.Aux.Render(fmt.Sprintf("[%0.1f%% coverage]", coverage))
 	}

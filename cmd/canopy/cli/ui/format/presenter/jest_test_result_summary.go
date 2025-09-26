@@ -53,18 +53,20 @@ type JestTestResultSummaryConfig struct {
 	DurationFromEvents bool
 }
 
-func (c JestTestResultSummaryConfig) New(run gotest.Run) Presenter {
+func (c JestTestResultSummaryConfig) New(runs ...gotest.Run) Presenter {
 	return JestTestResultSummary{
-		config: c,
-		style:  newJestStyle(c.Color),
-		run:    run,
+		config:  c,
+		style:   newJestStyle(c.Color),
+		runs:    runs,
+		results: newJoinedResults(runs...),
 	}
 }
 
 type JestTestResultSummary struct {
-	config JestTestResultSummaryConfig
-	style  jestStyle
-	run    gotest.Run
+	config  JestTestResultSummaryConfig
+	style   jestStyle
+	runs    []gotest.Run
+	results result
 }
 
 func (s JestTestResultSummary) Present(stdout, stderr io.Writer) error {
@@ -73,7 +75,7 @@ func (s JestTestResultSummary) Present(stdout, stderr io.Writer) error {
 		w = stderr
 	}
 
-	stats := s.run.Result.TestStats()
+	stats := s.results.TestStats()
 
 	var header string
 
@@ -99,12 +101,12 @@ func (s JestTestResultSummary) Present(stdout, stderr io.Writer) error {
 	summary := s.style.wideTitle.Render("Tests: ") + strings.Join(tests, ", ") + "\n"
 
 	if s.config.ShowElapsed {
-		el := s.run.Result.Elapsed(!s.config.DurationFromEvents)
+		el := s.results.Elapsed(!s.config.DurationFromEvents)
 		el = el.Truncate(time.Millisecond)
 		summary += s.style.wideTitle.Render("Elapsed:") + fmt.Sprintf("%s\n", el)
 	}
 
-	percent, ok := s.run.Result.Coverage()
+	percent, ok := s.results.Coverage()
 	if ok {
 		summary += s.style.wideTitle.Render("Coverage:") + fmt.Sprintf("%0.2f%%\n", percent)
 	}

@@ -63,182 +63,182 @@ func NewModel(ref gotest.Reference, common state.Common, config Config) *Model {
 	}
 }
 
-func (j Model) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-func (j Model) ShouldImprint() bool {
-	return j.isExpired(j.config.ExpireOnCompletion)
+func (m Model) ShouldImprint() bool {
+	return m.isExpired(m.config.ExpireOnCompletion)
 }
 
-func (j Model) isExpired(enabled bool) bool {
+func (m Model) isExpired(enabled bool) bool {
 	if !enabled {
 		return false
 	}
-	switch j.action {
+	switch m.action {
 	case gotest.PassAction, gotest.FailAction, gotest.SkipAction:
 		return true
 	}
 	return false
 }
 
-func (j Model) IsAlive() bool {
-	isPkg := j.ref.IsPackage()
-	if j.config.ShowPackages && isPkg {
+func (m Model) IsAlive() bool {
+	isPkg := m.ref.IsPackage()
+	if m.config.ShowPackages && isPkg {
 		return true
 	}
 	if !isPkg {
-		if j.config.KeepAllTestOutput {
+		if m.config.KeepAllTestOutput {
 			return true
 		}
-		if j.config.KeepFailedTestOutput && j.action == gotest.FailAction {
+		if m.config.KeepFailedTestOutput && m.action == gotest.FailAction {
 			return true
 		}
 	}
-	return !j.isExpired(true)
+	return !m.isExpired(true)
 }
 
-func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	j.common.OnMessage(msg)
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m.common.OnMessage(msg)
 
 	e, ok := msg.(partybus.Event)
 	if !ok {
-		return j, nil
+		return m, nil
 	}
 
 	if e.Type != event.GoTestType {
-		return j, nil
+		return m, nil
 	}
 
 	gt, err := parser.ParseGoTestType(e)
 	if err != nil {
 		log.WithFields("error", err).Error("unable to parse go test event")
-		return j, nil
+		return m, nil
 	}
 
-	if j.ref.IsPackage() && gt.Reference.Package == j.ref.Package && !gt.Reference.IsPackage() {
-		if _, ok := j.testsSeen[gt.Reference]; !ok {
-			j.testsSeen[gt.Reference] = struct{}{}
+	if m.ref.IsPackage() && gt.Reference.Package == m.ref.Package && !gt.Reference.IsPackage() {
+		if _, ok := m.testsSeen[gt.Reference]; !ok {
+			m.testsSeen[gt.Reference] = struct{}{}
 		}
 	}
 
-	if gt.Reference != j.ref {
-		return j, nil
+	if gt.Reference != m.ref {
+		return m, nil
 	}
 
 	switch gt.Action {
 	case gotest.RunAction, gotest.PassAction, gotest.FailAction, gotest.SkipAction, gotest.StartAction:
-		j.action = gt.Action
+		m.action = gt.Action
 
 	case gotest.OutputAction:
-		j.output = append(j.output, gt.Output)
+		m.output = append(m.output, gt.Output)
 
-		if j.ref.IsPackage() && output.HasPackageCoverageMarking(gt.Output) {
-			j.coverage = gt.Output
+		if m.ref.IsPackage() && output.HasPackageCoverageMarking(gt.Output) {
+			m.coverage = gt.Output
 		}
 	}
-	return j, nil
+	return m, nil
 }
 
-func (j Model) testTitleOutput() (title, output string) {
-	if j.config.NestNonPackages && !j.ref.IsPackage() {
-		return j.testNestedTitleOutput()
+func (m Model) testTitleOutput() (title, output string) {
+	if m.config.NestNonPackages && !m.ref.IsPackage() {
+		return m.testNestedTitleOutput()
 	}
-	return j.testTopTitleOutput()
+	return m.testTopTitleOutput()
 }
 
-func (j Model) testNestedTitleOutput() (title, output string) {
-	switch j.action {
+func (m Model) testNestedTitleOutput() (title, output string) {
+	switch m.action {
 	case gotest.RunAction, gotest.StartAction:
-		status := j.common.Spinner.View
+		status := m.common.Spinner.View
 		if status == "" {
 			status = "…"
 		}
 
-		title = j.style.Aux.Render(fmt.Sprintf("  %s", status))
-		if j.config.ShowIntermediateOutput && len(j.output) > 0 {
-			output = j.style.Aux.Render(strings.TrimSpace(j.output[len(j.output)-1]))
+		title = m.style.Aux.Render(fmt.Sprintf("  %s", status))
+		if m.config.ShowIntermediateOutput && len(m.output) > 0 {
+			output = m.style.Aux.Render(strings.TrimSpace(m.output[len(m.output)-1]))
 		}
 	case gotest.PassAction:
-		title = j.style.CheckTitle.Render("  ✔")
+		title = m.style.CheckTitle.Render("  ✔")
 	case gotest.FailAction:
-		title = j.style.XTitle.Render("  ✕") // ✘✕✖
+		title = m.style.XTitle.Render("  ✕") // ✘✕✖
 
-		// if j.ref.IsPackage() {
-		//	output = j.s.Aux.Render(strings.TrimSpace(j.coverage))
+		// if m.ref.IsPackage() {
+		//	output = m.s.Aux.Render(strings.TrimSpace(m.coverage))
 		// } else {
-		//	output = renderOutput(j.output, 0)
+		//	output = renderOutput(m.output, 0)
 		//}
 
-		if !j.ref.IsPackage() {
-			output = renderOutput(j.output, 2)
+		if !m.ref.IsPackage() {
+			output = renderOutput(m.output, 2)
 		}
 
 	case gotest.SkipAction:
-		title = j.style.Aux.Render("  ►►")
+		title = m.style.Aux.Render("  ►►")
 	}
 	return title, output
 }
 
-func (j Model) testTopTitleOutput() (title, output string) {
-	switch j.action {
+func (m Model) testTopTitleOutput() (title, output string) {
+	switch m.action {
 	case gotest.RunAction, gotest.StartAction:
-		title = j.style.RunningTitle.Render(" RUNS ")
-		if j.config.ShowIntermediateOutput && len(j.output) > 0 {
-			output = j.style.Aux.Render(strings.TrimSpace(j.output[len(j.output)-1]))
+		title = m.style.RunningTitle.Render(" RUNS ")
+		if m.config.ShowIntermediateOutput && len(m.output) > 0 {
+			output = m.style.Aux.Render(strings.TrimSpace(m.output[len(m.output)-1]))
 		}
 	case gotest.PassAction:
-		title = j.style.SuccessTitle.Render(" PASS ")
+		title = m.style.SuccessTitle.Render(" PASS ")
 	case gotest.FailAction:
-		title = j.style.FailureTitle.Render(" FAIL ")
+		title = m.style.FailureTitle.Render(" FAIL ")
 
-		// if j.ref.IsPackage() {
-		//	output = j.s.Aux.Render(strings.TrimSpace(j.coverage))
+		// if m.ref.IsPackage() {
+		//	output = m.s.Aux.Render(strings.TrimSpace(m.coverage))
 		// } else {
-		//	output = renderOutput(j.output, 0)
+		//	output = renderOutput(m.output, 0)
 		//}
 
-		if !j.ref.IsPackage() {
-			output = renderOutput(j.output, 0)
+		if !m.ref.IsPackage() {
+			output = renderOutput(m.output, 0)
 		}
 
 	case gotest.SkipAction:
-		title = j.style.SkipTitle.Render(" SKIP ")
+		title = m.style.SkipTitle.Render(" SKIP ")
 	}
 	return title, output
 }
 
-func (j Model) View() string {
+func (m Model) View() string {
 	var (
 		title     string
 		output    string
 		testCount string
 	)
 
-	title, output = j.testTitleOutput()
+	title, output = m.testTitleOutput()
 
-	output = j.style.Aux.Render(output)
+	output = m.style.Aux.Render(output)
 
-	testPkg, testName := splitTestRef(j.ref)
+	testPkg, testName := splitTestRef(m.ref)
 
-	if j.config.NestNonPackages {
-		if !j.ref.IsPackage() {
+	if m.config.NestNonPackages {
+		if !m.ref.IsPackage() {
 			testPkg = ""
 		} else {
-			testPkg = j.style.Title.Render(testPkg)
+			testPkg = m.style.Title.Render(testPkg)
 		}
 
 		if testName != "" {
-			testPkg = j.style.Aux.Render(testPkg)
+			testPkg = m.style.Aux.Render(testPkg)
 		}
 	} else if testName != "" {
-		testPkg = j.style.Aux.Render(testPkg)
-		testName = j.style.Title.Render(testName)
+		testPkg = m.style.Aux.Render(testPkg)
+		testName = m.style.Title.Render(testName)
 	}
 
-	if j.ref.IsPackage() {
-		testCount = fmt.Sprintf(" (%d tests) ", len(j.testsSeen))
-		testCount = j.style.Aux.Render(testCount)
+	if m.ref.IsPackage() {
+		testCount = fmt.Sprintf(" (%d tests) ", len(m.testsSeen))
+		testCount = m.style.Aux.Render(testCount)
 	}
 
 	return fmt.Sprintf("%-5s %s%s%s %s", title, testPkg, testName, testCount, output)

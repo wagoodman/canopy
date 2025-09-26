@@ -6,8 +6,11 @@ import (
 	"go/parser"
 	"go/token"
 	"path/filepath"
+	"sort"
 	"strings"
 
+	"github.com/scylladb/go-set/strset"
+	"github.com/wagoodman/canopy/cmd/canopy/internal"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 )
@@ -20,13 +23,78 @@ type Definition struct {
 	Cases      []string
 }
 
-func FindDefinitions(collection *golist.PackageCollection) ([]Definition, error) {
+func (d Definition) References() []Reference {
+	refs := []Reference{
+		{
+			// function reference
+			Package:  d.ImportPath,
+			FuncName: d.FnName,
+		},
+	}
+	for _, c := range d.Cases {
+		refs = append(refs, Reference{
+			// test case reference
+			Package:  d.ImportPath,
+			FuncName: d.FnName,
+			TRunName: c,
+		})
+	}
+	return refs
+}
+
+type Definitions []Definition
+
+func (d Definitions) References(removeFilters ...func(Reference) bool) []Reference {
+	if len(d) == 0 {
+		return nil
+	}
+
+	var refs []Reference
+	pkgs := strset.New()
+	for _, def := range d {
+	all:
+		for _, ref := range def.References() {
+			// apply filters to the reference
+			if evaluateFilters(ref, removeFilters) {
+				log.WithFields("ref", ref).Trace("skipping reference due to filter")
+				continue all
+			}
+
+			if !pkgs.Has(ref.Package) {
+				pkgs.Add(ref.Package)
+				pkgRef := ref.PackageRef()
+				if !evaluateFilters(pkgRef, removeFilters) {
+					refs = append(refs, pkgRef)
+				}
+			}
+			refs = append(refs, ref)
+		}
+	}
+	sort.Sort(References(refs))
+	return refs
+}
+
+func evaluateFilters(ref Reference, removeFilters []func(Reference) bool) bool {
+	for _, filter := range removeFilters {
+		if filter(ref) {
+			return true
+		}
+	}
+	return false
+}
+
+func FindDefinitions(collection *golist.PackageCollection, runsStatements ...string) (Definitions, error) {
 	// find and parse all '_test.go' files in given directory and subdirectories
 	fileSet := token.NewFileSet()
 	var tests []Definition
 
+	runPatterns, err := internal.MakeRegexes(runsStatements...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compile '-run' patterns: %w", err)
+	}
+
 	process := func(path string) error {
-		log.WithFields("path", path).Debug("parsing test file")
+		log.WithFields("path", path).Trace("parsing test file")
 
 		f, err := parser.ParseFile(fileSet, path, nil, 0)
 		if err != nil {
@@ -44,6 +112,11 @@ func FindDefinitions(collection *golist.PackageCollection) ([]Definition, error)
 			importPath = curPkg.ImportPath
 		}
 		for _, fnDecl := range findTestsInFile(f) {
+			if !internal.MatchesAny(fnDecl.Name.Name, runPatterns) {
+				log.WithFields("fn", fnDecl.Name.Name, "importPath", importPath).Trace("skipping test function that does not match run patterns")
+				continue
+			}
+
 			_, _, cases := getTableTestCases(fnDecl)
 			tests = append(tests, Definition{
 				ImportPath: importPath,

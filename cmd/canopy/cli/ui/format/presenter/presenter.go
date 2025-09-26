@@ -13,4 +13,4 @@ type Presenter interface {
 
 type EventFactory func(e partybus.Event) Presenter
 
-type TestRunFactory func(tr gotest.Run) Presenter
+type TestRunFactory func(tr ...gotest.Run) Presenter

@@ -26,8 +26,8 @@ import (
 )
 
 var (
-	_ fangs.FlagAdder  = (*testCoreConfig)(nil)
-	_ fangs.PostLoader = (*testCoreConfig)(nil)
+	_ fangs.FlagAdder  = (*TestCoreConfig)(nil)
+	_ fangs.PostLoader = (*TestCoreConfig)(nil)
 )
 
 var _ SilentError = (*ErrTestSuiteFailed)(nil)
@@ -52,7 +52,7 @@ func (e ErrTestSuiteFailed) Error() string {
 	return fmt.Sprintf("test suite failed: %s", render)
 }
 
-type testCoreConfig struct {
+type TestCoreConfig struct {
 	options.Config `yaml:",inline" mapstructure:",squash"`
 	options.Store  `yaml:"store" json:"store" mapstructure:"store"`
 
@@ -80,15 +80,39 @@ type testRuntimeConfig struct {
 	Packages *golist.PackageCollection
 }
 
-func (t *testCoreConfig) AddFlags(flags fangs.FlagSet) {
+func (t *TestCoreConfig) AddFlags(flags fangs.FlagSet) {
 	t.NamedFlagSet = xflagset.NewNamed()
 	t.tracker = xflagset.NewDecorator(flags, t.NamedFlagSet.FlagSet("State"))
 	flags = t.tracker
 	flags.BoolVarP(&t.Test.NoCache, "no-cache", "", "do not use cached test results")
 }
 
-func defaultTestOptions() *testCoreConfig {
-	return &testCoreConfig{
+func withoutCoverageOpts() func(*TestCoreConfig) {
+	return func(cfg *TestCoreConfig) {
+		cfg.Test.Coverage.Disabled = true
+	}
+}
+
+func withoutOpenOpts() func(*TestCoreConfig) {
+	return func(cfg *TestCoreConfig) {
+		cfg.Test.Open.Disabled = true
+	}
+}
+
+func withoutRunOptsRendered() func(*TestCoreConfig) {
+	return func(cfg *TestCoreConfig) {
+		cfg.Test.IgnoreRenderingFlags = append(cfg.Test.IgnoreRenderingFlags, "run")
+	}
+}
+
+func withCombineMultipleRuns() func(*TestCoreConfig) {
+	return func(cfg *TestCoreConfig) {
+		cfg.Test.CombineMultipleRuns = true
+	}
+}
+
+func defaultTestOptions(opts ...func(*TestCoreConfig)) *TestCoreConfig {
+	t := &TestCoreConfig{
 		Store: options.DefaultStore(),
 		Test: testConfig{
 			Packages:   options.DefaultPackages(),
@@ -100,6 +124,12 @@ func defaultTestOptions() *testCoreConfig {
 			Appearance: options.DefaultAppearance(),
 		},
 	}
+
+	for _, fn := range opts {
+		fn(t)
+	}
+
+	return t
 }
 
 func Test(app clio.Application) *cobra.Command {
@@ -131,7 +161,8 @@ func Test(app clio.Application) *cobra.Command {
 			opts.Test.Runtime.Packages = testPkgs
 
 			// set the UI dynamically
-			logTestFailuresAsErrors, err = setupUIs(app, opts.Test.Writers, opts.Test.Appearance, testPkgs)
+			maxPkgName := maxPkgNameLength(testPkgs.ImportPaths())
+			logTestFailuresAsErrors, err = setupTestUIs(app, opts.Test.Writers, opts.Test.Appearance, maxPkgName)
 			return err
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -175,7 +206,7 @@ func Test(app clio.Application) *cobra.Command {
 	return app.SetupCommand(cmd, opts)
 }
 
-func runTest(ctx context.Context, app clio.Application, coreCfg testCoreConfig, logTestFailuresAsErrors bool) error {
+func runTest(ctx context.Context, app clio.Application, coreCfg TestCoreConfig, logTestFailuresAsErrors bool) error {
 	cfg := coreCfg.Test
 
 	log.WithFields("pkgs", cfg.Specifiers).Info("running test suite")
@@ -271,12 +302,12 @@ func evaluateResult(run *gotest.Run, logTestFailuresAsErrors bool, coverMin floa
 	return passed, resultErr
 }
 
-func setupUIs(app clio.Application, writers []options.FormatWriter, appearance options.Appearance, testPkgs *golist.PackageCollection) (bool, error) {
+func setupTestUIs(app clio.Application, writers []options.FormatWriter, appearance options.Appearance, maxPkgName int) (bool, error) {
 	var logTestFailuresAsErrors bool
 
 	var uxs []clio.UI
 	for _, writer := range writers {
-		ux, ltaf, err := setupUI(app, writer, appearance, testPkgs)
+		ux, ltaf, err := setupTestUI(app, writer, appearance, maxPkgName)
 		if err != nil {
 			return false, fmt.Errorf("unable to setup UI %q: %w", writer.Name, err)
 		}
@@ -299,7 +330,7 @@ func setupUIs(app clio.Application, writers []options.FormatWriter, appearance o
 	return logTestFailuresAsErrors, nil
 }
 
-func setupUI(app clio.Application, format options.FormatWriter, appearance options.Appearance, testPkgs *golist.PackageCollection) (clio.UI, bool, error) {
+func setupTestUI(app clio.Application, format options.FormatWriter, appearance options.Appearance, maxPkgName int) (clio.UI, bool, error) {
 	var ux clio.UI
 
 	fields := logger.Fields{
@@ -321,16 +352,16 @@ func setupUI(app clio.Application, format options.FormatWriter, appearance optio
 	var logTestFailuresAsErrors bool
 	switch format.Name {
 	// case "go++":
-	//	ux = ui.NewGoxxUI(testPkgs, uiConfig)
+	//	ux = ui.NewGoxxUI(uiConfig, maxPkgName)
 	case "go":
-		ux = ui.NewGoUI(testPkgs, uiConfig)
+		ux = ui.NewTestGoUI(uiConfig, maxPkgName)
 	case "json":
 		// TODO: we're not passing testPkgs intentionally?
-		ux = ui.NewJSONUI(uiConfig)
+		ux = ui.NewTestJSONUI(uiConfig)
 	case "jest":
-		ux = ui.NewJestUI(uiConfig)
+		ux = ui.NewTestJestUI(uiConfig)
 	case "dot":
-		ux = ui.NewDotUI(uiConfig)
+		ux = ui.NewTestDotUI(uiConfig)
 	case "log":
 		if state.Config.Log.Verbosity == 0 || !logger.IsVerbose(state.Config.Log.Level) {
 			if state.Config.Log.Verbosity == 0 {
@@ -346,7 +377,7 @@ func setupUI(app clio.Application, format options.FormatWriter, appearance optio
 			log.Set(state.Logger)
 		}
 
-		ux = ui.None()
+		ux = ui.TestNoUI()
 		if format.PrimaryUI {
 			logTestFailuresAsErrors = true
 		}
@@ -362,13 +393,14 @@ func setupUI(app clio.Application, format options.FormatWriter, appearance optio
 	return ux, logTestFailuresAsErrors, nil
 }
 
-func getUIConfig(appearance options.Appearance, clioCfg clio.Config, format options.FormatWriter) ui.Config {
-	return ui.Config{
+func getUIConfig(appearance options.Appearance, clioCfg clio.Config, format options.FormatWriter) ui.TestUIConfig {
+	return ui.TestUIConfig{
 		Color:                   !appearance.NoColor,
 		Verbose:                 clioCfg.Log.Verbosity,
 		ShowPackagesWithNoTests: appearance.ShowPackagesWithNoTests,
 		Writer:                  format.Writer,
 		IsTTY:                   format.IsTTY,
+		CombineMultipleRuns:     appearance.CombineMultipleRuns,
 	}
 }
 
@@ -430,4 +462,14 @@ func renderTestSuiteFailure(err ErrTestSuiteFailed) string {
 		render += fmt.Sprintf("\n  • %s", reason)
 	}
 	return fmt.Sprintf("Test suite failed: %s", render)
+}
+
+func maxPkgNameLength(testPkgs []string) int {
+	maxPkgName := 30
+	for _, pkg := range testPkgs {
+		if len(pkg) > maxPkgName {
+			maxPkgName = len(pkg)
+		}
+	}
+	return maxPkgName
 }

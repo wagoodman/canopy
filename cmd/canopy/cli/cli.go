@@ -14,7 +14,7 @@ func New(id clio.Identification) *cobra.Command {
 	clioCfg := clio.NewSetupConfig(id).
 		WithGlobalConfigFlag().   // add persistent -c <path> for reading an application config from
 		WithGlobalLoggingFlags(). // add persistent -v and -q flags tied to the logging config
-		WithUI(ui.None()).
+		WithUI(ui.TestNoUI()).
 		WithInitializers(
 			func(state *clio.State) error {
 				bus.Set(state.Bus)
@@ -25,16 +25,14 @@ func New(id clio.Identification) *cobra.Command {
 
 	app := clio.New(*clioCfg)
 
-	testCmd := commands.Test(app)
-
-	root := commands.Root(app, testCmd)
+	root := commands.Root(app)
 
 	app.AddFlags(root.PersistentFlags())
 
 	root.AddCommand(
 		clio.VersionCommand(id),
 		clio.ConfigCommand(app, nil),
-		testCmd,
+		commands.Test(app),
 		commands.List(app),
 		commands.Session(app),
 		commands.Format(app),

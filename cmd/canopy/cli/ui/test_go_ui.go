@@ -12,32 +12,19 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/syncspinner"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
-	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
 
 	"github.com/anchore/clio"
 )
 
-func NewGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
+func NewTestGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
 	if cfg.IsTTY && cfg.Writer == nil {
-		return newDynamicGoUI(testPkgs, cfg)
+		return newDynamicGoUI(cfg, maxPkgNameLength)
 	}
-	return newSafeGoUI(testPkgs, cfg)
+	return newSafeGoUI(cfg, maxPkgNameLength)
 }
 
-func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI { //nolint:funlen
-	var pkgCount int
-	maxPkgName := 30
-	if testPkgs != nil {
-		pkgs := testPkgs.Packages()
-		for _, pkg := range pkgs {
-			if len(pkg.ImportPath) > maxPkgName {
-				maxPkgName = len(pkg.ImportPath)
-			}
-		}
-		pkgCount = len(pkgs)
-	}
-
+func newDynamicGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
 	spin := syncspinner.New()
 
 	common := state.Common{
@@ -55,7 +42,7 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI { //
 		h = gostd.NewVerboseHandler(
 			reportWriter,
 			gostd.PackageConfig{
-				PackageNameWidth:            maxPkgName,
+				PackageNameWidth:            maxPkgNameLength,
 				Color:                       cfg.Color,
 				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
 				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
@@ -67,7 +54,7 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI { //
 		h = gostd.NewQuietHandler(
 			reportWriter,
 			gostd.PackageConfig{
-				PackageNameWidth:            maxPkgName,
+				PackageNameWidth:            maxPkgNameLength,
 				Color:                       cfg.Color,
 				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
 				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
@@ -86,10 +73,10 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI { //
 
 	summaryHandler := gosummary.NewFactory(
 		presenter.DefaultGoTestResultSummaryConfig().
-			WithColor(cfg.Color).WithPackageNameWidth(maxPkgName).
-			WithPackageCount(pkgCount).
+			WithColor(cfg.Color).WithPackageNameWidth(maxPkgNameLength).
 			WithStalePackageDuration(stalePackageDuration).
 			WithLoosePackageOrder(loosePackageOrder).
+			WithCombineMultipleRuns(cfg.CombineMultipleRuns).
 			WithDurationFromEvents(false), //  we're running with a true wall clock, so we want to use that. Otherwise you'll see the timers jitter, only updating when there is a test event that arrives.
 		common,
 	)
@@ -103,19 +90,8 @@ func newDynamicGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI { //
 	return NewTeaUI(c)
 }
 
-func newSafeGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
+func newSafeGoUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 	var writeToStderr bool
-	var pkgCount int
-	maxPkgName := 30
-	if testPkgs != nil {
-		pkgs := testPkgs.Packages()
-		for _, pkg := range pkgs {
-			if len(pkg.ImportPath) > maxPkgName {
-				maxPkgName = len(pkg.ImportPath)
-			}
-		}
-		pkgCount = len(pkgs)
-	}
 
 	var reportWriter io.WriteCloser
 	if cfg.Writer != nil {
@@ -155,10 +131,9 @@ func newSafeGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 		withStdout(reportWriter).
 		withStderr(notificationWriter).
 		withHandledPresenters(
-			adapter.NewTestRun(presenter.GoTestResultSummaryConfig{
+			adapter.NewTestRun(presenter.GoSummaryConfig{
 				WriteToStderr:    writeToStderr,
 				PackageNameWidth: maxPkgName,
-				PackageCount:     pkgCount,
 				Color:            cfg.Color,
 				// we're running with a true wall clock, so we want to use that. Otherwise you'll see the timers jitter,
 				// only updating when there is a test event that arrives.
@@ -166,6 +141,7 @@ func newSafeGoUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 				ShowElapsedForRunningPackages:    true,
 				ShowSummaryForUnrenderedPackages: true,
 				ShowRunningTests:                 false, // it's safer to not thrash the number of lines we're writing to the terminal
+				CombineMultipleRuns:              cfg.CombineMultipleRuns,
 			}.New),
 		)
 

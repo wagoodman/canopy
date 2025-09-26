@@ -6,6 +6,7 @@ import (
 
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/require"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
 
 func TestJestTestResultSummary_Present(t *testing.T) {
@@ -60,7 +61,8 @@ func TestJestTestResultSummary_Present(t *testing.T) {
 			sb := strings.Builder{}
 
 			subject := tt.presenter
-			subject.run = *fixtureRun(t, tt.fixture)
+			subject.runs = []gotest.Run{*fixtureRun(t, tt.fixture)}
+			subject.results = newJoinedResults(subject.runs...)
 
 			err := subject.Present(&sb, &sb)
 			require.NoError(t, err)

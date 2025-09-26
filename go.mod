@@ -8,6 +8,7 @@ require (
 	github.com/anchore/fangs v0.0.0-20250616234211-1cd08d530bcd
 	github.com/anchore/go-homedir v0.0.0-20250319154043-c29668562e4d
 	github.com/anchore/go-logger v0.0.0-20250318195838-07ae343dd722
+	github.com/anchore/go-sync v0.0.0-20250714163430-add63db73ad1
 	github.com/bmatcuk/doublestar/v4 v4.8.1
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.6
@@ -22,6 +23,7 @@ require (
 	github.com/gookit/color v1.5.4
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/jedib0t/go-pretty/v6 v6.6.7
+	github.com/junegunn/fzf v0.64.0
 	github.com/lindell/go-ordered-set v1.0.2
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/magiconair/properties v1.8.7

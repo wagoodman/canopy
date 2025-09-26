@@ -2,16 +2,17 @@ package ui
 
 import "io"
 
-type Config struct {
+type TestUIConfig struct {
 	Color                   bool
 	Verbose                 int
 	ShowPackagesWithNoTests bool
 	Writer                  io.WriteCloser
 	IsTTY                   bool
+	CombineMultipleRuns     bool
 }
 
-func DefaultConfig() Config {
-	return Config{
+func DefaultTestUIConfig() TestUIConfig {
+	return TestUIConfig{
 		Color:                   true,
 		Verbose:                 0,
 		ShowPackagesWithNoTests: false,

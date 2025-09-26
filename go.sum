@@ -14,6 +14,8 @@ github.com/anchore/go-homedir v0.0.0-20250319154043-c29668562e4d h1:gT69osH9Asdp
 github.com/anchore/go-homedir v0.0.0-20250319154043-c29668562e4d/go.mod h1:PhSnuFYknwPZkOWKB1jXBNToChBA+l0FjwOxtViIc50=
 github.com/anchore/go-logger v0.0.0-20250318195838-07ae343dd722 h1:2SqmFgE7h+Ql4VyBzhjLkRF/3gDrcpUBj8LjvvO6OOM=
 github.com/anchore/go-logger v0.0.0-20250318195838-07ae343dd722/go.mod h1:oFuE8YuTCM+spgMXhePGzk3asS94yO9biUfDzVTFqNw=
+github.com/anchore/go-sync v0.0.0-20250714163430-add63db73ad1 h1:UK1SWZf2xD5jq8QVeDdpt6wW31cO3RckBvPmGlDrTkg=
+github.com/anchore/go-sync v0.0.0-20250714163430-add63db73ad1/go.mod h1:hd0Ol9qFM8tRDdF50a+DpZEoB0HFNaEnCp/BSVyBRlg=
 github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z4=
 github.com/atotto/clipboard v0.1.4/go.mod h1:ZY9tmq7sm5xIbd9bOK4onWV4S6X0u6GY7Vn0Yu86PYI=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1 h1:HwpRHbFMcZLEVr42D4p7XBqjyuxQH5SMiErDT4WkJ2k=
@@ -127,6 +129,8 @@ github.com/jinzhu/inflection v1.0.0/go.mod h1:h+uFLlag+Qp1Va5pdKtLDYj+kHp5pxUVkr
 github.com/jinzhu/now v1.1.5 h1:/o9tlHleP7gOFmsnYNz3RGnqzefHA47wQpKrrdTIwXQ=
 github.com/jinzhu/now v1.1.5/go.mod h1:d3SSVoowX0Lcu0IBviAWJpolVfI5UJVZZ7cO71lE/z8=
 github.com/josharian/intern v1.0.0/go.mod h1:5DoeVV0s6jJacbCEi61lwdGj/aVlrQvzHFFd8Hwg//Y=
+github.com/junegunn/fzf v0.64.0 h1:vy9QgDhf6lGX0+E3acBto1alpc6XSJFOSLIP9iL60iw=
+github.com/junegunn/fzf v0.64.0/go.mod h1:0PctWYfS0aCfyLFEIUjtE+PIXD2UFKaHgbIHiECG7Bo=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=

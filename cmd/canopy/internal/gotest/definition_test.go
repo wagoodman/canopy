@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 )
@@ -146,6 +147,42 @@ func TestFindDefinitions(t *testing.T) {
 			if cmp.Diff(tt.want, got) != "" {
 				t.Errorf("FindDefinitions() mismatch (-want +got):\n%s", cmp.Diff(tt.want, got))
 			}
+		})
+	}
+}
+
+func TestDefinitions_References(t *testing.T) {
+	tests := []struct {
+		name string
+		d    Definitions
+		want []Reference
+	}{
+		{
+			name: "single test",
+			d: Definitions{
+				{
+					ImportPath: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector",
+					FnName:     "TestFilter",
+					Start:      token.Position{},
+					End:        token.Position{},
+					Cases:      nil,
+				},
+			},
+			want: []Reference{
+				{
+					// generic package reference
+					Package: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector",
+				},
+				{
+					Package:  "github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector",
+					FuncName: "TestFilter",
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equalf(t, tt.want, tt.d.References(), "References()")
 		})
 	}
 }

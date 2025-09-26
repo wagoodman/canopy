@@ -1,3 +1,6 @@
+store:
+  enabled: false
+
 profiles:
   unit:
     store:

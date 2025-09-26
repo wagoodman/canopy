@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/google/uuid"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
@@ -12,62 +13,19 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
-
-	"github.com/anchore/bubbly"
 )
 
-var (
-	_ bubbly.EventHandler = (*Factory)(nil)
-	_ tea.Model           = (*Model)(nil)
-)
-
-type Factory struct {
-	config presenter.GoTestResultSummaryConfig
-	seen   map[uuid.UUID]struct{}
-	common state.Common
-}
-
-func NewFactory(cfg presenter.GoTestResultSummaryConfig, common state.Common) *Factory {
-	return &Factory{
-		config: cfg,
-		seen:   make(map[uuid.UUID]struct{}),
-		common: common,
-	}
-}
-
-func (j Factory) RespondsTo() []partybus.EventType {
-	return []partybus.EventType{event.GoTestType, event.GoTestRunType, event.GoTestRunRequestType}
-}
-
-func (j Factory) Handle(e partybus.Event) ([]tea.Model, tea.Cmd) {
-	if e.Type != event.GoTestRunRequestType {
-		return nil, nil
-	}
-
-	cfg, id, err := parser.ParseGoTestRunRequestType(e)
-	if err != nil {
-		log.WithFields("error", err).Error("unable to parse go test event")
-		return nil, nil
-	}
-
-	idVal := *id
-
-	if _, ok := j.seen[idVal]; ok {
-		return nil, nil
-	}
-
-	j.seen[idVal] = struct{}{}
-	return []tea.Model{NewModel(j.config, j.common, idVal, *cfg)}, nil
-}
+var _ tea.Model = (*Model)(nil)
 
 type Model struct {
-	config  presenter.GoTestResultSummaryConfig
+	config  presenter.GoSummaryConfig
 	started bool
-	run     gotest.Run
+	runs    []gotest.Run
+	ids     mapset.Set[uuid.UUID]
 	common  state.Common
 }
 
-func NewModel(config presenter.GoTestResultSummaryConfig, common state.Common, runID uuid.UUID, runCfg gotest.RunnerConfig) *Model {
+func NewModel(config presenter.GoSummaryConfig, common state.Common, runID uuid.UUID, runCfg gotest.RunnerConfig) *Model {
 	run := gotest.NewRun(gotest.RunnerConfig{}) // we only need the cumulative state, not the run config
 	run.Result = *gotest.NewResult(gotest.ResultConfig{
 		TrackFailingOutput: true,
@@ -77,62 +35,97 @@ func NewModel(config presenter.GoTestResultSummaryConfig, common state.Common, r
 	run.Config = runCfg
 	return &Model{
 		config: config,
-		run:    *run,
+		runs:   []gotest.Run{*run},
+		ids:    mapset.NewSet[uuid.UUID](runID),
 		common: common,
 	}
 }
 
-func (j Model) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	j.common.OnMessage(msg)
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m.common.OnMessage(msg)
 
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case partybus.Event:
-
 		switch msg.Type {
 		case event.GoTestType:
-			testEvent, err := parser.ParseGoTestType(msg)
-			if err != nil {
-				log.WithFields("error", err).Error("unable to parse go test event")
-				panic("TODO")
-			}
-
-			if j.run.ID != testEvent.RunID {
-				break
-			}
-
-			if !j.started {
-				j.started = true
-			}
-
-			j.run.Result.Update(testEvent)
-
+			m.handleGoTestEvent(msg)
 		case event.GoTestRunType:
-			runEvent, err := parser.ParseGoTestRunType(msg)
-			if err != nil {
-				log.WithFields("error", err).Error("unable to parse go test event")
-				panic("TODO")
-			}
-
-			if j.run.ID != runEvent.ID {
-				break
-			}
-
-			j.run = *runEvent
+			m.handleGoTestRunEvent(msg)
 		}
 	}
 
-	return j, cmd
+	return m, cmd
 }
 
-func (j Model) View() string {
+// handleGoTestEvent processes GoTestType events, updating test results for matching runs
+func (m *Model) handleGoTestEvent(msg partybus.Event) {
+	testEvent, err := parser.ParseGoTestType(msg)
+	if err != nil {
+		log.WithFields("error", err).Error("unable to parse go test event")
+		panic("TODO")
+	}
+
+	if !m.shouldProcessTestEvent(testEvent) {
+		return
+	}
+
+	if !m.started {
+		m.started = true
+	}
+
+	m.updateRunResult(testEvent)
+}
+
+// handleGoTestRunEvent processes GoTestRunType events, adding new test runs
+func (m *Model) handleGoTestRunEvent(msg partybus.Event) {
+	runEvent, err := parser.ParseGoTestRunType(msg)
+	if err != nil {
+		log.WithFields("error", err).Error("unable to parse go test event")
+		panic("TODO")
+	}
+
+	if !m.shouldProcessRunEvent(runEvent) {
+		return
+	}
+
+	if !m.ids.Contains(runEvent.ID) {
+		m.runs = append(m.runs, *runEvent)
+		m.ids.Add(runEvent.ID)
+	}
+}
+
+// shouldProcessTestEvent determines if a test event should be processed based on configuration
+func (m *Model) shouldProcessTestEvent(testEvent gotest.Event) bool {
+	return m.config.CombineMultipleRuns || m.ids.Contains(testEvent.RunID)
+}
+
+// shouldProcessRunEvent determines if a run event should be processed based on configuration
+func (m *Model) shouldProcessRunEvent(runEvent *gotest.Run) bool {
+	if runEvent == nil {
+		return false
+	}
+	return m.config.CombineMultipleRuns || m.ids.Contains(runEvent.ID)
+}
+
+// updateRunResult finds the matching run and updates its result with the test event
+func (m *Model) updateRunResult(testEvent gotest.Event) {
+	for i := range m.runs {
+		if m.runs[i].ID == testEvent.RunID {
+			m.runs[i].Result.Update(testEvent)
+			break
+		}
+	}
+}
+
+func (m Model) View() string {
 	sb := strings.Builder{}
-	j.config.RunningState = j.common.Spinner.View
-	err := j.config.New(j.run).Present(&sb, &sb)
+	m.config.RunningState = m.common.Spinner.View
+	err := m.config.New(m.runs...).Present(&sb, &sb)
 	if err != nil {
 		// TODO
 		panic(err)

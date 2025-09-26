@@ -15,7 +15,6 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
-	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
 	"github.com/wagoodman/go-partybus"
@@ -23,29 +22,17 @@ import (
 	"github.com/anchore/clio"
 )
 
-func NewGoxxUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
+func NewTestGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 	if cfg.IsTTY && cfg.Writer == nil {
 		if cfg.Verbose > 0 {
-			return newVerboseDynamicGoxxUI(testPkgs, cfg)
+			return newVerboseDynamicGoxxUI(cfg, maxPkgName)
 		}
-		return newDefaultDynamicGoxxUI(testPkgs, cfg)
+		return newDefaultDynamicGoxxUI(cfg, maxPkgName)
 	}
-	return newSafeGoxxUI(testPkgs, cfg)
+	return newSafeGoxxUI(cfg, maxPkgName)
 }
 
-func newVerboseDynamicGoxxUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
-	var pkgCount int
-	maxPkgName := 30
-	if testPkgs != nil {
-		pkgs := testPkgs.Packages()
-		for _, pkg := range pkgs {
-			if len(pkg.ImportPath) > maxPkgName {
-				maxPkgName = len(pkg.ImportPath)
-			}
-		}
-		pkgCount = len(pkgs)
-	}
-
+func newVerboseDynamicGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 	spin := syncspinner.New()
 
 	common := state.Common{
@@ -74,10 +61,9 @@ func newVerboseDynamicGoxxUI(testPkgs *golist.PackageCollection, cfg Config) cli
 		withStderr(notificationWriter)
 
 	summaryHandler := gosummary.NewFactory(
-		presenter.GoTestResultSummaryConfig{
+		presenter.GoSummaryConfig{
 			Color:            cfg.Color,
 			PackageNameWidth: maxPkgName,
-			PackageCount:     pkgCount,
 			ShowRunningTests: true,
 		},
 		common,
@@ -97,19 +83,7 @@ func readerWriterPair() (io.Reader, io.WriteCloser) {
 	return r, w
 }
 
-func newDefaultDynamicGoxxUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI { //nolint:funlen
-	var pkgCount int
-	maxPkgName := 30
-	if testPkgs != nil {
-		pkgs := testPkgs.Packages()
-		for _, pkg := range pkgs {
-			if len(pkg.ImportPath) > maxPkgName {
-				maxPkgName = len(pkg.ImportPath)
-			}
-		}
-		pkgCount = len(pkgs)
-	}
-
+func newDefaultDynamicGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 	spin := syncspinner.New()
 
 	pkgConfig := goxx.QuietPackageConfig{
@@ -157,10 +131,9 @@ func newDefaultDynamicGoxxUI(testPkgs *golist.PackageCollection, cfg Config) cli
 	)
 
 	summaryHandler := gosummary.NewFactory(
-		presenter.GoTestResultSummaryConfig{
+		presenter.GoSummaryConfig{
 			Color:            cfg.Color,
 			PackageNameWidth: maxPkgName,
-			PackageCount:     pkgCount,
 			// we turn all of this off since pkgModelFactory will handle these details
 			ShowRunningTests: false,
 		},
@@ -178,20 +151,9 @@ func newDefaultDynamicGoxxUI(testPkgs *golist.PackageCollection, cfg Config) cli
 	return NewTeaUI(c)
 }
 
-func newSafeGoxxUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
+func newSafeGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 	var handler partybus.Handler
 	var writeToStderr bool
-	var pkgCount int
-	maxPkgName := 30
-	if testPkgs != nil {
-		pkgs := testPkgs.Packages()
-		for _, pkg := range pkgs {
-			if len(pkg.ImportPath) > maxPkgName {
-				maxPkgName = len(pkg.ImportPath)
-			}
-		}
-		pkgCount = len(pkgs)
-	}
 
 	var reportWriter io.WriteCloser
 	if cfg.Writer != nil {
@@ -232,10 +194,9 @@ func newSafeGoxxUI(testPkgs *golist.PackageCollection, cfg Config) clio.UI {
 		withStdout(reportWriter).
 		withStderr(notificationWriter).
 		withHandledPresenters(
-			adapter.NewTestRun(presenter.GoTestResultSummaryConfig{
+			adapter.NewTestRun(presenter.GoSummaryConfig{
 				WriteToStderr:    writeToStderr,
 				PackageNameWidth: maxPkgName,
-				PackageCount:     pkgCount,
 				Color:            cfg.Color,
 			}.New),
 		)

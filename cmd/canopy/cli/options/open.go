@@ -9,10 +9,10 @@ import (
 var _ fangs.FlagAdder = (*Open)(nil)
 
 type Open struct {
+	Disabled             bool `yaml:"-" json:"-" mapstructure:"-"`
 	OpenSessionOnFailure bool `yaml:"open-on-failure" json:"open-on-failure" mapstructure:"open-on-failure"`
-
-	tracker      *xflagset.Decorator
-	NamedFlagSet *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
+	tracker              *xflagset.Decorator
+	NamedFlagSet         *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 func DefaultOpen() Open {
@@ -26,5 +26,7 @@ func (o *Open) AddFlags(flags fangs.FlagSet) {
 	o.tracker = xflagset.NewDecorator(flags, o.NamedFlagSet.FlagSet("State"))
 	flags = o.tracker
 
-	flags.BoolVarP(&o.OpenSessionOnFailure, "open-on-failure", "f", "open an interactive session on test failure")
+	if !o.Disabled {
+		flags.BoolVarP(&o.OpenSessionOnFailure, "open-on-failure", "f", "open an interactive session on test failure")
+	}
 }

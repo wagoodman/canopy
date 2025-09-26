@@ -16,72 +16,14 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
 
-	"github.com/anchore/bubbly"
 	"github.com/anchore/bubbly/bubbles/frame"
 )
 
 var (
-	_ bubbly.EventHandler      = (*Factory)(nil)
-	_ bubbly.MessageListener   = (*Factory)(nil)
 	_ tea.Model                = (*Model)(nil)
 	_ frame.ImprintableElement = (*Model)(nil)
 	_ frame.TerminalElement    = (*Model)(nil)
 )
-
-type Config struct {
-	Color                  bool
-	ShowPackages           bool
-	KeepFailedTestOutput   bool
-	NestNonPackages        bool
-	ExpireOnCompletion     bool
-	DieOnCompletion        bool
-	ShowIntermediateOutput bool
-	Style                  *style.Dot
-}
-
-type Factory struct {
-	config Config
-	seen   map[gotest.Reference]struct{}
-	common state.Common
-}
-
-func NewFactory(config Config) *Factory {
-	return &Factory{
-		config: config,
-		seen:   make(map[gotest.Reference]struct{}),
-	}
-}
-
-func (j *Factory) OnMessage(msg tea.Msg) {
-	j.common.OnMessage(msg)
-}
-
-func (j Factory) RespondsTo() []partybus.EventType {
-	return []partybus.EventType{event.GoTestType}
-}
-
-func (j Factory) Handle(e partybus.Event) ([]tea.Model, tea.Cmd) {
-	if e.Type != event.GoTestType {
-		return nil, nil
-	}
-
-	gt, err := parser.ParseGoTestType(e)
-	if err != nil {
-		log.WithFields("error", err).Error("unable to parse go test event")
-		return nil, nil
-	}
-
-	if !j.config.ShowPackages && gt.Reference.IsPackage() {
-		return nil, nil
-	}
-
-	if _, ok := j.seen[gt.Reference]; ok {
-		return nil, nil
-	}
-
-	j.seen[gt.Reference] = struct{}{}
-	return []tea.Model{NewModel(gt.Reference, j.common, j.config)}, nil
-}
 
 type Model struct {
 	config    Config
@@ -111,206 +53,206 @@ func NewModel(ref gotest.Reference, common state.Common, config Config) *Model {
 	}
 }
 
-func (j Model) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-func (j Model) ShouldImprint() bool {
-	return j.isExpired(j.config.ExpireOnCompletion)
+func (m Model) ShouldImprint() bool {
+	return m.isExpired(m.config.ExpireOnCompletion)
 }
 
-func (j Model) isExpired(enabled bool) bool {
+func (m Model) isExpired(enabled bool) bool {
 	if !enabled {
 		return false
 	}
-	switch j.action {
+	switch m.action {
 	case gotest.PassAction, gotest.FailAction, gotest.SkipAction:
 		return true
 	}
 	return false
 }
 
-func (j Model) IsHidden() bool {
-	isPkg := j.ref.IsPackage()
-	if !isPkg && j.action != gotest.FailAction {
+func (m Model) IsHidden() bool {
+	isPkg := m.ref.IsPackage()
+	if !isPkg && m.action != gotest.FailAction {
 		return true
 	}
 	return false
 }
 
-func (j Model) IsAlive() bool {
-	isPkg := j.ref.IsPackage()
-	if j.config.ShowPackages && isPkg {
+func (m Model) IsAlive() bool {
+	isPkg := m.ref.IsPackage()
+	if m.config.ShowPackages && isPkg {
 		return true
 	}
 	if !isPkg {
-		if j.config.KeepFailedTestOutput && j.action == gotest.FailAction {
+		if m.config.KeepFailedTestOutput && m.action == gotest.FailAction {
 			return true
 		}
 	}
-	return !j.isExpired(true)
+	return !m.isExpired(true)
 }
 
-func (j Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	j.common.OnMessage(msg)
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m.common.OnMessage(msg)
 
 	e, ok := msg.(partybus.Event)
 	if !ok {
-		return j, nil
+		return m, nil
 	}
 
 	if e.Type != event.GoTestType {
-		return j, nil
+		return m, nil
 	}
 
 	gt, err := parser.ParseGoTestType(e)
 	if err != nil {
 		log.WithFields("error", err).Error("unable to parse go test event")
-		return j, nil
+		return m, nil
 	}
 
-	if j.ref.IsPackage() && gt.Reference.Package == j.ref.Package && !gt.Reference.IsPackage() {
-		if _, ok := j.testsSeen[gt.Reference]; !ok {
-			j.testOrder = append(j.testOrder, gt.Reference)
+	if m.ref.IsPackage() && gt.Reference.Package == m.ref.Package && !gt.Reference.IsPackage() {
+		if _, ok := m.testsSeen[gt.Reference]; !ok {
+			m.testOrder = append(m.testOrder, gt.Reference)
 		}
-		j.testsSeen[gt.Reference] = gt.Action
+		m.testsSeen[gt.Reference] = gt.Action
 	}
 
-	if gt.Reference != j.ref {
-		return j, nil
+	if gt.Reference != m.ref {
+		return m, nil
 	}
 
 	switch gt.Action {
 	case gotest.RunAction, gotest.PassAction, gotest.FailAction, gotest.SkipAction, gotest.StartAction:
-		j.action = gt.Action
+		m.action = gt.Action
 
 	case gotest.OutputAction:
-		j.output = append(j.output, gt.Output)
+		m.output = append(m.output, gt.Output)
 
-		if j.ref.IsPackage() && output.HasPackageCoverageMarking(gt.Output) {
-			j.coverage = gt.Output
+		if m.ref.IsPackage() && output.HasPackageCoverageMarking(gt.Output) {
+			m.coverage = gt.Output
 		}
 	}
-	return j, nil
+	return m, nil
 }
 
-func (j Model) testTitleOutput() (title, output string) {
-	if j.config.NestNonPackages && !j.ref.IsPackage() {
-		return j.testNestedTitleOutput()
+func (m Model) testTitleOutput() (title, output string) {
+	if m.config.NestNonPackages && !m.ref.IsPackage() {
+		return m.testNestedTitleOutput()
 	}
-	return j.testTopTitleOutput()
+	return m.testTopTitleOutput()
 }
 
-func (j Model) testNestedTitleOutput() (title, output string) {
-	if j.action == gotest.FailAction {
-		title = j.style.XTitle.Render("  ✕") // ✘✕✖
+func (m Model) testNestedTitleOutput() (title, output string) {
+	if m.action == gotest.FailAction {
+		title = m.style.XTitle.Render("  ✕") // ✘✕✖
 
-		// if j.ref.IsPackage() {
-		//	output = j.s.Aux.Render(strings.TrimSpace(j.coverage))
+		// if m.ref.IsPackage() {
+		//	output = m.s.Aux.Render(strings.TrimSpace(m.coverage))
 		// } else {
-		//	output = renderOutput(j.output, 0)
+		//	output = renderOutput(m.output, 0)
 		//}
 
-		if !j.ref.IsPackage() {
-			output = renderOutput(j.output, 2, j.style)
+		if !m.ref.IsPackage() {
+			output = renderOutput(m.output, 2, m.style)
 		}
 	}
 
 	return title, output
 }
 
-func (j Model) testTopTitleOutput() (title, output string) {
-	switch j.action {
+func (m Model) testTopTitleOutput() (title, output string) {
+	switch m.action {
 	// TODO: why is action sometimes empty string?
 	case gotest.RunAction, gotest.StartAction, "":
-		status := j.common.Spinner.View
+		status := m.common.Spinner.View
 		if status == "" {
 			status = "…"
 		}
 
-		title = j.style.RunningTitle.Render(status)
-		if j.config.ShowIntermediateOutput && len(j.output) > 0 {
-			output = j.style.Aux.Render(strings.TrimSpace(j.output[len(j.output)-1]))
+		title = m.style.RunningTitle.Render(status)
+		if m.config.ShowIntermediateOutput && len(m.output) > 0 {
+			output = m.style.Aux.Render(strings.TrimSpace(m.output[len(m.output)-1]))
 		}
 	case gotest.PassAction:
-		title = j.style.SuccessTitle.Render("✔")
+		title = m.style.SuccessTitle.Render("✔")
 	case gotest.FailAction:
-		title = j.style.FailureTitle.Render("✕")
+		title = m.style.FailureTitle.Render("✕")
 
-		// if j.ref.IsPackage() {
-		//	output = j.s.Aux.Render(strings.TrimSpace(j.coverage))
+		// if m.ref.IsPackage() {
+		//	output = m.s.Aux.Render(strings.TrimSpace(m.coverage))
 		// } else {
-		//	output = renderOutput(j.output, 0)
+		//	output = renderOutput(m.output, 0)
 		//}
 
-		if !j.ref.IsPackage() {
-			output = renderOutput(j.output, 0, j.style)
+		if !m.ref.IsPackage() {
+			output = renderOutput(m.output, 0, m.style)
 		}
 
 	case gotest.SkipAction:
-		title = j.style.SkipTitle.Render(" ")
+		title = m.style.SkipTitle.Render(" ")
 	}
 	return title, output
 }
 
-func (j Model) View() string { //nolint: gocognit, funlen
+func (m Model) View() string { //nolint: gocognit, funlen
 	var (
 		title     string
 		output    string
 		testCount string
 	)
 
-	title, output = j.testTitleOutput()
+	title, output = m.testTitleOutput()
 
-	testPkg, testName := splitTestRef(j.ref)
+	testPkg, testName := splitTestRef(m.ref)
 
-	if j.config.NestNonPackages {
-		if !j.ref.IsPackage() {
+	if m.config.NestNonPackages {
+		if !m.ref.IsPackage() {
 			testPkg = ""
 		} else {
-			switch j.action {
+			switch m.action {
 			case gotest.RunAction, gotest.StartAction:
-				testPkg = j.style.RunningTitle.Render(testPkg)
+				testPkg = m.style.RunningTitle.Render(testPkg)
 			case gotest.FailAction:
-				testPkg = j.style.FailureTitle.Render(testPkg)
+				testPkg = m.style.FailureTitle.Render(testPkg)
 			}
 		}
 	} else {
 		if testName != "" {
-			testPkg = j.style.Nested.Render(testPkg)
-			testName = j.style.Nested.Render(testName)
+			testPkg = m.style.Nested.Render(testPkg)
+			testName = m.style.Nested.Render(testName)
 		} else {
-			switch j.action {
+			switch m.action {
 			case gotest.RunAction, gotest.StartAction:
-				testPkg = j.style.RunningTitle.Render(testPkg)
+				testPkg = m.style.RunningTitle.Render(testPkg)
 			case gotest.FailAction:
-				testPkg = j.style.FailureTitle.Render(testPkg)
+				testPkg = m.style.FailureTitle.Render(testPkg)
 			}
 		}
 	}
 
 	var hasFailed, hasSkipped bool
-	if j.ref.IsPackage() {
+	if m.ref.IsPackage() {
 		var sections []string
 		var currentSection string
 		var lastAction *gotest.Action
-		for i, ref := range j.testOrder {
-			currentAction := j.testsSeen[ref]
+		for i, ref := range m.testOrder {
+			currentAction := m.testsSeen[ref]
 
 			if lastAction == nil {
 				lastAction = &currentAction
 			}
 
-			if *lastAction != currentAction || i == len(j.testOrder)-1 {
+			if *lastAction != currentAction || i == len(m.testOrder)-1 {
 				switch *lastAction {
 				case gotest.FailAction:
-					currentSection = j.style.FailureTitle.Render(currentSection)
+					currentSection = m.style.FailureTitle.Render(currentSection)
 					hasFailed = true
 				case gotest.SkipAction:
-					currentSection = j.style.SkipTitle.Render(currentSection)
+					currentSection = m.style.SkipTitle.Render(currentSection)
 					hasSkipped = true
 				default:
-					currentSection = j.style.Dot.Render(currentSection)
+					currentSection = m.style.Dot.Render(currentSection)
 				}
 				sections = append(sections, currentSection)
 				currentSection = ""
@@ -328,20 +270,20 @@ func (j Model) View() string { //nolint: gocognit, funlen
 		testCount = " " + strings.Join(sections, "")
 
 		// very simple...
-		// testCount = " " + strings.Repeat("•", len(j.testsSeen)) // .•·●⏺⦿
-		// testCount = j.style.Dot.Render(testCount)
+		// testCount = " " + strings.Repeat("•", len(m.testsSeen)) // .•·●⏺⦿
+		// testCount = m.style.Dot.Render(testCount)
 	}
 
 	rendered := fmt.Sprintf("%-1s %s%s%s %s", title, testPkg, testName, testCount, output)
-	if lipgloss.Width(rendered) > j.common.Window.Width && j.common.Window.Width > 0 {
-		trailer := fmt.Sprintf("[%d]", len(j.testsSeen))
+	if lipgloss.Width(rendered) > m.common.Window.Width && m.common.Window.Width > 0 {
+		trailer := fmt.Sprintf("[%d]", len(m.testsSeen))
 		if hasFailed {
-			trailer = j.style.FailureTitle.Render(trailer)
+			trailer = m.style.FailureTitle.Render(trailer)
 		} else if hasSkipped {
-			trailer = j.style.SkipTitle.Render(trailer)
+			trailer = m.style.SkipTitle.Render(trailer)
 		}
 
-		rendered = ansi.Truncate(rendered, j.common.Window.Width, trailer)
+		rendered = ansi.Truncate(rendered, m.common.Window.Width, trailer)
 	}
 	return rendered
 }

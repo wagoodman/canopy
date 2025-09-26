@@ -19,7 +19,3 @@ type SelectedTestReferences struct {
 type ActionError struct {
 	Message string
 }
-
-type TestSelectionChanged struct {
-	References []gotest.Reference
-}

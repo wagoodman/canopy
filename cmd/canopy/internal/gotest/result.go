@@ -45,12 +45,12 @@ func (s ResultStats) Total() int {
 	return s.Passed + s.Failed + s.Skipped
 }
 
-func (s ResultStats) Merge(other ResultStats) ResultStats {
-	return ResultStats{
-		Passed:  s.Passed + other.Passed,
-		Failed:  s.Failed + other.Failed,
-		Skipped: s.Skipped + other.Skipped,
-		Running: s.Running + other.Running,
+func (s *ResultStats) Merge(others ...ResultStats) {
+	for _, other := range others {
+		s.Passed += other.Passed
+		s.Failed += other.Failed
+		s.Skipped += other.Skipped
+		s.Running += other.Running
 	}
 }
 
@@ -117,9 +117,9 @@ func (r *Result) Elapsed(live bool) time.Duration {
 
 	// we want to use the timestamps as the source of truth for calculating elapsed, however, we also need to ensure
 	// this is always relative to time.Now() so that subsequent calls will result in updated (non-static) values.
-	replayStart := time.Now().Add(-r.startOffset)
-	return replayStart.Add(r.totalElapsed).Sub(r.start)
-	// return time.Now().Add(-r.startOffset).Sub(r.start)
+	// Note: don't use r.totalElapsed as input into determining this since we don't know if there is a single
+	// track of tests being run or if t.Parallel() is being used.
+	return time.Now().Add(-r.startOffset).Sub(r.start)
 }
 
 func (r *Result) Update(e Event) {
@@ -200,11 +200,28 @@ func (r *Result) Update(e Event) {
 	}
 }
 
-func (r Result) References() []Reference {
+func (r Result) References(removeFilters ...func(Reference) bool) []Reference {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	return r.references.Values()
+	if len(removeFilters) == 0 {
+		return r.references.Values()
+	}
+
+	var values []Reference
+all:
+	for _, ref := range r.references.Values() {
+		// apply filters to references
+		for _, filter := range removeFilters {
+			if filter(ref) {
+				continue all
+			}
+		}
+
+		values = append(values, ref)
+	}
+
+	return values
 }
 
 func (r Result) Packages() []Reference {

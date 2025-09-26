@@ -62,7 +62,7 @@ func TestNewIndentWriter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			writer := NewIndentWriter(&buf, tt.ref)
+			writer := NewIndentWriterForReference(&buf, tt.ref)
 
 			indentWriter := writer.(*indentWriter)
 			require.Equal(t, tt.expectedIndent, indentWriter.indent)
@@ -191,7 +191,7 @@ func TestIndentWriter_Write(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			writer := NewIndentWriter(&buf, tt.ref)
+			writer := NewIndentWriterForReference(&buf, tt.ref)
 
 			n, err := writer.Write([]byte(tt.input))
 			require.NoError(t, err)
@@ -236,7 +236,7 @@ func TestIndentWriter_Write_ErrorHandling(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			failingWriter := &failingWriter{failAfter: tt.failAfter}
-			writer := NewIndentWriter(failingWriter, tt.ref)
+			writer := NewIndentWriterForReference(failingWriter, tt.ref)
 
 			_, err := writer.Write([]byte(tt.input))
 			tt.wantErr(t, err)
@@ -251,7 +251,7 @@ func TestIndentWriter_Write_MultipleWrites(t *testing.T) {
 		FuncName: "TestExample",
 		TRunName: "subtest",
 	}
-	writer := NewIndentWriter(&buf, ref)
+	writer := NewIndentWriterForReference(&buf, ref)
 
 	// write multiple times to test state management
 	writes := []string{"hello", " ", "world", "\n", "second", " ", "line"}

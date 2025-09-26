@@ -13,7 +13,7 @@ import (
 	"github.com/anchore/clio"
 )
 
-func NewDotUI(config Config) clio.UI {
+func NewTestDotUI(config TestUIConfig) clio.UI {
 	rowCfg := dottestrow.Config{
 		Color:                  config.Color,
 		ShowPackages:           true,

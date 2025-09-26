@@ -14,6 +14,8 @@ var (
 )
 
 type Coverage struct {
+	Disabled bool `yaml:"-" json:"-" mapstructure:"-"`
+
 	Cover    bool    `yaml:"cover" json:"cover" mapstructure:"cover"`          // custom flag
 	CoverMin float64 `yaml:"covermin" json:"covermin" mapstructure:"covermin"` // custom flag
 
@@ -29,6 +31,10 @@ func DefaultCoverage() Coverage {
 }
 
 func (o *Coverage) PostLoad() error {
+	if o.Disabled {
+		return nil
+	}
+
 	if o.CoverMin > 0 {
 		o.Cover = true
 	}
@@ -45,8 +51,10 @@ func (o *Coverage) AddFlags(fangFlags fangs.FlagSet) {
 	o.tracker = xflagset.NewDecorator(fangFlags, o.NamedFlagSet.FlagSet("Test"))
 	flags := o.tracker
 
-	flags.BoolVarP(&o.Cover, "cover", "", "enable coverage analysis")
+	if !o.Disabled {
+		flags.BoolVarP(&o.Cover, "cover", "", "enable coverage analysis")
 
-	// custom flags
-	flags.WithNoTrack().Float64VarP(&o.CoverMin, "covermin", "", "minimum coverage to enforce (percentage)")
+		// custom flags
+		flags.WithNoTrack().Float64VarP(&o.CoverMin, "covermin", "", "minimum coverage to enforce (percentage)")
+	}
 }

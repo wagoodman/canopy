@@ -110,6 +110,24 @@ func (r Reference) ParentRef() *Reference {
 	}
 }
 
+func (r Reference) GuessParentRef() *Reference {
+	if !r.IsPackage() {
+		return r.ParentRef()
+	}
+
+	// we can guess if there is a parent package by removing the last segment of the package path
+	parts := strings.Split(r.Package, "/")
+	if len(parts) <= 1 {
+		// no parent package, we're at the root
+		return nil
+	}
+	// return the parent package by joining all but the last segment
+	parts = parts[:len(parts)-1]
+	return &Reference{
+		Package: strings.Join(parts, "/"),
+	}
+}
+
 // below functions were copied from the go source repo:
 //https://github.com/golang/go/blob/3367475e83eeccd79a5c73c2cc2e91e85e482295/src/testing/match.go#LL284C1-L319C2
 
