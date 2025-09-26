@@ -8,6 +8,15 @@ import (
 	"github.com/lindell/go-ordered-set/orderedset"
 )
 
+// ResultConfig controls what events and output the Result will track and store.
+type ResultConfig struct {
+	TrackOtherOutput   bool
+	TrackFailingOutput bool
+}
+
+// Result aggregates test execution events into queryable state with thread-safe access.
+// It maintains multiple indices optimized for different access patterns and provides
+// real-time statistics as tests execute.
 type Result struct {
 	lock   *sync.RWMutex
 	config ResultConfig
@@ -29,11 +38,7 @@ type Result struct {
 	coverage *float64
 }
 
-type ResultConfig struct {
-	TrackOtherOutput   bool
-	TrackFailingOutput bool
-}
-
+// ResultStats provides counts of tests in each execution state for quick status reporting.
 type ResultStats struct {
 	Passed  int
 	Failed  int
@@ -54,6 +59,8 @@ func (s *ResultStats) Merge(others ...ResultStats) {
 	}
 }
 
+// NewResult creates a new Result aggregator with the specified configuration.
+// Initializes all internal data structures and indices for efficient querying.
 func NewResult(config ResultConfig) *Result {
 	referencesByAction := make(map[Action]*orderedset.OrderedSet[Reference])
 	testReferencesByAction := make(map[Action]*orderedset.OrderedSet[Reference])
@@ -122,6 +129,9 @@ func (r *Result) Elapsed(live bool) time.Duration {
 	return time.Now().Add(-r.startOffset).Sub(r.start)
 }
 
+// Update processes a new event and updates all internal indices and state.
+// This method is thread-safe and maintains the hierarchical structure of test results.
+// Called for every event received during test execution.
 func (r *Result) Update(e Event) {
 	// TODO: check for e.Error and report to the UI when found...
 
@@ -200,6 +210,8 @@ func (r *Result) Update(e Event) {
 	}
 }
 
+// References returns all test references tracked by this result, optionally filtered.
+// The references maintain their insertion order and include packages, functions, and subtests.
 func (r Result) References(removeFilters ...func(Reference) bool) []Reference {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
@@ -224,6 +236,7 @@ all:
 	return values
 }
 
+// Packages returns all package-level references that have been tracked.
 func (r Result) Packages() []Reference {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
@@ -248,6 +261,8 @@ func (r Result) ReferenceEvents(ref Reference) []Event {
 	return r.testEventsByReference[ref]
 }
 
+// ReferencesByAction returns all references (packages, functions, subtests) that
+// have reached the specified action state (run, pass, fail, skip).
 func (r Result) ReferencesByAction(action Action) []Reference {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
@@ -258,6 +273,8 @@ func (r Result) ReferencesByAction(action Action) []Reference {
 	return nil
 }
 
+// TestReferencesByAction returns only function and subtest references (excluding packages)
+// that have reached the specified action state.
 func (r Result) TestReferencesByAction(action Action) []Reference {
 	r.lock.RLock()
 	defer r.lock.RUnlock()

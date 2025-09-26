@@ -10,9 +10,15 @@ const (
 	SetupFailed  Annotation = "setup-failed"    // e.g. "[setup failed]"
 )
 
-// Annotation is a bracketed snippet found in a test event output line, usually at the end.
+// Annotation represents special conditions extracted from test output, such as cached results
+// or build failures. Annotations provide additional context about test execution beyond
+// the basic pass/fail status.
 type Annotation string
 
+// ExtractAnnotations parses special markers from go test output that indicate
+// exceptional conditions. Returns a slice of all annotations found in the output.
+// These annotations help distinguish between different types of test failures
+// and special states like cached results.
 func ExtractAnnotations(output string) []Annotation {
 	output = strings.TrimSpace(output)
 	var annotations []Annotation

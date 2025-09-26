@@ -4,6 +4,8 @@ import (
 	"github.com/google/uuid"
 )
 
+// Run represents a single `go test` execution session with its configuration and accumulated results.
+// Each run has a unique ID that ties together all events and results from that execution.
 type Run struct {
 	ID uuid.UUID
 
@@ -11,6 +13,8 @@ type Run struct {
 	Result Result
 }
 
+// NewRun creates a new test execution session with a unique identifier.
+// The Result field will be populated during test execution.
 func NewRun(config RunnerConfig) *Run {
 	return &Run{
 		ID:     uuid.New(),

@@ -15,6 +15,9 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 )
 
+// Definition represents a test function within go source code discovered by crawling the AST.
+// It is primarily useful to discover t.Run cases embedded within test functions (something
+// that is not readily observable from go test commands).
 type Definition struct {
 	ImportPath string
 	FnName     string
@@ -23,6 +26,9 @@ type Definition struct {
 	Cases      []string
 }
 
+// References converts a test definition into executable test references.
+// Returns the function-level reference plus individual references for each
+// discovered t.Run case within the function.
 func (d Definition) References() []Reference {
 	refs := []Reference{
 		{
@@ -44,6 +50,9 @@ func (d Definition) References() []Reference {
 
 type Definitions []Definition
 
+// References converts all definitions to executable test references with optional filtering.
+// Automatically includes package-level references and applies any provided filter functions
+// to exclude unwanted references. Returns sorted references ready for test execution.
 func (d Definitions) References(removeFilters ...func(Reference) bool) []Reference {
 	if len(d) == 0 {
 		return nil
@@ -83,6 +92,9 @@ func evaluateFilters(ref Reference, removeFilters []func(Reference) bool) bool {
 	return false
 }
 
+// FindDefinitions discovers test functions by parsing Go source code AST within the given packages.
+// It identifies test functions and extracts embedded t.Run cases that are not visible to
+// `go test` commands alone. Optionally filters results using provided run patterns.
 func FindDefinitions(collection *golist.PackageCollection, runsStatements ...string) (Definitions, error) {
 	// find and parse all '_test.go' files in given directory and subdirectories
 	fileSet := token.NewFileSet()

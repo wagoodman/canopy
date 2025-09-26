@@ -5,12 +5,18 @@ import (
 	"strings"
 )
 
+// Reference identifies a test at package, function, or subtest level. It forms a hierarchical
+// structure where package contains functions, and functions contain t.Run subtests. References
+// are used throughout the system for test selection, execution targeting, and result tracking.
 type Reference struct {
 	Package  string // the go package path
 	FuncName string // the test function name
 	TRunName string // optional instance of t.Run within the function
 }
 
+// NewReference constructs a Reference from package path and test name components.
+// Parses test names in the format "TestFunction/subtest/nested" into separate
+// function and subtest components for hierarchical representation.
 func NewReference(pkg, test string) Reference {
 	testFields := strings.SplitN(test, "/", 2)
 	var funcName, testName string
@@ -27,10 +33,14 @@ func NewReference(pkg, test string) Reference {
 	}
 }
 
+// IsPackage returns true if this reference represents a package-level test target
+// rather than a specific function or subtest.
 func (r Reference) IsPackage() bool {
 	return r.FuncName == "" && r.TRunName == "" && r.Package != ""
 }
 
+// PackageRef returns a package-level reference derived from this reference.
+// Useful for getting the parent package when working with function or subtest references.
 func (r Reference) PackageRef() Reference {
 	return Reference{
 		Package: r.Package,
@@ -47,6 +57,7 @@ func (r Reference) FuncRef() *Reference {
 	}
 }
 
+// IsSubTest returns true if this reference represents a t.Run subtest within a function.
 func (r Reference) IsSubTest() bool {
 	return r.FuncName != "" && r.TRunName != "" && r.Package != ""
 }
@@ -59,6 +70,8 @@ func (r Reference) SubTestName(clean bool) string {
 	return tRunNames
 }
 
+// TestName returns the full test name in go test format (TestFunc/subtest).
+// If clean is true, applies test name sanitization rules to match Go's behavior.
 func (r Reference) TestName(clean bool) string {
 	if r.FuncName == "" {
 		return ""
@@ -71,6 +84,9 @@ func (r Reference) TestName(clean bool) string {
 	return strings.Join([]string{r.FuncName, r.SubTestName(clean)}, "/")
 }
 
+// String returns the full reference identifier in a hierarchical format.
+// For packages: "pkg", for functions: "pkg/TestFunc", for subtests: "pkg/TestFunc/subtest".
+// If clean is true, applies test name sanitization.
 func (r Reference) String(clean bool) string {
 	testName := r.TestName(clean)
 	if testName == "" {
@@ -80,6 +96,9 @@ func (r Reference) String(clean bool) string {
 	return strings.Join([]string{r.Package, testName}, "/")
 }
 
+// ParentRef returns the immediate parent reference in the test hierarchy.
+// Package -> nil, Function -> Package, Subtest -> Function or parent subtest.
+// Returns nil if already at the root (package level).
 func (r Reference) ParentRef() *Reference {
 	if r.FuncName == "" {
 		// we're already at the package, there is no parent

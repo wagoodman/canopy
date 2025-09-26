@@ -26,6 +26,7 @@ func (e ErrRunStderr) Error() string {
 	return fmt.Sprintf("stderr from go test: %s", e.Output)
 }
 
+// RunnerConfig specifies how tests should be executed.
 type RunnerConfig struct {
 	Packages         *golist.PackageCollection
 	Coverage         bool
@@ -35,17 +36,22 @@ type RunnerConfig struct {
 	OnlyRefs         []Reference
 }
 
+// Runner coordinates test execution by spawning `go test` subprocesses and processing
+// their JSON output into structured events and results.
 type Runner struct {
 	config       RunnerConfig
 	coverageFile *os.File
 }
 
+// NewRunner creates a test runner with the specified configuration.
 func NewRunner(config RunnerConfig) *Runner {
 	return &Runner{
 		config: config,
 	}
 }
 
+// Run executes tests synchronously and returns the complete results.
+// Blocks until all tests complete or an error occurs. Use Start() for async execution.
 func (r *Runner) Run(ctx context.Context, resultConfig ResultConfig, onEvent ...func(*Event)) (*Run, error) {
 	run, errs := r.Start(ctx, resultConfig, onEvent...)
 
@@ -58,6 +64,9 @@ func (r *Runner) Run(ctx context.Context, resultConfig ResultConfig, onEvent ...
 	return run, nil
 }
 
+// Start executes tests asynchronously and returns immediately with a Run and error channel.
+// Events are processed in real-time and sent to provided callbacks. The error channel
+// will receive nil when execution completes successfully, or an error if something fails.
 func (r *Runner) Start(ctx context.Context, resultConfig ResultConfig, onEvent ...func(*Event)) (*Run, <-chan error) { //nolint: gocognit
 	run := NewRun(r.config)
 	run.Result = *NewResult(resultConfig)

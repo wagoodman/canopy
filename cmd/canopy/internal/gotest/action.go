@@ -12,8 +12,12 @@ const (
 	OutputAction  Action = "output"
 )
 
+// Action represents the state transitions that tests go through during execution.
+// Actions are parsed from `go test -json` output and used to track test lifecycle.
 type Action string
 
+// ParseAction converts a string from `go test -json` output into a typed Action.
+// Returns UnknownAction for any unrecognized strings.
 func ParseAction(s string) Action {
 	switch strings.ToLower(s) {
 	case "run":
@@ -32,6 +36,9 @@ func ParseAction(s string) Action {
 	return UnknownAction
 }
 
+// Completed returns true if the action represents a terminal state for a test.
+// Terminal states are pass, fail, or skip - once reached, no further events
+// are expected for that test reference.
 func (a Action) Completed() bool {
 	switch a {
 	case PassAction, FailAction, SkipAction:

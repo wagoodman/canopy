@@ -6,22 +6,29 @@ import (
 	mapset "github.com/deckarep/golang-set/v2"
 )
 
+// Tree organizes test references into a hierarchical structure for navigation and selection.
+// It maintains parent-child relationships between packages, functions, and subtests.
 type Tree struct {
 	Nodes map[Reference]*TreeNode
 	Roots *OrderedReferenceSet
 }
 
+// TreeNode represents a single node in the test hierarchy tree, containing its reference,
+// associated events, and child nodes.
 type TreeNode struct {
 	Reference Reference
 	Events    []Event
 	Children  *OrderedReferenceSet
 }
 
+// OrderedReferenceSet maintains an ordered collection of unique references, preserving
+// insertion order while preventing duplicates.
 type OrderedReferenceSet struct {
 	ordered []Reference
 	refs    mapset.Set[Reference]
 }
 
+// NewTree creates an empty test hierarchy tree.
 func NewTree() *Tree {
 	return &Tree{
 		Nodes: make(map[Reference]*TreeNode),
@@ -29,6 +36,8 @@ func NewTree() *Tree {
 	}
 }
 
+// NewTreeFromDefinitions creates a tree populated with references from test definitions.
+// Automatically builds the hierarchical structure from the definition data.
 func NewTreeFromDefinitions(defs []Definition) *Tree {
 	t := NewTree()
 	for _, def := range defs {
@@ -37,6 +46,8 @@ func NewTreeFromDefinitions(defs []Definition) *Tree {
 	return t
 }
 
+// NewTreeFromReferences creates a tree populated with the given references.
+// Builds parent-child relationships automatically based on reference hierarchy.
 func NewTreeFromReferences(refs []Reference) *Tree {
 	t := NewTree()
 	t.Add(refs...)

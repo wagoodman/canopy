@@ -4,10 +4,12 @@ import "github.com/lindell/go-ordered-set/orderedset"
 
 type References []Reference
 
+// Len implements sort.Interface for References.
 func (r References) Len() int {
 	return len(r)
 }
 
+// Less implements sort.Interface for References, sorting by package, then function, then subtest.
 func (r References) Less(i, j int) bool {
 	if r[i].Package == r[j].Package {
 		if r[i].FuncName == r[j].FuncName {
@@ -18,6 +20,7 @@ func (r References) Less(i, j int) bool {
 	return r[i].Package < r[j].Package
 }
 
+// Swap implements sort.Interface for References.
 func (r References) Swap(i, j int) {
 	r[i], r[j] = r[j], r[i]
 }
