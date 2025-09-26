@@ -40,9 +40,21 @@ func NewDecorator(upstream fangs.FlagSet, group *pflag.FlagSet) *Decorator {
 
 func (f Decorator) RenderFlags(ignore ...string) []string {
 	var flags []string
-
 	ignoreSet := strset.New(ignore...)
 
+	flags = append(flags, f.renderIntFlags(ignoreSet)...)
+	flags = append(flags, f.renderBoolFlags(ignoreSet)...)
+	flags = append(flags, f.renderBoolRefFlags(ignoreSet)...)
+	flags = append(flags, f.renderStringFlags(ignoreSet)...)
+	flags = append(flags, f.renderStringArrayFlags(ignoreSet)...)
+	flags = append(flags, f.renderFloat64Flags(ignoreSet)...)
+
+	return flags
+}
+
+// renderIntFlags processes int flags and returns their string representations
+func (f Decorator) renderIntFlags(ignoreSet *strset.Set) []string {
+	var flags []string
 	for p, name := range f.intFlags {
 		if ignoreSet.Has(name) {
 			continue
@@ -52,7 +64,12 @@ func (f Decorator) RenderFlags(ignore ...string) []string {
 		}
 		flags = append(flags, fmt.Sprintf("-%s=%d", name, *p))
 	}
+	return flags
+}
 
+// renderBoolFlags processes bool flags and returns their string representations
+func (f Decorator) renderBoolFlags(ignoreSet *strset.Set) []string {
+	var flags []string
 	for p, name := range f.boolFlags {
 		if ignoreSet.Has(name) {
 			continue
@@ -62,7 +79,12 @@ func (f Decorator) RenderFlags(ignore ...string) []string {
 		}
 		flags = append(flags, fmt.Sprintf("-%s", name))
 	}
+	return flags
+}
 
+// renderBoolRefFlags processes bool reference flags and returns their string representations
+func (f Decorator) renderBoolRefFlags(ignoreSet *strset.Set) []string {
+	var flags []string
 	for p, name := range f.boolRefFlags {
 		if ignoreSet.Has(name) {
 			continue
@@ -72,7 +94,12 @@ func (f Decorator) RenderFlags(ignore ...string) []string {
 		}
 		flags = append(flags, fmt.Sprintf("-%s", name))
 	}
+	return flags
+}
 
+// renderStringFlags processes string flags and returns their string representations
+func (f Decorator) renderStringFlags(ignoreSet *strset.Set) []string {
+	var flags []string
 	for p, name := range f.stringFlags {
 		if ignoreSet.Has(name) {
 			continue
@@ -82,7 +109,12 @@ func (f Decorator) RenderFlags(ignore ...string) []string {
 		}
 		flags = append(flags, fmt.Sprintf("-%s=%s", name, *p))
 	}
+	return flags
+}
 
+// renderStringArrayFlags processes string array flags and returns their string representations
+func (f Decorator) renderStringArrayFlags(ignoreSet *strset.Set) []string {
+	var flags []string
 	for p, name := range f.stringArrayFlags {
 		if ignoreSet.Has(name) {
 			continue
@@ -94,7 +126,12 @@ func (f Decorator) RenderFlags(ignore ...string) []string {
 			flags = append(flags, fmt.Sprintf("-%s=%s", name, v))
 		}
 	}
+	return flags
+}
 
+// renderFloat64Flags processes float64 flags and returns their string representations
+func (f Decorator) renderFloat64Flags(ignoreSet *strset.Set) []string {
+	var flags []string
 	for p, name := range f.float64Flags {
 		if ignoreSet.Has(name) {
 			continue
@@ -104,7 +141,6 @@ func (f Decorator) RenderFlags(ignore ...string) []string {
 		}
 		flags = append(flags, fmt.Sprintf("-%s=%f", name, *p))
 	}
-
 	return flags
 }
 

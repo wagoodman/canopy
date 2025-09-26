@@ -466,11 +466,9 @@ func renderTestSuiteFailure(err ErrTestSuiteFailed) string {
 
 func maxPkgNameLength(testPkgs []string) int {
 	maxPkgName := 30
-	if testPkgs != nil {
-		for _, pkg := range testPkgs {
-			if len(pkg) > maxPkgName {
-				maxPkgName = len(pkg)
-			}
+	for _, pkg := range testPkgs {
+		if len(pkg) > maxPkgName {
+			maxPkgName = len(pkg)
 		}
 	}
 	return maxPkgName

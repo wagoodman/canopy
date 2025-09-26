@@ -64,9 +64,7 @@ func filter(term string, targets []string) []list.Rank {
 			var matchedIndexes []int
 			if positions != nil {
 				matchedIndexes = make([]int, len(*positions))
-				for j, pos := range *positions {
-					matchedIndexes[j] = int(pos)
-				}
+				copy(matchedIndexes, *positions)
 			}
 
 			results = append(results, rankResult{

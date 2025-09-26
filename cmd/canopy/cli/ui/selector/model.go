@@ -78,12 +78,8 @@ func New(config Config) Model {
 	// we want a little more control over how filtering works, so we provide our own filter function
 	l.Filter = filter
 
-	l.AdditionalShortHelpKeys = func() []key.Binding {
-		return km.AdditionalShortHelp()
-	}
-	l.AdditionalFullHelpKeys = func() []key.Binding {
-		return km.AdditionalFullHelp()
-	}
+	l.AdditionalShortHelpKeys = km.AdditionalShortHelp
+	l.AdditionalFullHelpKeys = km.AdditionalFullHelp
 
 	return Model{
 		config:     config,

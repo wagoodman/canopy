@@ -24,8 +24,6 @@ type SelectorUI struct {
 	testDefinitions  gotest.Definitions // what is displayed as an option in the UI when it starts
 	initialSelection gotest.References  // the initial selection of tests to run, if any
 	model            selector.Model     // the current state of the UI model
-
-	references []gotest.References
 }
 
 func NewSelectorUI(cfg selector.Config, testDefs gotest.Definitions, selected gotest.References) *SelectorUI {

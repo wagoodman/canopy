@@ -188,7 +188,7 @@ func (j joinedResult) ReferenceDuration(ref gotest.Reference) time.Duration {
 }
 
 func (j joinedResult) SetCoverage(_ *float64) {
-	return // no-op for joined results, coverage is not possible
+	// no-op for joined results, coverage is not possible
 }
 
 func (j joinedResult) Coverage() (float64, bool) {

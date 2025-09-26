@@ -20,15 +20,15 @@ import (
 	"github.com/anchore/go-sync"
 )
 
-//const prettyTitle = `
-//▛▘▀▌▛▌▛▌▛▌▌▌
-//▙▖█▌▌▌▙▌▙▌▙▌
+// const prettyTitle = `
+// ▛▘▀▌▛▌▛▌▛▌▌▌
+// ▙▖█▌▌▌▙▌▙▌▙▌
 //        ▌ ▄▌
 //`
 
-//const prettyTitle = `
-//░█▀▀░█▀█░█▀█░█▀█░█▀█░█░█
-//░█░░░█▀█░█░█░█░█░█▀▀░░█░
+// const prettyTitle = `
+// ░█▀▀░█▀█░█▀█░█▀█░█▀█░█░█
+// ░█░░░█▀█░█░█░█░█░█▀▀░░█░
 //░▀▀▀░▀░▀░▀░▀░▀▀▀░▀░░░░▀░
 //`
 
@@ -107,27 +107,49 @@ func Root(app clio.Application) *cobra.Command {
 }
 
 func runRoot(ctx context.Context, app clio.Application, rootCfg rootConfig) error {
+	testDefs, selected, err := discoverAndSelectTests(rootCfg)
+	if err != nil {
+		return err
+	}
+
+	refs, err := promptUserSelection(app, testDefs, selected)
+	if err != nil {
+		return err
+	}
+
+	plan, err := prepareTestExecution(app, rootCfg, testDefs, refs)
+	if err != nil {
+		return err
+	}
+
+	if len(plan.runGroups) == 0 {
+		return nil
+	}
+
+	return executeTests(ctx, rootCfg.TestCoreConfig, plan)
+}
+
+// discoverAndSelectTests finds test definitions and applies run pattern filtering
+func discoverAndSelectTests(rootCfg rootConfig) (gotest.Definitions, gotest.References, error) {
 	// we can't narrow down the definitions based on the run statements, instead we want to capture from the definitions,
 	// which references would be selected from those definitions. If we fitler the definitions based on the run statements,
 	// then we're at risk of claiming that the minimal test selection can select a full package, when in fact it cannot
 	// (since we may have removed some tests from the package definitions). Thus we never filter the test definitions.
 	testDefs, err := gotest.FindDefinitions(rootCfg.Test.Runtime.Packages)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	if len(testDefs) == 0 {
-		return fmt.Errorf("no tests found in packages %q (with run options %q)", rootCfg.Test.Specifiers, rootCfg.Test.Run)
+		return nil, nil, fmt.Errorf("no tests found in packages %q (with run options %q)", rootCfg.Test.Specifiers, rootCfg.Test.Run)
 	}
-
-	id := app.ID()
 
 	var selected gotest.References
 
 	if len(rootCfg.Test.Run) > 0 {
 		runPatterns, err := internal.MakeRegexes(rootCfg.Test.Run)
 		if err != nil {
-			return fmt.Errorf("failed to compile '-run' patterns: %w", err)
+			return nil, nil, fmt.Errorf("failed to compile '-run' patterns: %w", err)
 		}
 
 		patternRemoveFilter := func(ref gotest.Reference) bool {
@@ -139,19 +161,23 @@ func runRoot(ctx context.Context, app clio.Application, rootCfg rootConfig) erro
 		}
 
 		pkgRemoveFilter := func(ref gotest.Reference) bool {
-			if ref.IsPackage() {
-				return true
-			}
-			return false
+			return ref.IsPackage()
 		}
 
 		selected = testDefs.References(patternRemoveFilter, pkgRemoveFilter)
 	}
 
+	return testDefs, selected, nil
+}
+
+// promptUserSelection creates the UI and prompts the user to select tests
+func promptUserSelection(app clio.Application, testDefs gotest.Definitions, preSelected gotest.References) (gotest.References, error) {
+	id := app.ID()
+
 	ux := ui.NewSelectorUI(selector.Config{
 		ID:    fmt.Sprintf("%s@%s", id.Name, id.Version),
 		Debug: false,
-	}, testDefs, selected)
+	}, testDefs, preSelected)
 
 	type Stater interface {
 		State() *clio.State
@@ -159,23 +185,38 @@ func runRoot(ctx context.Context, app clio.Application, rootCfg rootConfig) erro
 
 	state := app.(Stater).State()
 
-	if err = state.UI.Replace(ui.NewCollection(ux)); err != nil {
-		return fmt.Errorf("unable to replace UI: %w", err)
+	if err := state.UI.Replace(ui.NewCollection(ux)); err != nil {
+		return nil, fmt.Errorf("unable to replace UI: %w", err)
 	}
 
 	refs := ux.Prompt()
+	return refs, nil
+}
 
+// executionPlan contains all the data needed to execute tests
+type executionPlan struct {
+	runGroups               []gotest.References
+	runConfigs              []test.RunConfig
+	logTestFailuresAsErrors bool
+}
+
+// prepareTestExecution sets up UIs, groups tests, and builds run configurations
+func prepareTestExecution(app clio.Application, rootCfg rootConfig, testDefs gotest.Definitions, refs gotest.References) (*executionPlan, error) {
 	// set the UI dynamically
 	maxPkgName := maxPkgNameLength(refs.Packages())
 	logTestFailuresAsErrors, err := setupTestUIs(app, rootCfg.Test.Writers, rootCfg.Test.Appearance, maxPkgName)
 	if err != nil {
-		return fmt.Errorf("unable to setup test UIs: %w", err)
+		return nil, fmt.Errorf("unable to setup test UIs: %w", err)
 	}
 
 	runGroups := gotest.GroupIntoRuns(gotest.MinimalSelection(testDefs, refs))
 
 	if len(runGroups) == 0 {
-		return nil
+		return &executionPlan{
+			runGroups:               runGroups,
+			runConfigs:              nil,
+			logTestFailuresAsErrors: logTestFailuresAsErrors,
+		}, nil
 	}
 
 	log.WithFields("references", refs.TestFunctionsCount()).Info("running selected tests")
@@ -191,23 +232,7 @@ func runRoot(ctx context.Context, app clio.Application, rootCfg rootConfig) erro
 		}
 	}
 
-	coreCfg := rootCfg.TestCoreConfig
-	cfg := coreCfg.Test
-
-	s, err := test.NewManager(
-		test.Config{
-			DBRoot:    coreCfg.Root,
-			Ephemeral: coreCfg.Ephemeral,
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("unable to create test session: %w", err)
-	}
-	defer func() {
-		if err := s.Close(); err != nil {
-			log.WithFields("error", err).Error("unable to close test session")
-		}
-	}()
+	cfg := rootCfg.Test
 
 	var commonArgs []string
 	commonArgs = append(commonArgs, cfg.GoBuild.RenderedFlags...)
@@ -242,10 +267,34 @@ func runRoot(ctx context.Context, app clio.Application, rootCfg rootConfig) erro
 		)
 	}
 
+	return &executionPlan{
+		runGroups:               runGroups,
+		runConfigs:              runCfgs,
+		logTestFailuresAsErrors: logTestFailuresAsErrors,
+	}, nil
+}
+
+// executeTests creates a session, runs all test configurations, and evaluates results
+func executeTests(ctx context.Context, coreCfg *TestCoreConfig, plan *executionPlan) error {
+	s, err := test.NewManager(
+		test.Config{
+			DBRoot:    coreCfg.Root,
+			Ephemeral: coreCfg.Ephemeral,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("unable to create test session: %w", err)
+	}
+	defer func() {
+		if err := s.Close(); err != nil {
+			log.WithFields("error", err).Error("unable to close test session")
+		}
+	}()
+
 	start := time.Now()
 	var runs []*gotest.Run
 	err = sync.CollectSlice(&ctx, internal.ExecutorTestRunner,
-		sync.ToSeq(runCfgs),
+		sync.ToSeq(plan.runConfigs),
 		func(runConfig test.RunConfig) (*gotest.Run, error) {
 			return s.RunTests(ctx, runConfig)
 		},
@@ -256,7 +305,7 @@ func runRoot(ctx context.Context, app clio.Application, rootCfg rootConfig) erro
 		return fmt.Errorf("unable to run tests: %w", err)
 	}
 
-	_, resultErr := evaluateResults(runs, time.Since(start), logTestFailuresAsErrors)
+	_, resultErr := evaluateResults(runs, time.Since(start), plan.logTestFailuresAsErrors)
 
 	return resultErr
 }

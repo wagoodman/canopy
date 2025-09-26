@@ -60,13 +60,13 @@ func (d *referenceState) update(m *list.Model, aboutToFilters ...bool) tea.Cmd {
 	return d.setReferences(m, aboutToFilter, false, d.state.References()...)
 }
 
-func (d *referenceState) finish(m *list.Model, refs []gotest.Reference) tea.Cmd {
-	if d.state == nil {
-		return nil
-	}
-
-	return d.setReferences(m, false, true, refs...)
-}
+// func (d *referenceState) finish(m *list.Model, refs []gotest.Reference) tea.Cmd {
+//	if d.state == nil {
+//		return nil
+//	}
+//
+//	return d.setReferences(m, false, true, refs...)
+//}
 
 func (d *referenceState) setReferences(m *list.Model, aboutToFilter, finished bool, refs ...gotest.Reference) tea.Cmd {
 	sort.Sort(gotest.References(refs))

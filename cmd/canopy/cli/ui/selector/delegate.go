@@ -93,112 +93,197 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 
 	switch msg := msg.(type) {
 	case uievent.RefreshReferences:
-		cmds = append(cmds, d.refState.update(m, msg.AboutToFilter))
+		cmds = append(cmds, d.handleRefreshReferences(msg, m))
 
 	case uievent.SwitchState:
-		// select the last item that was selected in the list
-		if d.current != nil {
-			for idx, i := range m.Items() {
-				it := i.(item)
-				if it.ref == *d.current {
-					m.Select(idx)
-					break
-				}
+		cmds = append(cmds, d.handleSwitchState(msg, m))
+
+	case tea.MouseMsg:
+		cmds = append(cmds, d.handleMouseEvent(msg, m))
+
+	case tea.KeyMsg:
+		cmds = append(cmds, d.handleKeyEvent(msg, m))
+	}
+
+	return tea.Batch(cmds...)
+}
+
+// handleRefreshReferences processes refresh reference events
+func (d *listItemDelegate) handleRefreshReferences(msg uievent.RefreshReferences, m *list.Model) tea.Cmd {
+	return d.refState.update(m, msg.AboutToFilter)
+}
+
+// handleSwitchState processes state switch events and sets up test definitions
+func (d *listItemDelegate) handleSwitchState(msg uievent.SwitchState, m *list.Model) tea.Cmd {
+	var cmds []tea.Cmd
+
+	// restore the last selected item position
+	d.restoreLastSelection(m)
+
+	// initialize test definitions
+	d.initializeTestDefinitions(msg.Definitions)
+	cmds = append(cmds, d.refState.update(m))
+
+	// apply user selections from -run statements
+	firstSelectedIdx := d.applyUserSelections(msg.Selected, m)
+
+	if firstSelectedIdx >= 0 {
+		m.Select(firstSelectedIdx) // move the cursor to the first selected item
+	}
+	cmds = append(cmds, d.onNavigate(m))
+
+	return tea.Batch(cmds...)
+}
+
+// restoreLastSelection restores cursor to the last selected item if available
+func (d *listItemDelegate) restoreLastSelection(m *list.Model) {
+	if d.current != nil {
+		for idx, i := range m.Items() {
+			it := i.(item)
+			if it.ref == *d.current {
+				m.Select(idx)
+				break
 			}
 		}
+	}
+}
 
-		// set the initial test definitions
-		d.refState = newReferenceState(state.NewDefinitionViewer(msg.Definitions), d.refState)
-		cmds = append(cmds, d.refState.update(m))
+// initializeTestDefinitions sets up the reference state with new test definitions
+func (d *listItemDelegate) initializeTestDefinitions(definitions gotest.Definitions) {
+	d.refState = newReferenceState(state.NewDefinitionViewer(definitions), d.refState)
+}
 
-		// select any items that were selected by the user with -run statements...
-		selectedSet := make(map[gotest.Reference]struct{})
-		for _, ref := range msg.Selected {
-			d.userSelect[ref] = struct{}{}
-			selectedSet[ref] = struct{}{}
-		}
+// applyUserSelections marks items selected by user with -run statements and returns first selected index
+func (d *listItemDelegate) applyUserSelections(selected []gotest.Reference, m *list.Model) int {
+	selectedSet := make(map[gotest.Reference]struct{})
+	for _, ref := range selected {
+		d.userSelect[ref] = struct{}{}
+		selectedSet[ref] = struct{}{}
+	}
 
-		firstSelectedIdx := -1
-		for candidateIdx, candidate := range m.Items() {
-			it := candidate.(item)
-			if _, ok := selectedSet[it.ref]; ok {
-				markChildren(it, candidateIdx, d.visibleItems(m), d.userSelect, false, d.refState.children)
+	firstSelectedIdx := -1
+	for candidateIdx, candidate := range m.Items() {
+		it := candidate.(item)
+		if _, ok := selectedSet[it.ref]; ok {
+			markChildren(it, candidateIdx, d.visibleItems(m), d.userSelect, false, d.refState.children)
+			if firstSelectedIdx == -1 {
 				firstSelectedIdx = candidateIdx // remember the first selected item
 			}
 		}
+	}
 
-		if firstSelectedIdx >= 0 {
-			m.Select(firstSelectedIdx) // move the cursor to the last selected item
-		}
+	return firstSelectedIdx
+}
+
+// handleMouseEvent processes mouse interactions
+func (d *listItemDelegate) handleMouseEvent(msg tea.MouseMsg, m *list.Model) tea.Cmd {
+	var cmds []tea.Cmd
+
+	switch msg.Button {
+	case tea.MouseButtonWheelUp:
+		m.CursorUp()
 		cmds = append(cmds, d.onNavigate(m))
-
-	case tea.MouseMsg:
-		switch msg.Button {
-		case tea.MouseButtonWheelUp:
-			m.CursorUp()
+	case tea.MouseButtonWheelDown:
+		m.CursorDown()
+		cmds = append(cmds, d.onNavigate(m))
+	default:
+		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
 			cmds = append(cmds, d.onNavigate(m))
-		case tea.MouseButtonWheelDown:
-			m.CursorDown()
-			cmds = append(cmds, d.onNavigate(m))
-		default:
-			if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
-				cmds = append(cmds, d.onNavigate(m))
-			}
-		}
-
-	case tea.KeyMsg:
-		// note: delegates do not receive key messages regarding filtering
-		switch {
-		case key.Matches(msg, d.keyMap.SelectTest):
-			cmds = append(cmds, d.onToggleMultiselect(m))
-			cmds = append(cmds, d.onNavigate(m))
-
-		case key.Matches(msg, d.keyMap.SelectAllTests):
-			isAllAlreadySelected := len(d.userSelect) == len(m.Items())
-			cmds = append(cmds, d.onSelectAll(m, isAllAlreadySelected))
-
-		case key.Matches(msg, d.keyMap.NextPackage):
-			cmds = append(cmds, d.nextPkg(m))
-			cmds = append(cmds, d.onNavigate(m))
-
-		case key.Matches(msg, d.keyMap.PrevPackage):
-			cmds = append(cmds, d.prevPkg(m))
-			cmds = append(cmds, d.onNavigate(m))
-
-		case key.Matches(msg, m.KeyMap.CursorDown, m.KeyMap.CursorUp, m.KeyMap.PrevPage, m.KeyMap.NextPage):
-			cmds = append(cmds, d.onNavigate(m))
-
-		case key.Matches(msg, d.keyMap.ToggleReferenceLongForm):
-			// toggle the long form view
-			d.refState.preferLongForm = !d.refState.preferLongForm
-			cmds = append(cmds, d.refState.update(m))
-
-		case key.Matches(msg, d.keyMap.ToggleTests):
-			// toggle the long form view
-			d.refState.hideTests = !d.refState.hideTests
-			cmds = append(cmds, d.refState.update(m))
-
-		case key.Matches(msg, d.keyMap.Finish):
-			d.finished = true
-			cmds = append(cmds, d.selectedTestReferences(m, true))
-		}
-
-		// don't match any of the keys below if we're actively filtering.
-		if m.SettingFilter() {
-			break
-		}
-
-		switch {
-		case key.Matches(msg, filterKeyBindings...):
-			// if matches a-z, A-Z then we set the filter state to filtering. We should account for the missing input
-			// character that the user just entered (as well as anything else that already may be applied in the filter text)
-			m.SetFilterText(m.FilterInput.Value() + msg.String())
-			m.SetFilterState(list.Filtering)
-			cmds = append(cmds, d.refState.update(m))
 		}
 	}
 
 	return tea.Batch(cmds...)
+}
+
+// handleKeyEvent processes keyboard interactions
+func (d *listItemDelegate) handleKeyEvent(msg tea.KeyMsg, m *list.Model) tea.Cmd {
+	var cmds []tea.Cmd
+
+	// handle main key actions
+	cmds = append(cmds, d.handleSelectionKeys(msg, m)...)
+	cmds = append(cmds, d.handleNavigationKeys(msg, m)...)
+	cmds = append(cmds, d.handleToggleKeys(msg, m)...)
+
+	// handle filter keys if not actively filtering
+	if !m.SettingFilter() {
+		cmds = append(cmds, d.handleFilterKeys(msg, m)...)
+	}
+
+	return tea.Batch(cmds...)
+}
+
+// handleSelectionKeys processes test selection and finish actions
+func (d *listItemDelegate) handleSelectionKeys(msg tea.KeyMsg, m *list.Model) []tea.Cmd {
+	var cmds []tea.Cmd
+
+	switch {
+	case key.Matches(msg, d.keyMap.SelectTest):
+		cmds = append(cmds, d.onToggleMultiselect(m))
+		cmds = append(cmds, d.onNavigate(m))
+
+	case key.Matches(msg, d.keyMap.SelectAllTests):
+		isAllAlreadySelected := len(d.userSelect) == len(m.Items())
+		cmds = append(cmds, d.onSelectAll(m, isAllAlreadySelected))
+
+	case key.Matches(msg, d.keyMap.Finish):
+		d.finished = true
+		cmds = append(cmds, d.selectedTestReferences(true))
+	}
+
+	return cmds
+}
+
+// handleNavigationKeys processes cursor movement and package navigation
+func (d *listItemDelegate) handleNavigationKeys(msg tea.KeyMsg, m *list.Model) []tea.Cmd {
+	var cmds []tea.Cmd
+
+	switch {
+	case key.Matches(msg, d.keyMap.NextPackage):
+		cmds = append(cmds, d.nextPkg(m))
+		cmds = append(cmds, d.onNavigate(m))
+
+	case key.Matches(msg, d.keyMap.PrevPackage):
+		cmds = append(cmds, d.prevPkg(m))
+		cmds = append(cmds, d.onNavigate(m))
+
+	case key.Matches(msg, m.KeyMap.CursorDown, m.KeyMap.CursorUp, m.KeyMap.PrevPage, m.KeyMap.NextPage):
+		cmds = append(cmds, d.onNavigate(m))
+	}
+
+	return cmds
+}
+
+// handleToggleKeys processes view toggle actions
+func (d *listItemDelegate) handleToggleKeys(msg tea.KeyMsg, m *list.Model) []tea.Cmd {
+	var cmds []tea.Cmd
+
+	switch {
+	case key.Matches(msg, d.keyMap.ToggleReferenceLongForm):
+		d.refState.preferLongForm = !d.refState.preferLongForm
+		cmds = append(cmds, d.refState.update(m))
+
+	case key.Matches(msg, d.keyMap.ToggleTests):
+		d.refState.hideTests = !d.refState.hideTests
+		cmds = append(cmds, d.refState.update(m))
+	}
+
+	return cmds
+}
+
+// handleFilterKeys processes text filtering input
+func (d *listItemDelegate) handleFilterKeys(msg tea.KeyMsg, m *list.Model) []tea.Cmd {
+	var cmds []tea.Cmd
+
+	switch {
+	case key.Matches(msg, filterKeyBindings...):
+		// if matches a-z, A-Z then we set the filter state to filtering. We should account for the missing input
+		// character that the user just entered (as well as anything else that already may be applied in the filter text)
+		m.SetFilterText(m.FilterInput.Value() + msg.String())
+		m.SetFilterState(list.Filtering)
+		cmds = append(cmds, d.refState.update(m))
+	}
+
+	return cmds
 }
 
 func (d *listItemDelegate) nextPkg(m *list.Model) tea.Cmd {
@@ -268,7 +353,7 @@ func (d *listItemDelegate) onNavigate(m *list.Model) tea.Cmd {
 	if len(d.cursorScope) > 0 && len(d.userSelect) == 0 {
 		// special case: if the user is hovering over an item, but has not selected any items, then these are implicitly selected
 		// in case the user hits "enter".
-		return d.selectedTestReferences(m, false)
+		return d.selectedTestReferences(false)
 	}
 	return nil
 }
@@ -279,7 +364,7 @@ func (d *listItemDelegate) onSelectAll(m *list.Model, isAllAlreadySelected bool)
 
 	markAll(d.visibleItems(m), d.userSelect, isAllAlreadySelected)
 
-	return d.selectedTestReferences(m, false)
+	return d.selectedTestReferences(false)
 }
 
 func (d *listItemDelegate) onToggleMultiselect(m *list.Model) tea.Cmd {
@@ -296,7 +381,7 @@ func (d *listItemDelegate) onToggleMultiselect(m *list.Model) tea.Cmd {
 
 	markChildren(selected, selectedIdx, d.visibleItems(m), d.userSelect, invert, d.refState.children)
 
-	return d.selectedTestReferences(m, false)
+	return d.selectedTestReferences(false)
 }
 
 func (d listItemDelegate) visibleItems(m *list.Model) []item {
@@ -311,7 +396,7 @@ func (d listItemDelegate) selectedItem(m *list.Model) (int, item) {
 	return m.Index(), m.SelectedItem().(item)
 }
 
-func (d listItemDelegate) selectedTestReferences(m *list.Model, finished bool) tea.Cmd {
+func (d listItemDelegate) selectedTestReferences(finished bool) tea.Cmd {
 	var cmds []tea.Cmd
 	refs := d.selectedReferences()
 	// if finished {

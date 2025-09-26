@@ -51,49 +51,75 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case partybus.Event:
-
 		switch msg.Type {
 		case event.GoTestType:
-			testEvent, err := parser.ParseGoTestType(msg)
-			if err != nil {
-				log.WithFields("error", err).Error("unable to parse go test event")
-				panic("TODO")
-			}
-
-			if !m.config.CombineMultipleRuns && !m.ids.Contains(testEvent.RunID) {
-				break
-			}
-
-			if !m.started {
-				m.started = true
-			}
-
-			for i := range m.runs {
-				if m.runs[i].ID == testEvent.RunID {
-					m.runs[i].Result.Update(testEvent)
-					break
-				}
-			}
-
+			m.handleGoTestEvent(msg)
 		case event.GoTestRunType:
-			runEvent, err := parser.ParseGoTestRunType(msg)
-			if err != nil {
-				log.WithFields("error", err).Error("unable to parse go test event")
-				panic("TODO")
-			}
-
-			if (!m.config.CombineMultipleRuns && !m.ids.Contains(runEvent.ID)) || runEvent == nil {
-				break
-			}
-
-			if !m.ids.Contains(runEvent.ID) {
-				m.runs = append(m.runs, *runEvent)
-				m.ids.Add(runEvent.ID)
-			}
+			m.handleGoTestRunEvent(msg)
 		}
 	}
 
 	return m, cmd
+}
+
+// handleGoTestEvent processes GoTestType events, updating test results for matching runs
+func (m *Model) handleGoTestEvent(msg partybus.Event) {
+	testEvent, err := parser.ParseGoTestType(msg)
+	if err != nil {
+		log.WithFields("error", err).Error("unable to parse go test event")
+		panic("TODO")
+	}
+
+	if !m.shouldProcessTestEvent(testEvent) {
+		return
+	}
+
+	if !m.started {
+		m.started = true
+	}
+
+	m.updateRunResult(testEvent)
+}
+
+// handleGoTestRunEvent processes GoTestRunType events, adding new test runs
+func (m *Model) handleGoTestRunEvent(msg partybus.Event) {
+	runEvent, err := parser.ParseGoTestRunType(msg)
+	if err != nil {
+		log.WithFields("error", err).Error("unable to parse go test event")
+		panic("TODO")
+	}
+
+	if !m.shouldProcessRunEvent(runEvent) {
+		return
+	}
+
+	if !m.ids.Contains(runEvent.ID) {
+		m.runs = append(m.runs, *runEvent)
+		m.ids.Add(runEvent.ID)
+	}
+}
+
+// shouldProcessTestEvent determines if a test event should be processed based on configuration
+func (m *Model) shouldProcessTestEvent(testEvent gotest.Event) bool {
+	return m.config.CombineMultipleRuns || m.ids.Contains(testEvent.RunID)
+}
+
+// shouldProcessRunEvent determines if a run event should be processed based on configuration
+func (m *Model) shouldProcessRunEvent(runEvent *gotest.Run) bool {
+	if runEvent == nil {
+		return false
+	}
+	return m.config.CombineMultipleRuns || m.ids.Contains(runEvent.ID)
+}
+
+// updateRunResult finds the matching run and updates its result with the test event
+func (m *Model) updateRunResult(testEvent gotest.Event) {
+	for i := range m.runs {
+		if m.runs[i].ID == testEvent.RunID {
+			m.runs[i].Result.Update(testEvent)
+			break
+		}
+	}
 }
 
 func (m Model) View() string {
