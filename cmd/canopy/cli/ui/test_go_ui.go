@@ -65,6 +65,7 @@ func newDynamicGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
 		presenter.DefaultGoTestResultSummaryConfig().
 			WithColor(cfg.Color).
 			WithPackageNameWidth(maxPkgNameLength).
+			WithStripPackagePrefix(cfg.StripPackagePrefix).
 			WithStalePackageDuration(stalePackageDuration).
 			WithLoosePackageOrder(loosePackageOrder).
 			WithCombineMultipleRuns(cfg.CombineMultipleRuns).

@@ -25,6 +25,9 @@ type GoSummaryConfig struct {
 	// PackageNameWidth is the width of the package name in the summary (controls where the aux component column starts)
 	PackageNameWidth int
 
+	// StripPackagePrefix removes the given prefix from package names in the summary (usually the module path)
+	StripPackagePrefix string
+
 	// ShowPackageCount toggles whether the package count is shown in the summary
 	ShowPackageCount bool
 
@@ -82,6 +85,11 @@ func (c GoSummaryConfig) WithWriteToStderr(writeToStderr bool) GoSummaryConfig {
 
 func (c GoSummaryConfig) WithPackageNameWidth(width int) GoSummaryConfig {
 	c.PackageNameWidth = width
+	return c
+}
+
+func (c GoSummaryConfig) WithStripPackagePrefix(prefix string) GoSummaryConfig {
+	c.StripPackagePrefix = prefix
 	return c
 }
 
@@ -232,6 +240,7 @@ func (s GoTestResultSummary) runningFooter() string { //nolint:funlen
 					Style:        s.style,
 					FormatStatus: false,
 					MaxTestName:  s.config.PackageNameWidth,
+					StripPrefix:  s.config.StripPackagePrefix,
 				}.String())
 			}
 		}
@@ -270,6 +279,7 @@ func (s GoTestResultSummary) runningFooter() string { //nolint:funlen
 			Style:        s.style,
 			FormatStatus: false,
 			MaxTestName:  s.config.PackageNameWidth,
+			StripPrefix:  s.config.StripPackagePrefix,
 		}.String())
 	}
 

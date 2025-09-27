@@ -20,6 +20,7 @@ type Package struct {
 	Style          style.Go
 	FormatStatus   bool
 	MaxTestName    int
+	StripPrefix    string
 }
 
 func (p Package) Present(stdout, _ io.Writer) error {
@@ -63,6 +64,11 @@ func (p Package) String() string {
 	}
 
 	if p.Name != "" {
+		if p.StripPrefix != "" {
+			p.Name = strings.TrimPrefix(p.Name, p.StripPrefix)
+			p.Name = strings.TrimPrefix(p.Name, "/")
+		}
+
 		// make all test names the same width
 		p.Name = fmt.Sprintf("%-*s", p.MaxTestName, p.Name)
 	}

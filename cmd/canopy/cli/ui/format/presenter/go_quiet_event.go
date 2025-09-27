@@ -91,10 +91,6 @@ func parseAndFormatPackageLine(s string, st style.Go, maxTestName int, stripPack
 
 	if len(fields) > 1 {
 		pkgName = fields[1]
-		if stripPackagePrefix != "" {
-			pkgName = strings.TrimPrefix(pkgName, stripPackagePrefix)
-			pkgName = strings.TrimPrefix(pkgName, "/")
-		}
 	}
 
 	if len(fields) > 2 {
@@ -110,5 +106,6 @@ func parseAndFormatPackageLine(s string, st style.Go, maxTestName int, stripPack
 		Style:          st,
 		FormatStatus:   true,
 		MaxTestName:    maxTestName,
+		StripPrefix:    stripPackagePrefix,
 	}.String()
 }
