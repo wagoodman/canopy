@@ -17,6 +17,7 @@ type PackageCollection struct {
 	order      []string
 	set        map[string]Package
 	indexByDir map[string]string
+	module     string
 }
 
 func NewPackageCollection(pkgs ...Package) *PackageCollection {
@@ -36,6 +37,13 @@ func (c *PackageCollection) Add(pkg Package) {
 	c.order = append(c.order, pkg.ImportPath)
 	c.set[pkg.ImportPath] = pkg
 	c.indexByDir[pkg.Dir] = pkg.ImportPath
+	if c.module == "" && pkg.ModulePath != "" {
+		c.module = pkg.ModulePath
+	}
+}
+
+func (c *PackageCollection) Module() string {
+	return c.module
 }
 
 func (c *PackageCollection) Size() int {
@@ -88,6 +96,7 @@ func (c *PackageCollection) GetByDir(dir string) *Package {
 type Package struct {
 	Dir        string // directory containing package sources
 	ImportPath string // import path of package in dir
+	ModulePath string // module path of package (this is not part of the original datastructure, but instead extracted from Module.Path)
 	// ImportComment string   // path in import comment on package statement
 	// Name          string   // package name
 	// Doc           string   // package documentation string
@@ -213,7 +222,7 @@ func PackageInfo(pkgs ...string) ([]Package, error) {
 
 	// note: doing -f with minimal fields is much faster than doing -json
 
-	args, err := shlex.Split(`-f '{ "Dir": "{{ .Dir }}",  "ImportPath": "{{ .ImportPath }}" }'`)
+	args, err := shlex.Split(`-f '{ "Dir": "{{ .Dir }}",  "ImportPath": "{{ .ImportPath }}", "ModulePath": "{{.Module.Path}}" }'`)
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse go list args: %w", err)
 	}

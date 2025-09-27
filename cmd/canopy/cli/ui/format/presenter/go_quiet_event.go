@@ -8,49 +8,40 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
-	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
 )
 
 type GoQuietEventFactory struct {
-	Style            style.Go
-	IDE              ide.Context
-	PackageNameWidth int
+	config GoEventConfig
 }
 
-func NewGoQuietEventFactory(sty style.Go, i ide.Context, packageNameWidth int) GoQuietEventFactory {
+func NewGoQuietEventFactory(cfg GoEventConfig) GoQuietEventFactory {
 	return GoQuietEventFactory{
-		Style:            sty,
-		IDE:              i,
-		PackageNameWidth: packageNameWidth,
+		config: cfg,
 	}
 }
 
 func (f GoQuietEventFactory) NewEvent(e gotest.Event, midPanic bool) fmt.Stringer {
-	return goxxQuietEvent{
-		Style:            f.Style,
-		IDE:              f.IDE,
-		PackageNameWidth: f.PackageNameWidth,
-		Event:            e,
-		Panic:            midPanic,
+	return goQuietEvent{
+		GoEventConfig: f.config,
+		Event:         e,
+		Panic:         midPanic,
 	}
 }
 
-type goxxQuietEvent struct {
-	Style            style.Go
-	IDE              ide.Context
-	Event            gotest.Event
-	PackageNameWidth int
-	Panic            bool
+type goQuietEvent struct {
+	GoEventConfig
+	Event gotest.Event
+	Panic bool
 }
 
-func (p goxxQuietEvent) Present(stdout, _ io.Writer) error {
+func (p goQuietEvent) Present(stdout, _ io.Writer) error {
 	if _, err := fmt.Fprint(stdout, p.String()); err != nil {
 		return fmt.Errorf("failed to write go test event output to stdout: %w", err)
 	}
 	return nil
 }
 
-func (p goxxQuietEvent) String() string {
+func (p goQuietEvent) String() string {
 	e := p.Event
 	if e.Reference.IsPackage() {
 		return p.formatPackage(e)
@@ -60,14 +51,14 @@ func (p goxxQuietEvent) String() string {
 	return strings.Repeat("    ", strings.Count(e.Reference.TestName(false), "/")) + p.format(e)
 }
 
-func (p goxxQuietEvent) formatPackage(e gotest.Event) string {
+func (p goQuietEvent) formatPackage(e gotest.Event) string {
 	if output.HasAny(output.HasFailedPackageMarking, output.HasPackageOKMarking, output.HasUnknownPackageMarking)(e.Output) {
-		return parseAndFormatPackageLine(e.Output, p.Style, p.PackageNameWidth)
+		return parseAndFormatPackageLine(e.Output, p.Style, p.PackageNameWidth, p.StripPackagePrefix)
 	}
 	return e.Output
 }
 
-func (p goxxQuietEvent) format(e gotest.Event) string {
+func (p goQuietEvent) format(e gotest.Event) string {
 	if p.Panic {
 		return formatPanic(e.Output, p.Style)
 	}
@@ -80,7 +71,7 @@ func (p goxxQuietEvent) format(e gotest.Event) string {
 	return e.Output
 }
 
-func parseAndFormatPackageLine(s string, st style.Go, maxTestName int) string {
+func parseAndFormatPackageLine(s string, st style.Go, maxTestName int, stripPackagePrefix string) string {
 	// preserve trailer
 	var trailer string
 	endIdx := strings.Index(s, "\n")
@@ -100,6 +91,10 @@ func parseAndFormatPackageLine(s string, st style.Go, maxTestName int) string {
 
 	if len(fields) > 1 {
 		pkgName = fields[1]
+		if stripPackagePrefix != "" {
+			pkgName = strings.TrimPrefix(pkgName, stripPackagePrefix)
+			pkgName = strings.TrimPrefix(pkgName, "/")
+		}
 	}
 
 	if len(fields) > 2 {

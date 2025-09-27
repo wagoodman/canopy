@@ -19,6 +19,7 @@ import (
 // It is primarily useful to discover t.Run cases embedded within test functions (something
 // that is not readily observable from go test commands).
 type Definition struct {
+	Module     string
 	ImportPath string
 	FnName     string
 	Start      token.Position
@@ -49,6 +50,15 @@ func (d Definition) References() []Reference {
 }
 
 type Definitions []Definition
+
+func (d Definitions) Module() string {
+	for _, def := range d {
+		if def.Module != "" {
+			return def.Module
+		}
+	}
+	return ""
+}
 
 // References converts all definitions to executable test references with optional filtering.
 // Automatically includes package-level references and applies any provided filter functions
@@ -131,6 +141,7 @@ func FindDefinitions(collection *golist.PackageCollection, runsStatements ...str
 
 			_, _, cases := getTableTestCases(fnDecl)
 			tests = append(tests, Definition{
+				Module:     collection.Module(),
 				ImportPath: importPath,
 				FnName:     fnDecl.Name.Name,
 				Start:      fileSet.Position(fnDecl.Pos()),

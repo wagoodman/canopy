@@ -161,8 +161,14 @@ func Test(app clio.Application) *cobra.Command {
 			opts.Test.Runtime.Packages = testPkgs
 
 			// set the UI dynamically
-			maxPkgName := maxPkgNameLength(testPkgs.ImportPaths())
-			logTestFailuresAsErrors, err = setupTestUIs(app, opts.Test.Writers, opts.Test.Appearance, maxPkgName)
+			var module string
+			if opts.Test.UseShortNames {
+				module = testPkgs.Module()
+				log.WithFields("module", module).Debug("using module name for package prefix stripping")
+			}
+
+			maxPkgName := maxPkgNameLength(testPkgs.ImportPaths(), module)
+			logTestFailuresAsErrors, err = setupTestUIs(app, opts.Test.Writers, opts.Test.Appearance, maxPkgName, module)
 			return err
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -302,12 +308,12 @@ func evaluateResult(run *gotest.Run, logTestFailuresAsErrors bool, coverMin floa
 	return passed, resultErr
 }
 
-func setupTestUIs(app clio.Application, writers []options.FormatWriter, appearance options.Appearance, maxPkgName int) (bool, error) {
+func setupTestUIs(app clio.Application, writers []options.FormatWriter, appearance options.Appearance, maxPkgName int, module string) (bool, error) {
 	var logTestFailuresAsErrors bool
 
 	var uxs []clio.UI
 	for _, writer := range writers {
-		ux, ltaf, err := setupTestUI(app, writer, appearance, maxPkgName)
+		ux, ltaf, err := setupTestUI(app, writer, appearance, maxPkgName, module)
 		if err != nil {
 			return false, fmt.Errorf("unable to setup UI %q: %w", writer.Name, err)
 		}
@@ -330,7 +336,7 @@ func setupTestUIs(app clio.Application, writers []options.FormatWriter, appearan
 	return logTestFailuresAsErrors, nil
 }
 
-func setupTestUI(app clio.Application, format options.FormatWriter, appearance options.Appearance, maxPkgName int) (clio.UI, bool, error) {
+func setupTestUI(app clio.Application, format options.FormatWriter, appearance options.Appearance, maxPkgName int, module string) (clio.UI, bool, error) {
 	var ux clio.UI
 
 	fields := logger.Fields{
@@ -347,7 +353,7 @@ func setupTestUI(app clio.Application, format options.FormatWriter, appearance o
 
 	state := app.(Stater).State()
 
-	uiConfig := getUIConfig(appearance, state.Config, format)
+	uiConfig := getUIConfig(appearance, state.Config, format, module)
 
 	var logTestFailuresAsErrors bool
 	switch format.Name {
@@ -393,11 +399,16 @@ func setupTestUI(app clio.Application, format options.FormatWriter, appearance o
 	return ux, logTestFailuresAsErrors, nil
 }
 
-func getUIConfig(appearance options.Appearance, clioCfg clio.Config, format options.FormatWriter) ui.TestUIConfig {
+func getUIConfig(appearance options.Appearance, clioCfg clio.Config, format options.FormatWriter, module string) ui.TestUIConfig {
+	var removePrefix string
+	if appearance.UseShortNames {
+		removePrefix = module
+	}
 	return ui.TestUIConfig{
 		Color:                   !appearance.NoColor,
 		Verbose:                 clioCfg.Log.Verbosity,
 		ShowPackagesWithNoTests: appearance.ShowPackagesWithNoTests,
+		StripPackagePrefix:      removePrefix,
 		Writer:                  format.Writer,
 		IsTTY:                   format.IsTTY,
 		CombineMultipleRuns:     appearance.CombineMultipleRuns,
@@ -464,9 +475,13 @@ func renderTestSuiteFailure(err ErrTestSuiteFailed) string {
 	return fmt.Sprintf("Test suite failed: %s", render)
 }
 
-func maxPkgNameLength(testPkgs []string) int {
+func maxPkgNameLength(testPkgs []string, removePrefix string) int {
 	maxPkgName := 30
 	for _, pkg := range testPkgs {
+		if removePrefix != "" && strings.HasPrefix(pkg, removePrefix) {
+			pkg = strings.TrimPrefix(pkg, removePrefix)
+			pkg = strings.TrimPrefix(pkg, "/")
+		}
 		if len(pkg) > maxPkgName {
 			maxPkgName = len(pkg)
 		}

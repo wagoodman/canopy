@@ -40,9 +40,13 @@ func NewQuietHandler(writer io.Writer, config PackageConfig) handler.Handler {
 		packages: orderedset.New[gotest.Reference](),
 		panic:    make(map[gotest.Reference]bool),
 		formatter: presenter.NewGoQuietEventFactory(
-			style.NewGo(config.Color),
-			config.IDE,
-			config.PackageNameWidth,
+			presenter.GoEventConfig{
+				Style:                   style.NewGo(config.Color),
+				IDE:                     config.IDE,
+				PackageNameWidth:        config.PackageNameWidth,
+				StripPackagePrefix:      config.StripPackagePrefix,
+				HideExecutionTestEvents: false,
+			},
 		).NewEvent,
 	}
 }

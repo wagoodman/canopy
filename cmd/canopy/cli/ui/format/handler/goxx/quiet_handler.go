@@ -60,9 +60,12 @@ func NewQuietPackage(writer io.Writer, config QuietPackageConfig, ref gotest.Ref
 		packageCoverage: make(map[gotest.Reference]string),
 		panic:           make(map[gotest.Reference]bool),
 		formatter: presenter.NewGoQuietEventFactory(
-			style.NewGo(config.Color),
-			config.IDE,
-			config.PackageNameWidth,
+			presenter.GoEventConfig{
+				Style:              style.NewGo(config.Color),
+				IDE:                config.IDE,
+				PackageNameWidth:   config.PackageNameWidth,
+				StripPackagePrefix: "", // TODO: not wired up
+			},
 		).NewEvent,
 	}
 }

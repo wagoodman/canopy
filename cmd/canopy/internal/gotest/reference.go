@@ -159,8 +159,7 @@ func rewriteTestNames(ss ...string) []string {
 	return ret
 }
 
-// rewriteTestNames rewrites a subname to having only printable characters and no white
-// space.
+// rewriteTestNames rewrites a subname to having only printable characters and no white space.
 func rewriteTestName(s string) string {
 	b := []byte{}
 	for _, r := range s {

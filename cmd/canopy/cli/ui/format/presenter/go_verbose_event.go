@@ -16,40 +16,36 @@ import (
 
 var _ Presenter = (*goVerboseEvent)(nil)
 
-type GoVerboseEventFactory struct {
+type GoEventConfig struct {
 	Style                   style.Go
 	IDE                     ide.Context
-	HideExecutionTestEvents bool
 	PackageNameWidth        int
+	StripPackagePrefix      string
+	HideExecutionTestEvents bool // note: this is a verbose-only option
 }
 
-func NewGoVerboseEventFactory(sty style.Go, i ide.Context, hideExecutionTestEvents bool, packageNameWidth int) GoVerboseEventFactory {
+type GoVerboseEventFactory struct {
+	config GoEventConfig
+}
+
+func NewGoVerboseEventFactory(cfg GoEventConfig) GoVerboseEventFactory {
 	return GoVerboseEventFactory{
-		Style:                   sty,
-		IDE:                     i,
-		HideExecutionTestEvents: hideExecutionTestEvents,
-		PackageNameWidth:        packageNameWidth,
+		config: cfg,
 	}
 }
 
 func (f GoVerboseEventFactory) NewEvent(e gotest.Event, midPanic bool) fmt.Stringer {
 	return goVerboseEvent{
-		Style:                   f.Style,
-		IDE:                     f.IDE,
-		HideExecutionTestEvents: f.HideExecutionTestEvents,
-		PackageNameWidth:        f.PackageNameWidth,
-		Event:                   e,
-		Panic:                   midPanic,
+		GoEventConfig: f.config,
+		Event:         e,
+		Panic:         midPanic,
 	}
 }
 
 type goVerboseEvent struct {
-	Style                   style.Go
-	IDE                     ide.Context
-	Event                   gotest.Event
-	HideExecutionTestEvents bool
-	PackageNameWidth        int
-	Panic                   bool
+	GoEventConfig
+	Event gotest.Event
+	Panic bool
 }
 
 func (p goVerboseEvent) Present(stdout, _ io.Writer) error {
@@ -69,7 +65,7 @@ func (p goVerboseEvent) String() string {
 
 func (p goVerboseEvent) formatPackage(e gotest.Event) string {
 	if output.HasAny(output.HasFailedPackageMarking, output.HasPackageOKMarking, output.HasUnknownPackageMarking, output.HasPackagePassMarking)(e.Output) {
-		return parseAndFormatPackageLine(e.Output, p.Style, p.PackageNameWidth)
+		return parseAndFormatPackageLine(e.Output, p.Style, p.PackageNameWidth, p.StripPackagePrefix)
 	}
 	if output.HasPackageCoverageMarking(e.Output) {
 		// withhold this until you are showing the final package output

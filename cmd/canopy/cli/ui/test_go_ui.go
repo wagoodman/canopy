@@ -38,30 +38,20 @@ func newDynamicGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
 	stalePackageDuration := 3 * time.Second // this is the duration that a package can be stale before the UI skips ahead to the next package
 
 	var h handler.Handler
+	handlerPkgConfig := gostd.PackageConfig{
+		PackageNameWidth:            maxPkgNameLength,
+		Color:                       cfg.Color,
+		IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
+		HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
+		StripPackagePrefix:          cfg.StripPackagePrefix,
+		LoosePackageOrder:           loosePackageOrder,
+		StalePackageDuration:        stalePackageDuration,
+	}
+
 	if cfg.Verbose > 0 {
-		h = gostd.NewVerboseHandler(
-			reportWriter,
-			gostd.PackageConfig{
-				PackageNameWidth:            maxPkgNameLength,
-				Color:                       cfg.Color,
-				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
-				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
-				LoosePackageOrder:           loosePackageOrder,
-				StalePackageDuration:        stalePackageDuration,
-			},
-		)
+		h = gostd.NewVerboseHandler(reportWriter, handlerPkgConfig)
 	} else {
-		h = gostd.NewQuietHandler(
-			reportWriter,
-			gostd.PackageConfig{
-				PackageNameWidth:            maxPkgNameLength,
-				Color:                       cfg.Color,
-				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
-				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
-				LoosePackageOrder:           loosePackageOrder,
-				StalePackageDuration:        stalePackageDuration,
-			},
-		)
+		h = gostd.NewQuietHandler(reportWriter, handlerPkgConfig)
 	}
 
 	ux := newSimpleUI().
@@ -73,7 +63,8 @@ func newDynamicGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
 
 	summaryHandler := gosummary.NewFactory(
 		presenter.DefaultGoTestResultSummaryConfig().
-			WithColor(cfg.Color).WithPackageNameWidth(maxPkgNameLength).
+			WithColor(cfg.Color).
+			WithPackageNameWidth(maxPkgNameLength).
 			WithStalePackageDuration(stalePackageDuration).
 			WithLoosePackageOrder(loosePackageOrder).
 			WithCombineMultipleRuns(cfg.CombineMultipleRuns).

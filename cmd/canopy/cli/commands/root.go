@@ -203,8 +203,9 @@ type executionPlan struct {
 // prepareTestExecution sets up UIs, groups tests, and builds run configurations
 func prepareTestExecution(app clio.Application, rootCfg rootConfig, testDefs gotest.Definitions, refs gotest.References) (*executionPlan, error) {
 	// set the UI dynamically
-	maxPkgName := maxPkgNameLength(refs.Packages())
-	logTestFailuresAsErrors, err := setupTestUIs(app, rootCfg.Test.Writers, rootCfg.Test.Appearance, maxPkgName)
+	module := testDefs.Module()
+	maxPkgName := maxPkgNameLength(refs.Packages(), module)
+	logTestFailuresAsErrors, err := setupTestUIs(app, rootCfg.Test.Writers, rootCfg.Test.Appearance, maxPkgName, module)
 	if err != nil {
 		return nil, fmt.Errorf("unable to setup test UIs: %w", err)
 	}

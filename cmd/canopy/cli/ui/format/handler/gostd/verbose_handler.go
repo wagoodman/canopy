@@ -31,6 +31,7 @@ type PackageConfig struct {
 	PackageNameWidth            int
 	IDE                         ide.Context
 	HidePackagesWithNoTestFiles bool // TODO: not used??
+	StripPackagePrefix          string
 
 	// LoosePackageOrder is used to determine if the packages should be rendered in strict alphabetical order
 	// or allow for skipping ahead across packages that are taking a long time to complete (based on the stale duration).
@@ -53,10 +54,13 @@ func NewVerboseHandler(writer io.Writer, config PackageConfig) handler.Handler {
 		packages: orderedset.New[gotest.Reference](),
 		panic:    make(map[gotest.Reference]bool),
 		formatter: presenter.NewGoVerboseEventFactory(
-			style.NewGo(config.Color),
-			config.IDE,
-			false,
-			config.PackageNameWidth,
+			presenter.GoEventConfig{
+				Style:                   style.NewGo(config.Color),
+				IDE:                     config.IDE,
+				PackageNameWidth:        config.PackageNameWidth,
+				StripPackagePrefix:      config.StripPackagePrefix,
+				HideExecutionTestEvents: false,
+			},
 		).NewEvent,
 	}
 }

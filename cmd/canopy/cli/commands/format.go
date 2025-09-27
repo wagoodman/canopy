@@ -111,7 +111,7 @@ func Format(app clio.Application) *cobra.Command {
 				log.Debug("reading test json from stdin")
 			}
 			var err error
-			logTestFailuresAsErrors, err = setupTestUIs(app, opts.Test.Writers, opts.Test.Appearance, 30)
+			logTestFailuresAsErrors, err = setupTestUIs(app, opts.Test.Writers, opts.Test.Appearance, 30, "") // TODO: we do not support module prefix stripping here yet for format-only operations
 			return err
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {

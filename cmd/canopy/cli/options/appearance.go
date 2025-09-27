@@ -18,6 +18,7 @@ type Appearance struct {
 	CombineMultipleRuns     bool `yaml:"-" json:"-" mapstructure:"-"`
 	NoColor                 bool `yaml:"no-color" json:"no-color" mapstructure:"no-color"`
 	ShowPackagesWithNoTests bool `yaml:"show-packages-with-no-tests" json:"show-packages-with-no-tests" mapstructure:"show-packages-with-no-tests"`
+	UseShortNames           bool `yaml:"use-short-names" json:"use-short-names" mapstructure:"use-short-names"`
 
 	tracker      *xflagset.Decorator
 	NamedFlagSet *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
@@ -27,6 +28,7 @@ func DefaultAppearance() Appearance {
 	return Appearance{
 		NoColor:                 false,
 		ShowPackagesWithNoTests: false,
+		UseShortNames:           true,
 	}
 }
 

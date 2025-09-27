@@ -64,10 +64,13 @@ func NewVerbosePackage(writer io.Writer, config VerbosePackageConfig, ref gotest
 		funcConcluded: make(map[gotest.Reference]struct{}),
 		panic:         make(map[gotest.Reference]bool),
 		formatter: presenter.NewGoVerboseEventFactory(
-			st,
-			config.IDE,
-			config.HideExecutionTestEvents,
-			config.PackageNameWidth,
+			presenter.GoEventConfig{
+				Style:                   st,
+				IDE:                     config.IDE,
+				PackageNameWidth:        config.PackageNameWidth,
+				StripPackagePrefix:      "", // TODO: not wired up
+				HideExecutionTestEvents: false,
+			},
 		).NewEvent,
 	}
 }
