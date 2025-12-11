@@ -10,6 +10,8 @@ import (
 // session open ID     ... opens a specific session
 // session open        ... opens the most recent session
 
+// Session creates the session management command with subcommands for listing and opening test sessions.
+// Sessions store test run history and results in a SQLite database for later inspection.
 func Session(app clio.Application) *cobra.Command {
 	db := &cobra.Command{
 		Use:   "session",

@@ -6,18 +6,39 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/xhelp"
 )
 
+// keyMap defines keybindings for the references pane, including test selection,
+// filtering, and navigation commands.
 type keyMap struct {
-	SelectTest       xhelp.Item
-	SelectAllTests   xhelp.Item
-	ShowFailedTests  xhelp.Item
-	ShowPassedTests  xhelp.Item
+	// SelectTest toggles selection of the current test reference.
+	SelectTest xhelp.Item
+
+	// SelectAllTests selects all visible test references.
+	SelectAllTests xhelp.Item
+
+	// ShowFailedTests toggles visibility of failed tests.
+	ShowFailedTests xhelp.Item
+
+	// ShowPassedTests toggles visibility of passed tests.
+	ShowPassedTests xhelp.Item
+
+	// ShowSkippedTests toggles visibility of skipped tests.
 	ShowSkippedTests xhelp.Item
-	NextPackage      xhelp.Item
-	PrevPackage      xhelp.Item
-	NextTestFunc     xhelp.Item
-	PrevTestFunc     xhelp.Item
+
+	// NextPackage navigates to the next package in the list.
+	NextPackage xhelp.Item
+
+	// PrevPackage navigates to the previous package in the list.
+	PrevPackage xhelp.Item
+
+	// NextTestFunc navigates to the next test function in the list.
+	NextTestFunc xhelp.Item
+
+	// PrevTestFunc navigates to the previous test function in the list.
+	PrevTestFunc xhelp.Item
 }
 
+// newKeyMap creates a keyMap with default keybindings. The showFailedOnly parameter
+// determines the initial state of the ShowPassedTests toggle.
 func newKeyMap(showFailedOnly bool) keyMap {
 	return keyMap{
 		SelectTest: xhelp.NewKeyBinding(
@@ -74,10 +95,12 @@ func newKeyMap(showFailedOnly bool) keyMap {
 	}
 }
 
+// ShortHelp returns keybindings for the short help view.
 func (k keyMap) ShortHelp() []xhelp.Item {
 	return []xhelp.Item{k.SelectTest, k.SelectAllTests, k.ShowFailedTests, k.ShowPassedTests, k.ShowSkippedTests}
 }
 
+// FullHelp returns keybindings organized into columns for the full help view.
 func (k keyMap) FullHelp() [][]xhelp.Item {
 	return [][]xhelp.Item{
 		{k.SelectTest, k.SelectAllTests},

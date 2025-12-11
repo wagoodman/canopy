@@ -1,3 +1,6 @@
+// Package event defines the event types and payloads used for inter-component
+// communication via the event bus. It includes events for test execution,
+// UI updates, and session management.
 package event
 
 import (
@@ -9,10 +12,23 @@ const (
 	prefix        = internal.ApplicationName + "-"
 	cliTypePrefix = prefix + "cli-"
 
+	// GoTestRunRequestType is published when a test run is requested.
+	// Value: gotest.RunnerConfig, Source: uuid.UUID
 	GoTestRunRequestType partybus.EventType = prefix + "go-test-run-request"
-	GoTestType           partybus.EventType = prefix + "go-test-event"
-	GoTestRunType        partybus.EventType = prefix + "go-test-run-event"
 
-	CLIReport       partybus.EventType = cliTypePrefix + "report"
+	// GoTestType is published for individual test events during execution.
+	// Value: gotest.Event
+	GoTestType partybus.EventType = prefix + "go-test-event"
+
+	// GoTestRunType is published for test run lifecycle events.
+	// Value: gotest.Run
+	GoTestRunType partybus.EventType = prefix + "go-test-run-event"
+
+	// CLIReport is published for longer-form CLI output messages.
+	// Value: string, Source: string (optional context)
+	CLIReport partybus.EventType = cliTypePrefix + "report"
+
+	// CLINotification is published for short CLI status messages.
+	// Value: string, Source: string (optional context)
 	CLINotification partybus.EventType = cliTypePrefix + "notification"
 )

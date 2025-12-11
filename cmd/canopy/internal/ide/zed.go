@@ -5,10 +5,14 @@ import (
 	"os/exec"
 )
 
+// Zed provides integration with the Zed editor.
 type Zed struct {
+	// binPath is the path to the zed command-line binary.
 	binPath string
 }
 
+// NewZed creates a new Zed Context. If lookPathFunc is nil, os/exec.LookPath
+// is used to locate the zed binary. Returns an error if the binary is not found.
 func NewZed(lookPathFunc func(string) (string, error)) (*Zed, error) {
 	if lookPathFunc == nil {
 		lookPathFunc = exec.LookPath
@@ -22,6 +26,8 @@ func NewZed(lookPathFunc func(string) (string, error)) (*Zed, error) {
 	}, nil
 }
 
+// isActive checks if Zed is the active editor by examining environment variables
+// set by Zed's terminal.
 func (z Zed) isActive(env EnvironmentGetter) bool {
 	if env.Getenv("__CFBundleIdentifier") == "dev.zed.Zed" {
 		return true
@@ -32,10 +38,13 @@ func (z Zed) isActive(env EnvironmentGetter) bool {
 	return false
 }
 
+// OpenFileAtLineCommand returns the shell command to open a file at a specific
+// line in Zed using the file:line:column format.
 func (z Zed) OpenFileAtLineCommand(filePath string, line int) string {
 	return fmt.Sprintf(`%s "%s:%d:0"`, z.binPath, filePath, line)
 }
 
+// FileAtLineURL returns a file:// URL for the given file and line.
 func (z Zed) FileAtLineURL(file string, line int) string {
 	return fileAtLineURL(file, line)
 }

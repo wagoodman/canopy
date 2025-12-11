@@ -2,6 +2,7 @@ package referencespane
 
 import tea "github.com/charmbracelet/bubbletea"
 
+// nextPkg moves the selection to the first reference of the next package in the list.
 func (m *Model) nextPkg() tea.Cmd {
 	currentIdx := m.list.Index()
 	currentElement := m.list.SelectedItem()
@@ -20,6 +21,7 @@ func (m *Model) nextPkg() tea.Cmd {
 	return m.refreshRun()
 }
 
+// prevPkg moves the selection to the first reference of the previous package in the list.
 func (m *Model) prevPkg() tea.Cmd {
 	currentIdx := m.list.Index()
 	currentElement := m.list.SelectedItem()
@@ -48,6 +50,7 @@ func (m *Model) prevPkg() tea.Cmd {
 	return m.refreshRun()
 }
 
+// nextTestFn moves the selection to the next test function in the list.
 func (m *Model) nextTestFn() tea.Cmd {
 	currentIdx := m.list.Index()
 	currentElement := m.list.SelectedItem()
@@ -69,6 +72,7 @@ func (m *Model) nextTestFn() tea.Cmd {
 	return m.refreshRun()
 }
 
+// prevTestFn moves the selection to the previous test function in the list.
 func (m *Model) prevTestFn() tea.Cmd {
 	currentIdx := m.list.Index()
 	currentElement := m.list.SelectedItem()

@@ -22,6 +22,8 @@ import (
 	"github.com/anchore/clio"
 )
 
+// NewTestGoxxUI creates a new UI for displaying Go test results using the goxx handler.
+// This is less stable than the default UI, and should be used with caution (will probably be removed in the future).
 func NewTestGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 	if cfg.IsTTY && cfg.Writer == nil {
 		if cfg.Verbose > 0 {

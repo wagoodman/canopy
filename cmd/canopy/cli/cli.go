@@ -1,3 +1,4 @@
+// Package cli provides the command-line interface initialization and configuration for canopy.
 package cli
 
 import (
@@ -10,6 +11,9 @@ import (
 	"github.com/anchore/clio"
 )
 
+// New creates and configures the root cobra command with all subcommands and global configuration.
+// It initializes the clio application framework with configuration file support, logging flags,
+// and the event bus for coordinating test execution and UI updates.
 func New(id clio.Identification) *cobra.Command {
 	clioCfg := clio.NewSetupConfig(id).
 		WithGlobalConfigFlag().   // add persistent -c <path> for reading an application config from

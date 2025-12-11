@@ -11,6 +11,8 @@ import (
 
 var _ fangs.FlagSet = (*Decorator)(nil)
 
+// Decorator wraps a fangs.FlagSet to track which flags are set by the user, enabling selective rendering
+// of flags for passing to external commands like `go test`.
 type Decorator struct {
 	upstream fangs.FlagSet
 	group    *pflag.FlagSet
@@ -25,6 +27,7 @@ type Decorator struct {
 	noTrack bool
 }
 
+// NewDecorator creates a new flag decorator that tracks flag values and associates them with a named flag group.
 func NewDecorator(upstream fangs.FlagSet, group *pflag.FlagSet) *Decorator {
 	return &Decorator{
 		upstream:         upstream,
@@ -38,6 +41,8 @@ func NewDecorator(upstream fangs.FlagSet, group *pflag.FlagSet) *Decorator {
 	}
 }
 
+// RenderFlags returns the command-line representation of all tracked flags that have non-default values.
+// Flags in the ignore list are excluded from the output.
 func (f Decorator) RenderFlags(ignore ...string) []string {
 	var flags []string
 	ignoreSet := strset.New(ignore...)
@@ -52,7 +57,7 @@ func (f Decorator) RenderFlags(ignore ...string) []string {
 	return flags
 }
 
-// renderIntFlags processes int flags and returns their string representations
+// renderIntFlags processes int flags and returns their string representations.
 func (f Decorator) renderIntFlags(ignoreSet *strset.Set) []string {
 	var flags []string
 	for p, name := range f.intFlags {
@@ -67,7 +72,7 @@ func (f Decorator) renderIntFlags(ignoreSet *strset.Set) []string {
 	return flags
 }
 
-// renderBoolFlags processes bool flags and returns their string representations
+// renderBoolFlags processes bool flags and returns their string representations.
 func (f Decorator) renderBoolFlags(ignoreSet *strset.Set) []string {
 	var flags []string
 	for p, name := range f.boolFlags {
@@ -82,7 +87,7 @@ func (f Decorator) renderBoolFlags(ignoreSet *strset.Set) []string {
 	return flags
 }
 
-// renderBoolRefFlags processes bool reference flags and returns their string representations
+// renderBoolRefFlags processes bool reference flags and returns their string representations.
 func (f Decorator) renderBoolRefFlags(ignoreSet *strset.Set) []string {
 	var flags []string
 	for p, name := range f.boolRefFlags {
@@ -97,7 +102,7 @@ func (f Decorator) renderBoolRefFlags(ignoreSet *strset.Set) []string {
 	return flags
 }
 
-// renderStringFlags processes string flags and returns their string representations
+// renderStringFlags processes string flags and returns their string representations.
 func (f Decorator) renderStringFlags(ignoreSet *strset.Set) []string {
 	var flags []string
 	for p, name := range f.stringFlags {
@@ -112,7 +117,7 @@ func (f Decorator) renderStringFlags(ignoreSet *strset.Set) []string {
 	return flags
 }
 
-// renderStringArrayFlags processes string array flags and returns their string representations
+// renderStringArrayFlags processes string array flags and returns their string representations.
 func (f Decorator) renderStringArrayFlags(ignoreSet *strset.Set) []string {
 	var flags []string
 	for p, name := range f.stringArrayFlags {
@@ -129,7 +134,7 @@ func (f Decorator) renderStringArrayFlags(ignoreSet *strset.Set) []string {
 	return flags
 }
 
-// renderFloat64Flags processes float64 flags and returns their string representations
+// renderFloat64Flags processes float64 flags and returns their string representations.
 func (f Decorator) renderFloat64Flags(ignoreSet *strset.Set) []string {
 	var flags []string
 	for p, name := range f.float64Flags {
@@ -144,6 +149,7 @@ func (f Decorator) renderFloat64Flags(ignoreSet *strset.Set) []string {
 	return flags
 }
 
+// BoolVarP registers a bool flag and tracks its pointer for rendering.
 func (f Decorator) BoolVarP(p *bool, name, shorthand, usage string) {
 	if !f.noTrack {
 		f.boolFlags[p] = nameOrShorthand(name, shorthand)
@@ -152,6 +158,7 @@ func (f Decorator) BoolVarP(p *bool, name, shorthand, usage string) {
 	f.group.BoolVarP(p, name, shorthand, *p, usage)
 }
 
+// BoolPtrVarP registers a bool pointer flag and tracks it for rendering.
 func (f Decorator) BoolPtrVarP(p **bool, name, shorthand, usage string) {
 	if !f.noTrack {
 		f.boolRefFlags[p] = nameOrShorthand(name, shorthand)
@@ -164,6 +171,7 @@ func (f Decorator) BoolPtrVarP(p **bool, name, shorthand, usage string) {
 	f.group.BoolVarP(*p, name, shorthand, val, usage)
 }
 
+// Float64VarP registers a float64 flag and tracks its pointer for rendering.
 func (f Decorator) Float64VarP(p *float64, name, shorthand, usage string) {
 	if !f.noTrack {
 		f.float64Flags[p] = nameOrShorthand(name, shorthand)
@@ -172,6 +180,7 @@ func (f Decorator) Float64VarP(p *float64, name, shorthand, usage string) {
 	f.group.Float64VarP(p, name, shorthand, *p, usage)
 }
 
+// CountVarP registers a count flag and tracks its pointer for rendering.
 func (f Decorator) CountVarP(p *int, name, shorthand, usage string) {
 	if !f.noTrack {
 		f.intFlags[p] = nameOrShorthand(name, shorthand)
@@ -180,6 +189,7 @@ func (f Decorator) CountVarP(p *int, name, shorthand, usage string) {
 	f.group.CountVarP(p, name, shorthand, usage)
 }
 
+// IntVarP registers an int flag and tracks its pointer for rendering.
 func (f Decorator) IntVarP(p *int, name, shorthand, usage string) {
 	if !f.noTrack {
 		f.intFlags[p] = nameOrShorthand(name, shorthand)
@@ -188,6 +198,7 @@ func (f Decorator) IntVarP(p *int, name, shorthand, usage string) {
 	f.group.IntVarP(p, name, shorthand, *p, usage)
 }
 
+// StringVarP registers a string flag and tracks its pointer for rendering.
 func (f Decorator) StringVarP(p *string, name, shorthand, usage string) {
 	if !f.noTrack {
 		f.stringFlags[p] = nameOrShorthand(name, shorthand)
@@ -196,6 +207,7 @@ func (f Decorator) StringVarP(p *string, name, shorthand, usage string) {
 	f.group.StringVarP(p, name, shorthand, *p, usage)
 }
 
+// StringArrayVarP registers a string array flag and tracks its pointer for rendering.
 func (f Decorator) StringArrayVarP(p *[]string, name, shorthand, usage string) {
 	if !f.noTrack {
 		f.stringArrayFlags[p] = nameOrShorthand(name, shorthand)
@@ -204,11 +216,14 @@ func (f Decorator) StringArrayVarP(p *[]string, name, shorthand, usage string) {
 	f.group.StringArrayVarP(p, name, shorthand, *p, usage)
 }
 
+// WithNoTrack returns a copy of the Decorator with tracking disabled. Flags registered through this copy
+// will not be included in RenderFlags output.
 func (f Decorator) WithNoTrack() Decorator {
 	f.noTrack = true
 	return f
 }
 
+// nameOrShorthand returns the flag name if provided, otherwise returns the shorthand.
 func nameOrShorthand(name, shorthand string) string {
 	if name != "" {
 		return name

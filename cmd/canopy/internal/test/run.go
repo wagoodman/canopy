@@ -11,20 +11,32 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 )
 
+// run represents a single test execution within a session, managing event collection and lifecycle.
 type run struct {
-	session  *session
+	// session is the parent session containing this test run.
+	session *session
+	// complete indicates whether the test run has finished.
 	complete bool
-	uuid     uuid.UUID
+	// uuid uniquely identifies this test run.
+	uuid uuid.UUID
 }
 
+// RunInfo contains metadata and configuration for a completed or in-progress test run.
 type RunInfo struct {
-	UUID     uuid.UUID
-	Started  time.Time
-	Ended    *time.Time
+	// UUID uniquely identifies the test run.
+	UUID uuid.UUID
+	// Started is when the test run began.
+	Started time.Time
+	// Ended is when the test run completed (nil if still running).
+	Ended *time.Time
+	// Coverage is the test coverage percentage (nil if not available).
 	Coverage *float64
-	Config   gotest.RunnerConfig
+	// Config contains the runner configuration used for this test run.
+	Config gotest.RunnerConfig
 }
 
+// newRunInfo converts a database test run record into a RunInfo struct.
+// Returns RunInfo with deserialized configuration and metadata.
 func newRunInfo(run db.TestRun) RunInfo {
 	var cfg gotest.RunnerConfig
 	if err := json.Unmarshal(run.Config, &cfg); err != nil {
@@ -39,6 +51,8 @@ func newRunInfo(run db.TestRun) RunInfo {
 	}
 }
 
+// addEvent records a test event to the run's persistent storage.
+// Returns an error if the run is already complete or if storage fails.
 func (r run) addEvent(event gotest.Event) error {
 	if r.complete {
 		return fmt.Errorf("cannot add event to completed test run")
@@ -46,6 +60,8 @@ func (r run) addEvent(event gotest.Event) error {
 	return r.session.store.AddTestEvent(r.uuid, event)
 }
 
+// end marks the test run as complete and records final coverage information.
+// Coverage can be nil if not available. Safe to call even if store is nil.
 func (r *run) end(coverage *float64) error {
 	r.complete = true
 	if r.session == nil || r.session.store == nil {

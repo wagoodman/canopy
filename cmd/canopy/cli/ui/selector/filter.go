@@ -13,22 +13,24 @@ func init() {
 	algo.Init("path")
 }
 
-// rankResult holds the result for a single target
+// rankResult holds the fuzzy match result for a single target string.
+// it combines the score from fzf with the list.Rank structure.
 type rankResult struct {
+	// Score is the fuzzy match score from fzf (higher is better).
 	Score int
 	list.Rank
 }
 
+// byScore implements sort.Interface to sort rank results by score descending.
 type byScore []rankResult
 
 func (a byScore) Len() int           { return len(a) }
 func (a byScore) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a byScore) Less(i, j int) bool { return a[i].Score > a[j].Score } // Higher score first
 
-// filter adapts fzf's FuzzyMatchV2 to work with bubbletea's list.Rank interface, which seems to work much
-// better than the default fuzzy matching provided by bubbletea's list package (for instance, when providing
-// search terms that look like paths, such as "foo/bar/baz" then the selected characters tend match the
-// relevant path segments, rather than just the first character of each segment).
+// filter adapts fzf's FuzzyMatchV2 to work with bubbletea's list.Rank interface.
+// it provides path-aware fuzzy matching that works better than the default list filtering,
+// especially for search terms that look like paths (e.g., "foo/bar/baz").
 func filter(term string, targets []string) []list.Rank {
 	if term == "" {
 		// return all items with original indices when no filter term

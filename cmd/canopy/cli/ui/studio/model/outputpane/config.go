@@ -1,3 +1,5 @@
+// Package outputpane provides a viewport-based UI component for displaying test
+// output with syntax highlighting and test statistics.
 package outputpane
 
 import (
@@ -6,21 +8,30 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Config holds configuration options for the output pane's appearance and sizing.
 type Config struct {
-	// The width ratio of the viewport to the terminal width. This is useful
+	// WidthRatio is the width ratio of the viewport to the terminal width. This is useful
 	// for sidebars and other UI elements that don't take up the full width of
 	// the terminal.
 	WidthRatio float64
 
-	// Summary Counts
-	FailedCountStyle  lipgloss.Style
-	PassedCountStyle  lipgloss.Style
-	SkippedCountStyle lipgloss.Style
-	SummaryLineStyle  lipgloss.Style
+	// FailedCountStyle is applied to the failed test count in the summary.
+	FailedCountStyle lipgloss.Style
 
+	// PassedCountStyle is applied to the passed test count in the summary.
+	PassedCountStyle lipgloss.Style
+
+	// SkippedCountStyle is applied to the skipped test count in the summary.
+	SkippedCountStyle lipgloss.Style
+
+	// SummaryLineStyle styles the summary line text.
+	SummaryLineStyle lipgloss.Style
+
+	// BorderSummaryStyle styles the border around the summary line.
 	BorderSummaryStyle lipgloss.Style
 }
 
+// defaultOptions returns Config with default styling and sizing.
 func defaultOptions() Config {
 	baseSummaryStyle := lipgloss.NewStyle()
 
@@ -43,8 +54,10 @@ func defaultOptions() Config {
 	}
 }
 
+// Option is a functional option for configuring the output pane.
 type Option func(*Config) error
 
+// WithWidthRatio sets the width ratio for the output pane. Must be > 0 and <= 1.
 func WithWidthRatio(ratio float64) Option {
 	return func(c *Config) error {
 		if ratio > 1 || ratio <= 0 {
@@ -55,6 +68,7 @@ func WithWidthRatio(ratio float64) Option {
 	}
 }
 
+// apply creates a Config by applying all options to the default configuration.
 func apply(options ...Option) (Config, error) {
 	opts := defaultOptions()
 	for _, o := range options {

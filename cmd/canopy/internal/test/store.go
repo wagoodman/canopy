@@ -14,35 +14,53 @@ import (
 
 var _ store = (*dbStore)(nil)
 
+// store defines the interface for persisting test sessions, runs, and events.
+// Implementations provide both session management and data persistence.
 type store interface {
 	// sessionManager
 	sessionStore
 	runStore
 }
 
+// sessionManager provides methods for creating and retrieving session instances.
 type sessionManager interface {
+	// newSession creates a new test session.
 	newSession() (*session, error)
+	// getSession retrieves an existing session by UUID.
 	getSession(uuid uuid.UUID) (*session, error)
 }
 
+// sessionStore defines persistence operations for test session metadata.
 type sessionStore interface {
+	// GetSessionInfo retrieves session information including all runs.
 	GetSessionInfo(id uuid.UUID) (*SessionInfo, error)
+	// ListSessions returns all stored test sessions.
 	ListSessions() ([]SessionInfo, error)
+	// EndTestSession marks a session as complete.
 	EndTestSession(sessionID uuid.UUID) error
 }
 
+// runStore defines persistence operations for test runs and events.
 type runStore interface {
+	// StartTestRun creates a new test run within a session.
 	StartTestRun(sessionID uuid.UUID, cfg gotest.RunnerConfig) (uuid.UUID, error)
+	// GetRunInfo retrieves metadata for a specific test run.
 	GetRunInfo(runID uuid.UUID) (RunInfo, error)
+	// GetTestEvents retrieves all events for a test run.
 	GetTestEvents(runID uuid.UUID) ([]gotest.Event, error)
+	// AddTestEvent records a test event to a run.
 	AddTestEvent(runID uuid.UUID, event gotest.Event) error
+	// EndTestRun marks a run as complete with optional coverage data.
 	EndTestRun(runID uuid.UUID, coverage *float64) error
 }
 
+// dbStore implements the store interface using SQLite via GORM.
 type dbStore struct {
 	*db.Store
 }
 
+// newDBStore creates a new database-backed store using the provided configuration.
+// Returns nil store if DBRoot is empty. The database path is expanded from home directory if needed.
 func newDBStore(cfg Config) (*dbStore, error) {
 	path := dbPath(cfg.DBRoot)
 	if path == "" {
@@ -63,6 +81,8 @@ func newDBStore(cfg Config) (*dbStore, error) {
 	}, nil
 }
 
+// dbPath constructs the full database file path from the given root directory.
+// Panics if root is empty as this indicates a programming error.
 func dbPath(root string) string {
 	if root == "" {
 		panic("DB root is empty")
@@ -70,6 +90,7 @@ func dbPath(root string) string {
 	return filepath.Join(root, "db", db.Version, "canopy.db")
 }
 
+// GetSessionInfo retrieves session metadata and all associated runs.
 func (s dbStore) GetSessionInfo(id uuid.UUID) (*SessionInfo, error) {
 	se, err := s.GetTestSession(id)
 	if err != nil {
@@ -89,6 +110,7 @@ func (s dbStore) GetSessionInfo(id uuid.UUID) (*SessionInfo, error) {
 	return &si, nil
 }
 
+// getSession retrieves an existing session by UUID, reconstructing the session state.
 func (s dbStore) getSession(uuid uuid.UUID) (*session, error) {
 	ts, err := s.GetTestSession(uuid)
 	if err != nil {
@@ -101,6 +123,7 @@ func (s dbStore) getSession(uuid uuid.UUID) (*session, error) {
 	}, nil
 }
 
+// newSession creates a new test session in the database.
 func (s dbStore) newSession() (*session, error) {
 	id, err := s.StartTestSession()
 	if err != nil {
@@ -112,6 +135,7 @@ func (s dbStore) newSession() (*session, error) {
 	}, nil
 }
 
+// ListSessions retrieves all test sessions with their run information.
 func (s dbStore) ListSessions() ([]SessionInfo, error) {
 	sessions, err := s.GetTestSessions()
 	if err != nil {
@@ -138,6 +162,7 @@ func (s dbStore) ListSessions() ([]SessionInfo, error) {
 	return sessionInfos, nil
 }
 
+// GetRunInfo retrieves metadata for a specific test run.
 func (s dbStore) GetRunInfo(runID uuid.UUID) (RunInfo, error) {
 	tr, err := s.GetTestRun(runID)
 	if err != nil {
@@ -146,6 +171,8 @@ func (s dbStore) GetRunInfo(runID uuid.UUID) (RunInfo, error) {
 	return newRunInfo(tr), nil
 }
 
+// GetTestEvents retrieves all events for a test run, converting from database format.
+// Reconstructs event objects with their references, annotations, and errors.
 func (s dbStore) GetTestEvents(runID uuid.UUID) ([]gotest.Event, error) {
 	eventInfos, err := s.Store.GetTestEvents(runID)
 	if err != nil {

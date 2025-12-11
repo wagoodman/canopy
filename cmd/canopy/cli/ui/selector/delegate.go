@@ -15,34 +15,56 @@ import (
 )
 
 var (
-	hoverBorder        = lipgloss.Border{Left: "░"}
+	// hoverBorder is the border style used for items under the cursor scope.
+	hoverBorder = lipgloss.Border{Left: "░"}
+	// userSelectedBorder is the border style used for items explicitly selected by the user.
 	userSelectedBorder = lipgloss.Border{Left: "█"}
-	emptyBorder        = lipgloss.Border{Left: " "}
+	// emptyBorder is the border style used for items with no selection state.
+	emptyBorder = lipgloss.Border{Left: " "}
 )
 
+// listItemDelegate is the custom item renderer for the test selector list.
+// it manages item rendering, selection state, and user interactions with test references.
 type listItemDelegate struct {
 	list.DefaultDelegate
 
-	keyMap   keyMap
-	styles   delegateStyles
+	// keyMap holds the key bindings for delegate actions.
+	keyMap keyMap
+	// styles contains the lipgloss styles for different item states.
+	styles delegateStyles
+	// finished indicates whether the selection process has completed.
 	finished bool
 
-	refState        referenceState
-	current         *gotest.Reference
-	cursorScope     map[gotest.Reference]struct{}
+	// refState manages the visibility and display format of test references.
+	refState referenceState
+	// current holds the test reference at the current cursor position.
+	current *gotest.Reference
+	// cursorScope contains all test references under the current cursor (parent and children).
+	cursorScope map[gotest.Reference]struct{}
+	// cursorScopeSize is the number of items in the cursor scope.
 	cursorScopeSize int
-	userSelect      map[gotest.Reference]struct{}
+	// userSelect contains all test references explicitly selected by the user.
+	userSelect map[gotest.Reference]struct{}
 }
 
+// delegateStyles holds lipgloss styles for rendering list items in various states.
 type delegateStyles struct {
-	hoverLine        lipgloss.Style
-	hoverBullet      lipgloss.Style
-	cursorLine       lipgloss.Style
+	// hoverLine is the style for items within cursor scope but not selected.
+	hoverLine lipgloss.Style
+	// hoverBullet is the style for the cursor indicator bullet.
+	hoverBullet lipgloss.Style
+	// cursorLine is the style for the item directly under the cursor.
+	cursorLine lipgloss.Style
+	// userSelectedLine is the style for items explicitly selected by the user.
 	userSelectedLine lipgloss.Style
-	allTestsLine     lipgloss.Style
-	normalStyle      lipgloss.Style
+	// allTestsLine is the style for the special "all tests" item.
+	allTestsLine lipgloss.Style
+	// normalStyle is the default style for unselected items.
+	normalStyle lipgloss.Style
 }
 
+// newItemDelegate creates a new list item delegate with the given key bindings.
+// it initializes selection tracking and configures rendering styles.
 func newItemDelegate(keyMap keyMap) *listItemDelegate {
 	d := list.NewDefaultDelegate()
 	d.ShowDescription = false
@@ -87,6 +109,8 @@ func newItemDelegate(keyMap keyMap) *listItemDelegate {
 	}
 }
 
+// Update handles incoming messages and updates the delegate state accordingly.
+// it processes refresh events, state switches, mouse interactions, and keyboard input.
 func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 	var cmds []tea.Cmd
 	cmds = append(cmds, d.DefaultDelegate.Update(msg, m))
@@ -108,12 +132,13 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// handleRefreshReferences processes refresh reference events
+// handleRefreshReferences processes refresh reference events and updates display format.
 func (d *listItemDelegate) handleRefreshReferences(msg uievent.RefreshReferences, m *list.Model) tea.Cmd {
 	return d.refState.update(m, msg.AboutToFilter)
 }
 
-// handleSwitchState processes state switch events and sets up test definitions
+// handleSwitchState processes state switch events and sets up test definitions.
+// it restores cursor position, initializes test definitions, and applies user selections.
 func (d *listItemDelegate) handleSwitchState(msg uievent.SwitchState, m *list.Model) tea.Cmd {
 	var cmds []tea.Cmd
 
@@ -135,7 +160,7 @@ func (d *listItemDelegate) handleSwitchState(msg uievent.SwitchState, m *list.Mo
 	return tea.Batch(cmds...)
 }
 
-// restoreLastSelection restores cursor to the last selected item if available
+// restoreLastSelection restores cursor to the last selected item if available.
 func (d *listItemDelegate) restoreLastSelection(m *list.Model) {
 	if d.current != nil {
 		for idx, i := range m.Items() {
@@ -148,12 +173,13 @@ func (d *listItemDelegate) restoreLastSelection(m *list.Model) {
 	}
 }
 
-// initializeTestDefinitions sets up the reference state with new test definitions
+// initializeTestDefinitions sets up the reference state with new test definitions.
 func (d *listItemDelegate) initializeTestDefinitions(definitions gotest.Definitions) {
 	d.refState = newReferenceState(state.NewDefinitionViewer(definitions), d.refState)
 }
 
-// applyUserSelections marks items selected by user with -run statements and returns first selected index
+// applyUserSelections marks items selected by user with -run statements and returns first selected index.
+// it also marks all children of selected items.
 func (d *listItemDelegate) applyUserSelections(selected []gotest.Reference, m *list.Model) int {
 	selectedSet := make(map[gotest.Reference]struct{})
 	for _, ref := range selected {
@@ -175,7 +201,7 @@ func (d *listItemDelegate) applyUserSelections(selected []gotest.Reference, m *l
 	return firstSelectedIdx
 }
 
-// handleMouseEvent processes mouse interactions
+// handleMouseEvent processes mouse interactions like scrolling and clicking.
 func (d *listItemDelegate) handleMouseEvent(msg tea.MouseMsg, m *list.Model) tea.Cmd {
 	var cmds []tea.Cmd
 
@@ -195,7 +221,7 @@ func (d *listItemDelegate) handleMouseEvent(msg tea.MouseMsg, m *list.Model) tea
 	return tea.Batch(cmds...)
 }
 
-// handleKeyEvent processes keyboard interactions
+// handleKeyEvent processes keyboard interactions including selection, navigation, and filtering.
 func (d *listItemDelegate) handleKeyEvent(msg tea.KeyMsg, m *list.Model) tea.Cmd {
 	var cmds []tea.Cmd
 
@@ -212,7 +238,7 @@ func (d *listItemDelegate) handleKeyEvent(msg tea.KeyMsg, m *list.Model) tea.Cmd
 	return tea.Batch(cmds...)
 }
 
-// handleSelectionKeys processes test selection and finish actions
+// handleSelectionKeys processes test selection and finish actions.
 func (d *listItemDelegate) handleSelectionKeys(msg tea.KeyMsg, m *list.Model) []tea.Cmd {
 	var cmds []tea.Cmd
 
@@ -233,7 +259,7 @@ func (d *listItemDelegate) handleSelectionKeys(msg tea.KeyMsg, m *list.Model) []
 	return cmds
 }
 
-// handleNavigationKeys processes cursor movement and package navigation
+// handleNavigationKeys processes cursor movement and package navigation.
 func (d *listItemDelegate) handleNavigationKeys(msg tea.KeyMsg, m *list.Model) []tea.Cmd {
 	var cmds []tea.Cmd
 
@@ -253,7 +279,7 @@ func (d *listItemDelegate) handleNavigationKeys(msg tea.KeyMsg, m *list.Model) [
 	return cmds
 }
 
-// handleToggleKeys processes view toggle actions
+// handleToggleKeys processes view toggle actions for reference format and test visibility.
 func (d *listItemDelegate) handleToggleKeys(msg tea.KeyMsg, m *list.Model) []tea.Cmd {
 	var cmds []tea.Cmd
 
@@ -270,7 +296,7 @@ func (d *listItemDelegate) handleToggleKeys(msg tea.KeyMsg, m *list.Model) []tea
 	return cmds
 }
 
-// handleFilterKeys processes text filtering input
+// handleFilterKeys processes text filtering input for letter characters.
 func (d *listItemDelegate) handleFilterKeys(msg tea.KeyMsg, m *list.Model) []tea.Cmd {
 	var cmds []tea.Cmd
 
@@ -286,6 +312,7 @@ func (d *listItemDelegate) handleFilterKeys(msg tea.KeyMsg, m *list.Model) []tea
 	return cmds
 }
 
+// nextPkg moves the cursor to the first item of the next package.
 func (d *listItemDelegate) nextPkg(m *list.Model) tea.Cmd {
 	currentIdx := m.Index()
 	currentElement := m.SelectedItem()
@@ -304,6 +331,7 @@ func (d *listItemDelegate) nextPkg(m *list.Model) tea.Cmd {
 	return d.refState.update(m)
 }
 
+// prevPkg moves the cursor to the first item of the previous package.
 func (d *listItemDelegate) prevPkg(m *list.Model) tea.Cmd {
 	currentIdx := m.Index()
 	currentElement := m.SelectedItem()
@@ -332,6 +360,8 @@ func (d *listItemDelegate) prevPkg(m *list.Model) tea.Cmd {
 	return d.refState.update(m)
 }
 
+// onNavigate updates cursor scope when the cursor moves to a new item.
+// it marks all children of the current item as being within cursor scope for potential hover effects.
 func (d *listItemDelegate) onNavigate(m *list.Model) tea.Cmd {
 	currentItem := m.SelectedItem()
 	if currentItem == nil {
@@ -358,6 +388,7 @@ func (d *listItemDelegate) onNavigate(m *list.Model) tea.Cmd {
 	return nil
 }
 
+// onSelectAll selects or deselects all visible items in the list.
 func (d *listItemDelegate) onSelectAll(m *list.Model, isAllAlreadySelected bool) tea.Cmd {
 	// select all items that can be seen in the list (on all pages)
 	// or if they are already all selected, then unselect them all
@@ -367,6 +398,7 @@ func (d *listItemDelegate) onSelectAll(m *list.Model, isAllAlreadySelected bool)
 	return d.selectedTestReferences(false)
 }
 
+// onToggleMultiselect toggles selection state for the current item and its children.
 func (d *listItemDelegate) onToggleMultiselect(m *list.Model) tea.Cmd {
 	d.cursorScope = make(map[gotest.Reference]struct{}) // reset!
 
@@ -384,6 +416,7 @@ func (d *listItemDelegate) onToggleMultiselect(m *list.Model) tea.Cmd {
 	return d.selectedTestReferences(false)
 }
 
+// visibleItems returns all currently visible items as a slice.
 func (d listItemDelegate) visibleItems(m *list.Model) []item {
 	var refs []item
 	for _, it := range m.VisibleItems() {
@@ -392,10 +425,13 @@ func (d listItemDelegate) visibleItems(m *list.Model) []item {
 	return refs
 }
 
+// selectedItem returns the index and item at the current cursor position.
 func (d listItemDelegate) selectedItem(m *list.Model) (int, item) {
 	return m.Index(), m.SelectedItem().(item)
 }
 
+// selectedTestReferences returns a command that emits the currently selected test references.
+// if finished is true, it signals that the user has confirmed their selection.
 func (d listItemDelegate) selectedTestReferences(finished bool) tea.Cmd {
 	var cmds []tea.Cmd
 	refs := d.selectedReferences()
@@ -412,6 +448,8 @@ func (d listItemDelegate) selectedTestReferences(finished bool) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// selectedReferences builds the final list of selected test references.
+// it uses explicitly selected items if any exist, otherwise falls back to cursor scope.
 func (d listItemDelegate) selectedReferences() []gotest.Reference {
 	var refs []gotest.Reference
 
@@ -437,6 +475,9 @@ func (d listItemDelegate) selectedReferences() []gotest.Reference {
 	return refs
 }
 
+// markChildren marks an item and all of its children in the given marker map.
+// if invert is true, it removes items from the marker instead of adding them.
+// returns the count of items marked.
 func markChildren(selected item, start int, items []item, marker map[gotest.Reference]struct{}, invert bool, children map[gotest.Reference][]gotest.Reference) int {
 	if selected.ref.Package == "*" {
 		return markAll(items, marker, invert)
@@ -480,6 +521,7 @@ func markChildren(selected item, start int, items []item, marker map[gotest.Refe
 	return count
 }
 
+// isChild determines if other is a child of ref based on package and function hierarchy.
 func isChild(ref, other *gotest.Reference) bool {
 	if other == nil || ref == nil {
 		return false
@@ -505,6 +547,8 @@ func isChild(ref, other *gotest.Reference) bool {
 	return ref.TRunName == other.TRunName
 }
 
+// markAll marks all items in the list.
+// if invert is true, it removes all items from the marker instead.
 func markAll(items []item, marker map[gotest.Reference]struct{}, invert bool) int {
 	count := 0
 	for i := 0; i < len(items); i++ {
@@ -520,6 +564,8 @@ func markAll(items []item, marker map[gotest.Reference]struct{}, invert bool) in
 	return count
 }
 
+// Render draws a single list item with appropriate styling based on selection state.
+// it applies different styles for cursor hover, user selection, and filter matches.
 func (d listItemDelegate) Render(w io.Writer, m list.Model, idx int, i list.Item) {
 	it := i.(item)
 

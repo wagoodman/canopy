@@ -7,18 +7,23 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// this is a copy of the help.go file from the bubbles package in bubbletea
-// this is a basis for extending help options to also be toggles, showing their state
-
+// Item wraps a key.Binding with optional toggle state support, allowing
+// keybindings to show whether a feature is currently enabled or disabled.
 type Item struct {
 	key.Binding
+
+	// toggle holds state for keybindings that toggle a feature.
 	toggle *Toggle
 }
 
+// NewKeyBinding creates an Item from a key.Binding without toggle functionality.
 func NewKeyBinding(keyBinding key.Binding) Item {
 	return Item{Binding: keyBinding}
 }
 
+// WithToggle adds toggle support to this Item. The state parameter indicates
+// the initial toggle state, and the engaged/disengaged descriptions are shown
+// in the help text based on the current state.
 func (i Item) WithToggle(state bool, engagedDesc, disengagedDesc string) Item {
 	i.toggle = &Toggle{
 		engaged:        state,
@@ -31,15 +36,25 @@ func (i Item) WithToggle(state bool, engagedDesc, disengagedDesc string) Item {
 	return i
 }
 
+// Toggle represents the state of a toggleable keybinding.
 type Toggle struct {
-	engaged        bool
-	engagedDesc    string
+	// engaged indicates whether the toggle is currently active.
+	engaged bool
+
+	// engagedDesc is the help text shown when engaged.
+	engagedDesc string
+
+	// disengagedDesc is the help text shown when disengaged.
 	disengagedDesc string
 
-	EngagedStyle    *lipgloss.Style
+	// EngagedStyle is applied when the toggle is active.
+	EngagedStyle *lipgloss.Style
+
+	// DisengagedStyle is applied when the toggle is inactive.
 	DisengagedStyle *lipgloss.Style
 }
 
+// Engaged returns whether this toggle is currently active.
 func (i Item) Engaged() bool {
 	if i.toggle == nil {
 		return false
@@ -47,6 +62,7 @@ func (i Item) Engaged() bool {
 	return i.toggle.engaged
 }
 
+// Press toggles the Item's state and updates its help text accordingly.
 func (i *Item) Press() {
 	if i.toggle == nil {
 		return
@@ -55,6 +71,7 @@ func (i *Item) Press() {
 	i.setHelp()
 }
 
+// setHelp updates the Item's help text based on its current toggle state.
 func (i *Item) setHelp() {
 	k := i.Binding.Help().Key
 	if k == "" {
@@ -74,12 +91,8 @@ func (i *Item) setHelp() {
 	}
 }
 
-// KeyMap is a map of keybindings used to generate help. Since it's an
-// interface it can be any type, though struct or a map[string][]key.Binding
-// are likely candidates.
-//
-// Note that if a key is disabled (via key.Binding.SetEnabled) it will not be
-// rendered in the help view, so in theory generated help should self-manage.
+// KeyMap defines the interface for retrieving keybindings for help display.
+// Disabled keybindings are automatically excluded from the help view.
 type KeyMap interface {
 	// ShortHelp returns a slice of bindings to be displayed in the short
 	// version of the help. The help bubble will render help in the order in
@@ -87,6 +100,7 @@ type KeyMap interface {
 	ShortHelp() []Item
 }
 
+// FullKeyMap extends KeyMap with support for multi-column full help display.
 type FullKeyMap interface {
 	// FullHelp returns an extended group of help items, grouped by columns.
 	// The help bubble will render the help in the order in which the help
@@ -94,14 +108,17 @@ type FullKeyMap interface {
 	FullHelp() [][]Item
 }
 
+// jointKeyMap combines multiple KeyMaps into a single KeyMap for display.
 type jointKeyMap struct {
 	keyMaps []KeyMap
 }
 
+// JoinKeyMaps merges multiple KeyMaps into one, concatenating their help items.
 func JoinKeyMaps(keyMaps ...KeyMap) KeyMap {
 	return jointKeyMap{keyMaps: keyMaps}
 }
 
+// ShortHelp implements KeyMap by concatenating all short help items.
 func (m jointKeyMap) ShortHelp() []Item {
 	var h []Item
 	for _, km := range m.keyMaps {
@@ -110,6 +127,7 @@ func (m jointKeyMap) ShortHelp() []Item {
 	return h
 }
 
+// FullHelp implements FullKeyMap by concatenating all full help items.
 func (m jointKeyMap) FullHelp() [][]Item {
 	var h [][]Item
 	for _, km := range m.keyMaps {
@@ -120,43 +138,61 @@ func (m jointKeyMap) FullHelp() [][]Item {
 	return h
 }
 
-// Styles is a set of available style definitions for the Help bubble.
+// Styles defines the visual styling for the help display.
 type Styles struct {
+	// Ellipsis is shown when help items are truncated due to width.
 	Ellipsis lipgloss.Style
 
-	// Styling for the short help
-	ShortKey       lipgloss.Style
-	ShortDesc      lipgloss.Style
+	// ShortKey styles the key portion of short help items.
+	ShortKey lipgloss.Style
+
+	// ShortDesc styles the description portion of short help items.
+	ShortDesc lipgloss.Style
+
+	// ShortSeparator styles the separator between short help items.
 	ShortSeparator lipgloss.Style
 
-	// Styling for the full help
-	FullKey       lipgloss.Style
-	FullDesc      lipgloss.Style
+	// FullKey styles the key portion of full help items.
+	FullKey lipgloss.Style
+
+	// FullDesc styles the description portion of full help items.
+	FullDesc lipgloss.Style
+
+	// FullSeparator styles the separator between full help columns.
 	FullSeparator lipgloss.Style
 
-	// Styling for toggles
-	Engaged    lipgloss.Style
+	// Engaged styles toggle items when they are active.
+	Engaged lipgloss.Style
+
+	// Disengaged styles toggle items when they are inactive.
 	Disengaged lipgloss.Style
 
+	// IDStyle styles the session ID shown in the help footer.
 	IDStyle lipgloss.Style
 }
 
-// Model contains the state of the help view.
+// Model manages the help display state and rendering.
 type Model struct {
-	Width   int
-	ShowAll bool // if true, render the "full" help menu
+	// Width constrains the help display width.
+	Width int
 
+	// ShowAll toggles between short and full help display.
+	ShowAll bool
+
+	// ShortSeparator is the string used between short help items.
 	ShortSeparator string
-	FullSeparator  string
 
-	// The symbol we use in the short help when help items have been truncated
-	// due to width. Periods of ellipsis by default.
+	// FullSeparator is the string used between full help columns.
+	FullSeparator string
+
+	// Ellipsis is shown when help items are truncated.
 	Ellipsis string
 
+	// Styles defines visual styling for help components.
 	Styles Styles
 }
 
-// New creates a new help view with some useful defaults.
+// New creates a new help Model with default styling.
 func New() Model {
 	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{
 		Light: "#909090",
@@ -199,6 +235,8 @@ func New() Model {
 	}
 }
 
+// View renders the help display with the given KeyMap and session ID, constrained
+// to the specified width. Returns either short or full help based on ShowAll.
 func (m Model) View(keyMap KeyMap, id string, width int) string {
 	var view string
 	if m.ShowAll {
@@ -217,6 +255,7 @@ func (m Model) View(keyMap KeyMap, id string, width int) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, view, right)
 }
 
+// Height returns the vertical space required by the help display for the given KeyMap.
 func (m Model) Height(keyMap KeyMap) int {
 	if m.ShowAll {
 		if f, ok := keyMap.(FullKeyMap); ok {
@@ -236,8 +275,7 @@ func (m Model) Height(keyMap KeyMap) int {
 }
 
 // ShortHelpView renders a single line help view from a slice of keybindings.
-// If the line is longer than the maximum width it will be gracefully
-// truncated, showing only as many help items as possible.
+// If the line exceeds the maximum width, it will be gracefully truncated.
 func (m Model) ShortHelpView(bindings []Item) string {
 	if len(bindings) == 0 {
 		return ""
@@ -377,6 +415,7 @@ func (m Model) FullHelpView(groups [][]Item) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, out...)
 }
 
+// shouldRenderColumn returns true if the column contains at least one enabled keybinding.
 func shouldRenderColumn(b []Item) (ok bool) {
 	for _, v := range b {
 		if v.Enabled() {

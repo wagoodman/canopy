@@ -11,8 +11,11 @@ var _ interface {
 	fangs.PostLoader
 } = (*Packages)(nil)
 
+// Packages configures package selection for test discovery and execution.
 type Packages struct {
-	Specifiers      []string `yaml:"packages" json:"packages" mapstructure:"packages"`
+	// Specifiers are Go package path patterns (e.g., "./...", "github.com/user/pkg/...").
+	Specifiers []string `yaml:"packages" json:"packages" mapstructure:"packages"`
+	// ExcludePatterns are glob patterns of package paths to ignore during selection.
 	ExcludePatterns []string `yaml:"exclude" json:"exclude" mapstructure:"exclude"`
 
 	// internal
@@ -21,16 +24,19 @@ type Packages struct {
 	NamedFlagSet *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
 }
 
+// DefaultPackages returns package options with the current directory as the default specifier.
 func DefaultPackages() Packages {
 	return Packages{
 		Specifiers: []string{"."},
 	}
 }
 
+// PostLoad performs any necessary post-configuration validation (currently a no-op).
 func (o *Packages) PostLoad() error {
 	return nil
 }
 
+// AddFlags registers package selection flags with the flag set.
 func (o *Packages) AddFlags(flags fangs.FlagSet) {
 	o.NamedFlagSet = xflagset.NewNamed()
 	o.tracker = xflagset.NewDecorator(flags, o.NamedFlagSet.FlagSet("Package Selection"))

@@ -16,15 +16,20 @@ var (
 	_ fangs.PostLoader = (*Store)(nil)
 )
 
+// Store configures persistent storage of test results in a SQLite database.
 type Store struct {
-	Enabled   bool   `yaml:"enabled" mapstructure:"enabled"`
-	Root      string `yaml:"root" mapstructure:"root"`
-	Ephemeral bool   `yaml:"yaml" mapstructure:"-"`
+	// Enabled controls whether test results should be stored in the database.
+	Enabled bool `yaml:"enabled" mapstructure:"enabled"`
+	// Root is the directory path where the SQLite database will be stored.
+	Root string `yaml:"root" mapstructure:"root"`
+	// Ephemeral indicates whether the database should be temporary and discarded after use.
+	Ephemeral bool `yaml:"yaml" mapstructure:"-"`
 
 	tracker      *xflagset.Decorator
 	NamedFlagSet *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
 }
 
+// DefaultStore returns store options with persistence disabled by default and using the .canopy directory.
 func DefaultStore() Store {
 	return Store{
 		Enabled: false,
@@ -32,6 +37,7 @@ func DefaultStore() Store {
 	}
 }
 
+// AddFlags registers store-related flags with the flag set.
 func (o *Store) AddFlags(flags fangs.FlagSet) {
 	o.NamedFlagSet = xflagset.NewNamed()
 	o.tracker = xflagset.NewDecorator(flags, o.NamedFlagSet.FlagSet("State"))
@@ -41,6 +47,7 @@ func (o *Store) AddFlags(flags fangs.FlagSet) {
 	flags.StringVarP(&o.Root, "store-dir", "", "directory to store test output to a sqlite DB (enabled by --store)")
 }
 
+// PostLoad configures ephemeral storage and expands the root path, creating temp directories if needed.
 func (o *Store) PostLoad() error {
 	if !o.Enabled {
 		o.Ephemeral = true

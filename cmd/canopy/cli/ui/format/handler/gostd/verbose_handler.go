@@ -26,27 +26,51 @@ var (
 	_ partybus.Handler = (*verboseHandler)(nil)
 )
 
+// PackageConfig holds configuration for gostd package handlers.
 type PackageConfig struct {
-	Color                       bool
-	PackageNameWidth            int
-	IDE                         ide.Context
-	HidePackagesWithNoTestFiles bool // TODO: not used??
-	StripPackagePrefix          string
+	// Color enables colored output.
+	Color bool
 
-	// LoosePackageOrder is used to determine if the packages should be rendered in strict alphabetical order
-	// or allow for skipping ahead across packages that are taking a long time to complete (based on the stale duration).
-	LoosePackageOrder    bool
+	// PackageNameWidth sets the width for package name alignment.
+	PackageNameWidth int
+
+	// IDE is the IDE context for generating clickable links.
+	IDE ide.Context
+
+	// HidePackagesWithNoTestFiles controls visibility of packages without tests.
+	HidePackagesWithNoTestFiles bool
+
+	// StripPackagePrefix is removed from package names in output.
+	StripPackagePrefix string
+
+	// LoosePackageOrder allows skipping stale packages for more real-time output.
+	LoosePackageOrder bool
+
+	// StalePackageDuration is the threshold for considering a package stale.
 	StalePackageDuration time.Duration
 }
 
+// verboseHandler formats test output in verbose mode, showing all test output
+// including RUN, PASS, and FAIL markers. Outputs packages in alphabetical order.
 type verboseHandler struct {
-	writer    io.Writer
-	result    *gotest.Result
-	packages  *orderedset.OrderedSet[gotest.Reference]
-	panic     map[gotest.Reference]bool
+	// writer is where formatted output is written.
+	writer io.Writer
+
+	// result tracks all test events and outcomes.
+	result *gotest.Result
+
+	// packages tracks package references in order seen.
+	packages *orderedset.OrderedSet[gotest.Reference]
+
+	// panic tracks which test references have panic output.
+	panic map[gotest.Reference]bool
+
+	// formatter converts test events to formatted output.
 	formatter func(gotest.Event, bool) fmt.Stringer
 }
 
+// NewVerboseHandler creates a handler that formats output in verbose mode,
+// showing all test execution details.
 func NewVerboseHandler(writer io.Writer, config PackageConfig) handler.Handler {
 	return &verboseHandler{
 		writer:   writer,
@@ -65,6 +89,7 @@ func NewVerboseHandler(writer io.Writer, config PackageConfig) handler.Handler {
 	}
 }
 
+// Handle processes partybus events, routing test events to the handler.
 func (h *verboseHandler) Handle(e partybus.Event) error {
 	switch e.Type {
 	case event.GoTestType:
@@ -79,6 +104,8 @@ func (h *verboseHandler) Handle(e partybus.Event) error {
 	return nil
 }
 
+// OnGoTestEvent processes test events, updating result state and rendering
+// completed packages.
 func (h *verboseHandler) OnGoTestEvent(e gotest.Event) error {
 	h.result.Update(e)
 	if e.Reference.IsPackage() {
@@ -100,6 +127,7 @@ func (h *verboseHandler) OnGoTestEvent(e gotest.Event) error {
 	return nil
 }
 
+// render outputs completed packages in strict alphabetical order.
 func (h *verboseHandler) render() {
 	// only render packages that are done, and render them in alphabetical order
 	// this is the reason why we cannot use a package handler (since order of packages is important, independent of the order of completion)
@@ -123,6 +151,7 @@ func (h *verboseHandler) render() {
 	}
 }
 
+// outputPackage writes all output for a package, including test logs and conclusions.
 func (h *verboseHandler) outputPackage(pkgRef gotest.Reference) {
 	for _, testRef := range h.result.Children(pkgRef) {
 		// output run/pause/continue and logs
@@ -151,6 +180,7 @@ func (h *verboseHandler) outputPackage(pkgRef gotest.Reference) {
 	}
 }
 
+// outputTest writes output for a test and its children, optionally indenting conclusions.
 func (h *verboseHandler) outputTest(testRef gotest.Reference, indent bool, include func(gotest.Event) bool) {
 	outputEvents := h.getEvents(testRef, include)
 
@@ -166,6 +196,7 @@ func (h *verboseHandler) outputTest(testRef gotest.Reference, indent bool, inclu
 	}
 }
 
+// getEvents collects events for a test and its children, filtered by the include function.
 func (h *verboseHandler) getEvents(testRef gotest.Reference, include func(gotest.Event) bool) []gotest.Event {
 	outputEvents := filterEvents(h.result.ReferenceEvents(testRef), include)
 
@@ -176,6 +207,7 @@ func (h *verboseHandler) getEvents(testRef gotest.Reference, include func(gotest
 	return outputEvents
 }
 
+// filterEvents returns only events that pass the include filter.
 func filterEvents(events []gotest.Event, include func(gotest.Event) bool) []gotest.Event {
 	var filtered []gotest.Event
 	for _, e := range events {
@@ -186,6 +218,7 @@ func filterEvents(events []gotest.Event, include func(gotest.Event) bool) []gote
 	return filtered
 }
 
+// String returns any remaining buffered output (none in this implementation).
 func (h *verboseHandler) String() string {
 	return ""
 }

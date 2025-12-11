@@ -2,8 +2,9 @@ package options
 
 import "github.com/anchore/fangs"
 
-// Config holds a reference to the specific config file that was used to load application configuration
+// Config holds a reference to the specific config file that was used to load application configuration.
 type Config struct {
+	// ConfigFile is the path to the configuration file used for loading application settings.
 	ConfigFile string `yaml:"config" json:"config" mapstructure:"config"`
 }
 

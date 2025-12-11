@@ -2,6 +2,7 @@ package gotest
 
 import "github.com/lindell/go-ordered-set/orderedset"
 
+// References is a collection of test references with sorting and utility methods.
 type References []Reference
 
 // Len implements sort.Interface for References.
@@ -25,6 +26,7 @@ func (r References) Swap(i, j int) {
 	r[i], r[j] = r[j], r[i]
 }
 
+// TestFunctionsCount returns the number of function-level test references (excluding subtests and packages).
 func (r References) TestFunctionsCount() int {
 	count := 0
 	for _, ref := range r {
@@ -35,6 +37,7 @@ func (r References) TestFunctionsCount() int {
 	return count
 }
 
+// Packages returns a deduplicated, ordered list of all package paths referenced in the collection.
 func (r References) Packages() []string {
 	pkgs := orderedset.New[string]()
 	for _, ref := range r {
@@ -46,6 +49,8 @@ func (r References) Packages() []string {
 	return pkgs.Values()
 }
 
+// NewReferencesFromDefinition converts a test definition into a collection of executable references.
+// Creates references for the function itself plus all discovered t.Run subtests.
 func NewReferencesFromDefinition(def Definition) []Reference {
 	fnName := def.FnName
 	pkgName := def.ImportPath
@@ -83,8 +88,10 @@ func newNode(ref Reference) *node {
 	}
 }
 
-// MinimizeReferences creates a selection tree from selected references,
-// prunes it based on the total tree, and returns the minimized set of references.
+// MinimizeReferences creates a selection tree from selected references, prunes it based on the
+// total tree, and returns the minimized set of references. This operation is useful for reducing
+// a large selection down to its essential components - for example, if all children of a node
+// are selected, the selection can be reduced to just the parent node.
 func MinimizeReferences(total, selected []Reference) []Reference {
 	totalTree := buildTree(total)
 	selectionTree := buildTree(selected)

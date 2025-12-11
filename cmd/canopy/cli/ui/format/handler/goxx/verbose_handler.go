@@ -23,14 +23,26 @@ var (
 	_ fmt.Stringer     = (*VerbosePackage)(nil)
 )
 
+// VerbosePackageConfig holds configuration for verbose mode goxx output.
 type VerbosePackageConfig struct {
-	Color                       bool
-	PackageNameWidth            int
-	IDE                         ide.Context
+	// Color enables colored output.
+	Color bool
+
+	// PackageNameWidth sets the width for package name alignment.
+	PackageNameWidth int
+
+	// IDE is the IDE context for generating clickable links.
+	IDE ide.Context
+
+	// HidePackagesWithNoTestFiles controls visibility of packages without tests.
 	HidePackagesWithNoTestFiles bool
-	HideExecutionTestEvents     bool
+
+	// HideExecutionTestEvents controls visibility of RUN/PAUSE/CONTINUE markers.
+	HideExecutionTestEvents bool
 }
 
+// NewVerboseHandler creates a handler that formats output in enhanced verbose mode,
+// showing all test output with improved formatting.
 func NewVerboseHandler(writer io.Writer, config VerbosePackageConfig) handler.Handler {
 	return handler.NewPackageHandler(
 		func(ref gotest.Reference, writer io.Writer) handler.Handler {
@@ -38,18 +50,38 @@ func NewVerboseHandler(writer io.Writer, config VerbosePackageConfig) handler.Ha
 		}, writer)
 }
 
+// VerbosePackage handles test events for a single package in verbose mode, writing
+// output immediately and buffering conclusions for later.
 type VerbosePackage struct {
-	writer        io.Writer
-	config        VerbosePackageConfig
-	style         style.Go
+	// writer is where formatted output is written.
+	writer io.Writer
+
+	// config holds formatting configuration.
+	config VerbosePackageConfig
+
+	// style is the style configuration for colored output.
+	style style.Go
+
+	// lastOutputRef tracks the last test reference that produced output.
 	lastOutputRef *gotest.Reference
-	pkg           string
-	buffer        *strings.Builder
+
+	// pkg is the package name being handled.
+	pkg string
+
+	// buffer holds output that is delayed until package completion.
+	buffer *strings.Builder
+
+	// funcConcluded tracks which test functions have concluded.
 	funcConcluded map[gotest.Reference]struct{}
-	formatter     func(gotest.Event, bool) fmt.Stringer
-	panic         map[gotest.Reference]bool
+
+	// formatter converts test events to formatted output.
+	formatter func(gotest.Event, bool) fmt.Stringer
+
+	// panic tracks which test references have panic output.
+	panic map[gotest.Reference]bool
 }
 
+// NewVerbosePackage creates a handler for a single package in verbose mode.
 func NewVerbosePackage(writer io.Writer, config VerbosePackageConfig, ref gotest.Reference) *VerbosePackage {
 	if !ref.IsPackage() {
 		ref = ref.PackageRef()
@@ -75,6 +107,7 @@ func NewVerbosePackage(writer io.Writer, config VerbosePackageConfig, ref gotest
 	}
 }
 
+// Handle processes partybus events, routing test events to the handler.
 func (h *VerbosePackage) Handle(e partybus.Event) error {
 	switch e.Type {
 	case event.GoTestType:
@@ -89,10 +122,13 @@ func (h *VerbosePackage) Handle(e partybus.Event) error {
 	return nil
 }
 
+// String returns buffered output for this package.
 func (h *VerbosePackage) String() string {
 	return h.buffer.String()
 }
 
+// OnGoTestEvent processes test events, writing output immediately or buffering
+// it depending on whether the test function has concluded.
 func (h *VerbosePackage) OnGoTestEvent(e gotest.Event) error {
 	if e.Reference.Package != h.pkg {
 		return nil
@@ -152,6 +188,7 @@ func (h *VerbosePackage) OnGoTestEvent(e gotest.Event) error {
 	return nil
 }
 
+// funcRefConcluded checks if a test function has concluded.
 func (h *VerbosePackage) funcRefConcluded(ref gotest.Reference) bool {
 	funcRef := ref.FuncRef()
 	if funcRef != nil {

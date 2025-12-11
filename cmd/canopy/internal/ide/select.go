@@ -1,5 +1,7 @@
 package ide
 
+// Select detects and returns the currently active IDE Context by checking
+// environment variables. Returns a dummy context if no supported IDE is detected.
 func Select(env EnvironmentGetter) Context {
 	var available []Context
 	if c, err := NewZed(nil); err == nil {
@@ -23,17 +25,21 @@ func Select(env EnvironmentGetter) Context {
 	return &dummy{}
 }
 
+// dummy is a no-op Context used when no IDE is detected.
 type dummy struct {
 }
 
+// isActive always returns true for the dummy context.
 func (d dummy) isActive(_ EnvironmentGetter) bool {
 	return true
 }
 
+// OpenFileAtLineCommand returns an empty string as no IDE command is available.
 func (d dummy) OpenFileAtLineCommand(_ string, _ int) string {
 	return ""
 }
 
+// FileAtLineURL returns a standard file:// URL.
 func (d dummy) FileAtLineURL(file string, line int) string {
 	return fileAtLineURL(file, line)
 }

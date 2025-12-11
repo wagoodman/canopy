@@ -1,3 +1,6 @@
+// Package referencespane provides a navigable list UI component for browsing and
+// selecting test references (packages, functions, and test cases) with filtering
+// and multi-selection support.
 package referencespane
 
 import (
@@ -6,35 +9,42 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Config holds configuration options for the references pane's appearance and behavior.
 type Config struct {
-	// The width ratio of the viewport to the terminal width. This is useful
+	// WidthRatio is the width ratio of the viewport to the terminal width. This is useful
 	// for sidebars and other UI elements that don't take up the full width of
 	// the terminal.
 	WidthRatio float64
 
-	// Reference list / selection
-	// AllRefStyle     lipgloss.Style
-	// RunningRefStyle lipgloss.Style
-	// FailedRefStyle  lipgloss.Style
-	// PassedRefStyle  lipgloss.Style
-	// SkippedRefStyle lipgloss.Style
-
+	// ShowFailedOnly when true displays only failed tests initially.
 	ShowFailedOnly bool
 
-	// Summary Counts
-	FailedCountStyle  lipgloss.Style
-	PassedCountStyle  lipgloss.Style
-	SkippedCountStyle lipgloss.Style
-	SummaryLineStyle  lipgloss.Style
+	// FailedCountStyle is applied to the failed test count in the summary.
+	FailedCountStyle lipgloss.Style
 
-	// Summary Conclusion
-	RunningStyle          lipgloss.Style
+	// PassedCountStyle is applied to the passed test count in the summary.
+	PassedCountStyle lipgloss.Style
+
+	// SkippedCountStyle is applied to the skipped test count in the summary.
+	SkippedCountStyle lipgloss.Style
+
+	// SummaryLineStyle styles the summary line text.
+	SummaryLineStyle lipgloss.Style
+
+	// RunningStyle styles the summary when tests are still running.
+	RunningStyle lipgloss.Style
+
+	// FailedConclusionStyle styles the summary when tests have failed.
 	FailedConclusionStyle lipgloss.Style
+
+	// PassedConclusionStyle styles the summary when all tests have passed.
 	PassedConclusionStyle lipgloss.Style
 
+	// BorderSummaryStyle styles the border around the summary line.
 	BorderSummaryStyle lipgloss.Style
 }
 
+// defaultOptions returns Config with default styling and sizing.
 func defaultOptions() Config {
 	baseSummaryStyle := lipgloss.NewStyle()
 	bdr := lipgloss.NormalBorder()
@@ -46,14 +56,6 @@ func defaultOptions() Config {
 			// BorderBottom(true).
 			// BorderForeground(lipgloss.Color("#666666")),
 			BorderForeground(lipgloss.Color("#FFFFFF")),
-
-		// ref list
-		//AllRefStyle:     lipgloss.NewStyle().Italic(true).Foreground(lipgloss.Color("246")),
-		//RunningRefStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("246")),
-		//FailedRefStyle:  lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
-		//PassedRefStyle:  lipgloss.NewStyle().Foreground(lipgloss.Color("10")),
-		////PassedRefStyle:  lipgloss.NewStyle(),
-		//SkippedRefStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
 
 		// counts
 		//PassedCountStyle:  summaryBG.Foreground(lipgloss.Color("10")),
@@ -70,8 +72,10 @@ func defaultOptions() Config {
 	}
 }
 
+// Option is a functional option for configuring the references pane.
 type Option func(*Config) error
 
+// WithWidthRatio sets the width ratio for the references pane. Must be > 0 and <= 1.
 func WithWidthRatio(ratio float64) Option {
 	return func(c *Config) error {
 		if ratio > 1 || ratio <= 0 {
@@ -82,6 +86,7 @@ func WithWidthRatio(ratio float64) Option {
 	}
 }
 
+// WithShowFailedOnly configures whether to show only failed tests initially.
 func WithShowFailedOnly(show bool) Option {
 	return func(c *Config) error {
 		c.ShowFailedOnly = show
@@ -89,6 +94,7 @@ func WithShowFailedOnly(show bool) Option {
 	}
 }
 
+// apply creates a Config by applying all options to the default configuration.
 func apply(options ...Option) (Config, error) {
 	opts := defaultOptions()
 	for _, o := range options {

@@ -25,10 +25,7 @@ import (
 	"github.com/anchore/go-logger/adapter/discard"
 )
 
-var (
-	_ fangs.FlagAdder  = (*TestCoreConfig)(nil)
-	_ fangs.PostLoader = (*TestCoreConfig)(nil)
-)
+var _ fangs.FlagAdder = (*TestCoreConfig)(nil)
 
 var _ SilentError = (*ErrTestSuiteFailed)(nil)
 
@@ -53,8 +50,9 @@ func (e ErrTestSuiteFailed) Error() string {
 }
 
 type TestCoreConfig struct {
-	options.Config `yaml:",inline" mapstructure:",squash"`
-	options.Store  `yaml:"store" json:"store" mapstructure:"store"`
+	options.Config     `yaml:",inline" mapstructure:",squash"`
+	options.Experiment `yaml:"exp" json:"exp" mapstructure:"exp"`
+	options.Store      `yaml:"store" json:"store" mapstructure:"store"`
 
 	Test testConfig `yaml:"test" json:"test" mapstructure:"test"`
 
@@ -113,7 +111,8 @@ func withCombineMultipleRuns() func(*TestCoreConfig) {
 
 func defaultTestOptions(opts ...func(*TestCoreConfig)) *TestCoreConfig {
 	t := &TestCoreConfig{
-		Store: options.DefaultStore(),
+		Experiment: options.DefaultExperiment(),
+		Store:      options.DefaultStore(),
 		Test: testConfig{
 			Packages:   options.DefaultPackages(),
 			GoTest:     options.DefaultGoTest(),

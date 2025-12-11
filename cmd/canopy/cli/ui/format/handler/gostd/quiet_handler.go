@@ -1,3 +1,5 @@
+// Package gostd provides handlers that format test output to match standard
+// Go test output, with optional enhancements for readability.
 package gostd
 
 import (
@@ -23,15 +25,31 @@ var (
 	_ partybus.Handler = (*quietHandler)(nil)
 )
 
+// quietHandler formats test output in quiet mode, showing only failing tests and
+// final package results. It buffers output and renders packages in alphabetical order
+// as they complete.
 type quietHandler struct {
-	config    PackageConfig
-	writer    io.Writer
-	result    *gotest.Result
-	packages  *orderedset.OrderedSet[gotest.Reference]
-	panic     map[gotest.Reference]bool
+	// config holds formatting configuration.
+	config PackageConfig
+
+	// writer is where formatted output is written.
+	writer io.Writer
+
+	// result tracks all test events and outcomes.
+	result *gotest.Result
+
+	// packages tracks package references in order seen.
+	packages *orderedset.OrderedSet[gotest.Reference]
+
+	// panic tracks which test references have panic output.
+	panic map[gotest.Reference]bool
+
+	// formatter converts test events to formatted output.
 	formatter func(gotest.Event, bool) fmt.Stringer
 }
 
+// NewQuietHandler creates a handler that formats output in quiet mode, showing
+// only failures and package summaries.
 func NewQuietHandler(writer io.Writer, config PackageConfig) handler.Handler {
 	return &quietHandler{
 		config:   config,
@@ -51,6 +69,7 @@ func NewQuietHandler(writer io.Writer, config PackageConfig) handler.Handler {
 	}
 }
 
+// Handle processes partybus events, routing test events to the handler.
 func (h *quietHandler) Handle(e partybus.Event) error {
 	switch e.Type {
 	case event.GoTestType:
@@ -65,6 +84,8 @@ func (h *quietHandler) Handle(e partybus.Event) error {
 	return nil
 }
 
+// OnGoTestEvent processes test events, updating result state and rendering
+// completed packages.
 func (h *quietHandler) OnGoTestEvent(e gotest.Event) error {
 	h.result.Update(e)
 	if e.Reference.IsPackage() {
@@ -86,6 +107,8 @@ func (h *quietHandler) OnGoTestEvent(e gotest.Event) error {
 	return nil
 }
 
+// render outputs completed packages in alphabetical order, with optional loose
+// ordering that skips stale packages.
 func (h *quietHandler) render() {
 	// only render packages that are done, and render them in alphabetical order
 	// this is the reason why we cannot use a package handler (since order of packages is important, independent of the order of completion)
@@ -127,6 +150,7 @@ func (h *quietHandler) render() {
 	}
 }
 
+// hasFailure recursively checks if a test reference or any of its children failed.
 func (h *quietHandler) hasFailure(testRef gotest.Reference) bool {
 	if h.result.ReferenceConclusiveAction(testRef) == gotest.FailAction {
 		return true
@@ -139,6 +163,8 @@ func (h *quietHandler) hasFailure(testRef gotest.Reference) bool {
 	return false
 }
 
+// outputPackage writes output for a completed package, including all tests matching
+// the include filter.
 func (h *quietHandler) outputPackage(pkgRef gotest.Reference, include func(gotest.Reference) bool, render func(gotest.Event) bool) {
 	for _, testRef := range h.result.Children(pkgRef) {
 		if include(testRef) {
@@ -160,6 +186,7 @@ func (h *quietHandler) outputPackage(pkgRef gotest.Reference, include func(gotes
 	}
 }
 
+// outputTest writes output for a test and its children, applying include and render filters.
 func (h *quietHandler) outputTest(testRef gotest.Reference, include func(gotest.Reference) bool, render func(gotest.Event) bool) {
 	outputEvents := h.getEvents(testRef, include)
 
@@ -178,6 +205,7 @@ func (h *quietHandler) outputTest(testRef gotest.Reference, include func(gotest.
 	}
 }
 
+// getEvents collects events for a test reference and its children, recursively.
 func (h *quietHandler) getEvents(testRef gotest.Reference, include func(gotest.Reference) bool) []gotest.Event {
 	if !include(testRef) {
 		return nil
@@ -194,10 +222,13 @@ func (h *quietHandler) getEvents(testRef gotest.Reference, include func(gotest.R
 	return outputEvents
 }
 
+// String returns any remaining buffered output (none in this implementation).
 func (h *quietHandler) String() string {
 	return ""
 }
 
+// spliceConclusionFirst moves the conclusion event (--- FAIL) to replace the
+// run event (=== RUN) to make output more compact.
 func spliceConclusionFirst(es []gotest.Event) (outputEvents []gotest.Event) {
 	// find the conclusion event (the last event with a conclusion marking of --- FAIL)
 	rmIdx := -1

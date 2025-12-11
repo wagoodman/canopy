@@ -13,14 +13,25 @@ import (
 	"github.com/wagoodman/go-partybus"
 )
 
+// PackageHandlerFactory creates a handler for a specific package reference.
+// The factory receives a test reference and writer, returning a configured handler.
 type PackageHandlerFactory func(gotest.Reference, io.Writer) Handler
 
+// packageHandler manages handlers for multiple running packages, writing output
+// immediately when packages complete and cleaning up finished handlers.
 type packageHandler struct {
-	writer      io.Writer
+	// writer is where completed package output is written.
+	writer io.Writer
+
+	// runningPkgs tracks handlers for packages currently being tested.
 	runningPkgs map[string]Handler
-	factory     PackageHandlerFactory
+
+	// factory creates new handlers for each package.
+	factory PackageHandlerFactory
 }
 
+// NewPackageHandler creates a handler that manages concurrent package handlers,
+// writing their output immediately upon completion and removing them from tracking.
 func NewPackageHandler(factory PackageHandlerFactory, writer io.Writer) Handler {
 	return &packageHandler{
 		writer:      writer,
@@ -29,6 +40,7 @@ func NewPackageHandler(factory PackageHandlerFactory, writer io.Writer) Handler 
 	}
 }
 
+// Handle processes partybus events, routing test events to package handlers.
 func (n *packageHandler) Handle(e partybus.Event) error {
 	switch e.Type {
 	case event.GoTestType:
@@ -43,6 +55,8 @@ func (n *packageHandler) Handle(e partybus.Event) error {
 	return nil
 }
 
+// OnGoTestEvent processes test events, creating package handlers on-demand and
+// removing them when they signal completion via ErrPackageComplete.
 func (n *packageHandler) OnGoTestEvent(goTestEvent gotest.Event) error {
 	// buffer all package output until all package test results are in
 	pkg := goTestEvent.Reference.Package
@@ -60,6 +74,7 @@ func (n *packageHandler) OnGoTestEvent(goTestEvent gotest.Event) error {
 	return nil
 }
 
+// String returns buffered output from all still-running packages in alphabetical order.
 func (n packageHandler) String() string {
 	var pkgs []string
 	for pkg := range n.runningPkgs {

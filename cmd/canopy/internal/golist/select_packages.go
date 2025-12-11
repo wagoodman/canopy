@@ -9,6 +9,9 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 )
 
+// SelectPackages discovers packages matching the given paths and filters them using exclude patterns.
+// Paths can be local filesystem paths (e.g., "./pkg/...") or module import paths.
+// Returns a PackageCollection containing all matching packages that don't match any exclude glob.
 func SelectPackages(paths, excludeGlobs []string) (*PackageCollection, error) {
 	if err := validateLocalPaths(paths); err != nil {
 		return nil, err

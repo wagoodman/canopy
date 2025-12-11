@@ -9,15 +9,25 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
 
+// referenceState manages the visibility and display format of test references in the selector.
+// it tracks which references are currently visible and how they should be rendered.
 type referenceState struct {
-	state          state.DefinitionViewer
-	children       map[gotest.Reference][]gotest.Reference
-	stateCount     int
-	visible        []gotest.Reference
+	// state provides access to the underlying test definitions.
+	state state.DefinitionViewer
+	// children maps each reference to its child references (e.g., package -> tests, test -> t.Run cases).
+	children map[gotest.Reference][]gotest.Reference
+	// stateCount is the total number of references in the current state.
+	stateCount int
+	// visible is the list of references currently shown in the UI.
+	visible []gotest.Reference
+	// preferLongForm controls whether to show full package paths or short names.
 	preferLongForm bool
-	hideTests      bool
+	// hideTests controls whether to show only packages or include test functions.
+	hideTests bool
 }
 
+// newReferenceState creates a new reference state from the given definition viewer.
+// it preserves preferLongForm and hideTests settings from previous states if provided.
 func newReferenceState(state state.DefinitionViewer, others ...referenceState) referenceState {
 	var preferLongForm, hideTests bool
 	if len(others) > 0 {
@@ -36,6 +46,8 @@ func newReferenceState(state state.DefinitionViewer, others ...referenceState) r
 	}
 }
 
+// mapAllChildren builds a map of parent-child relationships for all references.
+// each reference is mapped to its list of direct children.
 func mapAllChildren(refs []gotest.Reference) map[gotest.Reference][]gotest.Reference {
 	children := make(map[gotest.Reference][]gotest.Reference)
 	for _, ref := range refs {
@@ -47,6 +59,8 @@ func mapAllChildren(refs []gotest.Reference) map[gotest.Reference][]gotest.Refer
 	return children
 }
 
+// update refreshes the list model with the current reference state.
+// aboutToFilter controls whether references should be displayed in long form for filtering.
 func (d *referenceState) update(m *list.Model, aboutToFilters ...bool) tea.Cmd {
 	if d.state == nil {
 		return nil
@@ -68,6 +82,8 @@ func (d *referenceState) update(m *list.Model, aboutToFilters ...bool) tea.Cmd {
 //	return d.setReferences(m, false, true, refs...)
 //}
 
+// setReferences updates the list model with a new set of references.
+// it determines the appropriate display format based on filtering and completion state.
 func (d *referenceState) setReferences(m *list.Model, aboutToFilter, finished bool, refs ...gotest.Reference) tea.Cmd {
 	sort.Sort(gotest.References(refs))
 	d.visible = filterToVisibleRefs(finished, refs)
@@ -83,6 +99,8 @@ func (d *referenceState) setReferences(m *list.Model, aboutToFilter, finished bo
 	)
 }
 
+// filterToVisibleRefs determines which references should be visible in the UI.
+// it adds a special "all tests" entry when not finished.
 func filterToVisibleRefs(finished bool, original []gotest.Reference) []gotest.Reference {
 	var refs []gotest.Reference
 	if !finished {

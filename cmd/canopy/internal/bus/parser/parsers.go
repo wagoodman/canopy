@@ -9,9 +9,15 @@ import (
 	"github.com/wagoodman/go-partybus"
 )
 
+// ErrBadPayload represents an error when an event payload doesn't match the expected structure.
 type ErrBadPayload struct {
-	Type  partybus.EventType
+	// Type is the event type that had the bad payload.
+	Type partybus.EventType
+
+	// Field is the name of the field that was invalid.
 	Field string
+
+	// Value is the actual value that was encountered.
 	Value interface{}
 }
 
@@ -19,6 +25,7 @@ func (e *ErrBadPayload) Error() string {
 	return fmt.Sprintf("event='%s' has bad event payload field='%v': '%+v'", string(e.Type), e.Field, e.Value)
 }
 
+// newPayloadErr creates a new ErrBadPayload error.
 func newPayloadErr(t partybus.EventType, field string, value interface{}) error {
 	return &ErrBadPayload{
 		Type:  t,
@@ -27,6 +34,7 @@ func newPayloadErr(t partybus.EventType, field string, value interface{}) error 
 	}
 }
 
+// checkEventType verifies that an event has the expected type.
 func checkEventType(actual, expected partybus.EventType) error {
 	if actual != expected {
 		return newPayloadErr(expected, "Type", actual)
@@ -34,6 +42,8 @@ func checkEventType(actual, expected partybus.EventType) error {
 	return nil
 }
 
+// ParseCLIReport extracts the context and report message from a CLIReport event.
+// The context (Source field) is optional and may be empty.
 func ParseCLIReport(e partybus.Event) (string, string, error) {
 	if err := checkEventType(e.Type, event.CLIReport); err != nil {
 		return "", "", err
@@ -53,6 +63,8 @@ func ParseCLIReport(e partybus.Event) (string, string, error) {
 	return context, report, nil
 }
 
+// ParseCLINotification extracts the context and notification message from a CLINotification event.
+// The context (Source field) is optional and may be empty.
 func ParseCLINotification(e partybus.Event) (string, string, error) {
 	if err := checkEventType(e.Type, event.CLINotification); err != nil {
 		return "", "", err
@@ -72,6 +84,7 @@ func ParseCLINotification(e partybus.Event) (string, string, error) {
 	return context, notification, nil
 }
 
+// ParseGoTestType extracts a gotest.Event from a GoTestType event.
 func ParseGoTestType(e partybus.Event) (gotest.Event, error) {
 	if err := checkEventType(e.Type, event.GoTestType); err != nil {
 		return gotest.Event{}, err
@@ -85,6 +98,7 @@ func ParseGoTestType(e partybus.Event) (gotest.Event, error) {
 	return obj, nil
 }
 
+// ParseGoTestRunType extracts a gotest.Run from a GoTestRunType event.
 func ParseGoTestRunType(e partybus.Event) (*gotest.Run, error) {
 	if err := checkEventType(e.Type, event.GoTestRunType); err != nil {
 		return nil, err
@@ -98,6 +112,7 @@ func ParseGoTestRunType(e partybus.Event) (*gotest.Run, error) {
 	return &r, nil
 }
 
+// ParseGoTestRunRequestType extracts the runner configuration and session ID from a GoTestRunRequestType event.
 func ParseGoTestRunRequestType(e partybus.Event) (*gotest.RunnerConfig, *uuid.UUID, error) {
 	if err := checkEventType(e.Type, event.GoTestRunRequestType); err != nil {
 		return nil, nil, err

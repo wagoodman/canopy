@@ -13,6 +13,8 @@ import (
 	"github.com/anchore/clio"
 )
 
+// NewTestJestUI creates a new UI for displaying test results in a Jest-style format.
+// Today this is experimental thus requires opting into via configuration.
 func NewTestJestUI(config TestUIConfig) clio.UI {
 	rowCfg := jesttestrow.Config{
 		Color:                       config.Color,

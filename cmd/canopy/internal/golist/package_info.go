@@ -13,13 +13,21 @@ import (
 
 // derived from "go help list" output
 
+// PackageCollection maintains an ordered collection of packages with efficient lookup by import path and directory.
+// It preserves insertion order and provides bidirectional mapping between package paths and filesystem directories.
 type PackageCollection struct {
-	order      []string
-	set        map[string]Package
+	// order tracks the insertion order of package import paths.
+	order []string
+	// set maps import paths to their Package information.
+	set map[string]Package
+	// indexByDir maps filesystem directories to their import paths for reverse lookup.
 	indexByDir map[string]string
-	module     string
+	// module is the Go module path extracted from the first package added to the collection.
+	module string
 }
 
+// NewPackageCollection creates a new package collection initialized with the given packages.
+// Packages are indexed by import path and directory for efficient lookup.
 func NewPackageCollection(pkgs ...Package) *PackageCollection {
 	c := &PackageCollection{
 		set:        make(map[string]Package), // index by package name
@@ -33,6 +41,8 @@ func NewPackageCollection(pkgs ...Package) *PackageCollection {
 	return c
 }
 
+// Add inserts a package into the collection, maintaining insertion order and updating all indexes.
+// The module path is extracted from the first package that provides one.
 func (c *PackageCollection) Add(pkg Package) {
 	c.order = append(c.order, pkg.ImportPath)
 	c.set[pkg.ImportPath] = pkg
@@ -42,14 +52,18 @@ func (c *PackageCollection) Add(pkg Package) {
 	}
 }
 
+// Module returns the Go module path for the packages in this collection.
+// Returns empty string if no module path has been set.
 func (c *PackageCollection) Module() string {
 	return c.module
 }
 
+// Size returns the number of packages in the collection.
 func (c *PackageCollection) Size() int {
 	return len(c.set)
 }
 
+// Remove deletes a package from the collection, removing it from all indexes and the order list.
 func (c *PackageCollection) Remove(pkg Package) {
 	delete(c.set, pkg.ImportPath)
 	delete(c.indexByDir, pkg.Dir)
@@ -61,12 +75,14 @@ func (c *PackageCollection) Remove(pkg Package) {
 	}
 }
 
+// ImportPaths returns a copy of all import paths in insertion order.
 func (c *PackageCollection) ImportPaths() []string {
 	pkgs := make([]string, len(c.order))
 	copy(pkgs, c.order)
 	return pkgs
 }
 
+// Packages returns all packages in insertion order.
 func (c *PackageCollection) Packages() []Package {
 	var pkgs []Package
 	for _, importPath := range c.order {
@@ -75,6 +91,8 @@ func (c *PackageCollection) Packages() []Package {
 	return pkgs
 }
 
+// GetDir returns the filesystem directory for the given import path.
+// Returns empty string if the import path is not found.
 func (c *PackageCollection) GetDir(importPath string) string {
 	pkg, ok := c.set[importPath]
 	if !ok {
@@ -83,6 +101,8 @@ func (c *PackageCollection) GetDir(importPath string) string {
 	return pkg.Dir
 }
 
+// GetByDir returns the package at the given filesystem directory.
+// Returns nil if no package is found at that directory.
 func (c *PackageCollection) GetByDir(dir string) *Package {
 	importPath, ok := c.indexByDir[dir]
 	if !ok {
@@ -93,9 +113,15 @@ func (c *PackageCollection) GetByDir(dir string) *Package {
 	return &item
 }
 
+// Package represents a Go package with its filesystem location and import path.
+// This is a minimal subset of the full structure returned by `go list -json`.
+// Only the fields needed for test discovery are included.
 type Package struct {
-	Dir        string // directory containing package sources
-	ImportPath string // import path of package in dir
+	// Dir is the directory containing package sources.
+	Dir string
+	// ImportPath is the import path of the package.
+	ImportPath string
+	// ModulePath is the module path containing this package (extracted from Module.Path).
 	ModulePath string // module path of package (this is not part of the original datastructure, but instead extracted from Module.Path)
 	// ImportComment string   // path in import comment on package statement
 	// Name          string   // package name
@@ -193,6 +219,9 @@ type Package struct {
 //	Err string // the error itself
 // }
 
+// PackageInfo retrieves detailed package information for the given package patterns using `go list`.
+// It returns a slice of Package structs containing directory, import path, and module information.
+// The implementation uses a minimal JSON template for performance rather than full `-json` output.
 func PackageInfo(pkgs ...string) ([]Package, error) {
 	var output []Package
 

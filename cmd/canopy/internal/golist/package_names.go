@@ -16,6 +16,9 @@ import (
 //	return fmt.Sprintf("stderr from go test: %s", e.Output)
 //}
 
+// PackageNames retrieves import paths for the given package patterns using `go list`.
+// Returns a slice of package import paths (one per line of output).
+// This is a faster alternative to PackageInfo when only import paths are needed.
 func PackageNames(pkgs ...string) ([]string, error) {
 	var output []string
 

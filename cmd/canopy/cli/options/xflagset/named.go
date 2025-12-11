@@ -50,7 +50,8 @@ Use "{{.CommandPath}} [command] --help" for more information about a command.{{e
 `
 )
 
-// Named stores named flag sets in the order of calling FlagSet.
+// Named stores named flag sets in the order of calling FlagSet. This enables organizing flags into logical groups
+// for improved help text readability.
 type Named struct {
 	// Order is an ordered list of flag set names.
 	Order []string
@@ -60,13 +61,14 @@ type Named struct {
 	NormalizeNameFunc func(f *pflag.FlagSet, name string) pflag.NormalizedName
 }
 
+// NewNamed creates a new Named flag set collection with no groups.
 func NewNamed() *Named {
 	return &Named{
 		FlagSets: make(map[string]*pflag.FlagSet),
 	}
 }
 
-// FlagSet will return the flag set with the given name. If the flag set does not exist, it will be created.
+// FlagSet returns the flag set with the given name, creating it if it doesn't exist.
 func (nfs *Named) FlagSet(name string) *pflag.FlagSet {
 	if nfs.FlagSets == nil {
 		nfs.FlagSets = make(map[string]*pflag.FlagSet)
@@ -83,7 +85,7 @@ func (nfs *Named) FlagSet(name string) *pflag.FlagSet {
 	return nfs.FlagSets[name]
 }
 
-// printSections prints the given names flag sets in sections, with the maximal given column number.
+// printSections renders all flag groups as help text sections with proper wrapping at the specified column width.
 // If cols is zero, lines are not wrapped.
 func (nfs *Named) printSections(cols int) string {
 	w := &bytes.Buffer{}
@@ -122,8 +124,8 @@ type cmdWrapper struct {
 	NamedLocalFlags string
 }
 
-// BindUsageAndHelpFunc set both usage and help function.
-// Print the flag sets we need instead of all of them.
+// BindUsageAndHelpFunc customizes the usage and help functions for a cobra command to display named flag groups.
+// This organizes flags into logical sections for improved help text readability.
 func (nfs *Named) BindUsageAndHelpFunc(cmd *cobra.Command, cols int) {
 	help := func(cmd *cobra.Command) error {
 		return tmpl(
@@ -226,6 +228,7 @@ func tmpl(w io.Writer, text string, data interface{}) error {
 	return t.Execute(w, data)
 }
 
+// Merge combines another Named flag set collection into this one, preserving order and merging duplicate groups.
 func (nfs *Named) Merge(other *Named) {
 	for _, name := range other.Order {
 		if _, exists := nfs.FlagSets[name]; exists {
@@ -237,6 +240,7 @@ func (nfs *Named) Merge(other *Named) {
 	}
 }
 
+// Add adds one or more pflag.FlagSets to a named group, creating or extending the group as needed.
 func (nfs *Named) Add(name string, fss ...*pflag.FlagSet) {
 	for _, fs := range fss {
 		if _, exists := nfs.FlagSets[name]; exists {

@@ -11,12 +11,15 @@ import (
 
 var _ clio.UI = (*Collection)(nil)
 
+// Collection multiplexes events to multiple UI implementations, allowing multiple output formats simultaneously.
+// This enables scenarios like displaying a TUI while also writing JSON to a file.
 type Collection struct {
 	uis          []clio.UI
 	subscription partybus.Unsubscribable
 	lock         *sync.Mutex
 }
 
+// NewCollection creates a UI multiplexer that forwards events to all provided UI implementations.
 func NewCollection(uis ...clio.UI) *Collection {
 	return &Collection{
 		uis:  uis,
@@ -24,6 +27,7 @@ func NewCollection(uis ...clio.UI) *Collection {
 	}
 }
 
+// Setup initializes all UIs in the collection with the event bus subscription.
 func (u *Collection) Setup(subscription partybus.Unsubscribable) error {
 	u.lock.Lock()
 	defer u.lock.Unlock()
@@ -41,6 +45,7 @@ func (u *Collection) setup(subscription partybus.Unsubscribable) error {
 	return errs
 }
 
+// Handle forwards the event to all UIs in the collection, accumulating any errors.
 func (u Collection) Handle(event partybus.Event) error {
 	u.lock.Lock()
 	defer u.lock.Unlock()
@@ -53,6 +58,7 @@ func (u Collection) Handle(event partybus.Event) error {
 	return errs
 }
 
+// Teardown shuts down all UIs in the collection, accumulating any errors.
 func (u *Collection) Teardown(force bool) error {
 	u.lock.Lock()
 	defer u.lock.Unlock()

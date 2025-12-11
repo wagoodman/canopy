@@ -71,7 +71,7 @@ func MinimalSelection(defs Definitions, refs References) References {
 	return result
 }
 
-// buildPackageFunctions creates a map of package -> set of all test functions defined in that package
+// buildPackageFunctions creates a map of package -> set of all test functions defined in that package.
 func buildPackageFunctions(defs Definitions) map[string]map[string]bool {
 	packageFunctions := make(map[string]map[string]bool)
 	for _, def := range defs {
@@ -83,7 +83,7 @@ func buildPackageFunctions(defs Definitions) map[string]map[string]bool {
 	return packageFunctions
 }
 
-// collectPackagesAndSelections processes references to collect packages and their selected functions
+// collectPackagesAndSelections processes references to collect packages and their selected functions.
 func collectPackagesAndSelections(refs References) (map[string]bool, map[string]map[string]bool, map[string]bool) {
 	packages := make(map[string]bool)
 	selectedFunctions := make(map[string]map[string]bool)
@@ -111,7 +111,8 @@ func collectPackagesAndSelections(refs References) (map[string]bool, map[string]
 }
 
 // shouldUsePackageReference determines if a package should be referenced as a whole package
-// rather than individual function references
+// rather than individual function references. Returns true when all defined functions in the
+// package are selected and no undefined functions are included.
 func shouldUsePackageReference(pkg string, packageFunctions map[string]map[string]bool, selectedFunctions map[string]map[string]bool, selectedPackages map[string]bool) bool {
 	// if the entire package was explicitly selected AND no individual functions are selected, add package reference
 	if selectedPackages[pkg] && (selectedFunctions[pkg] == nil || len(selectedFunctions[pkg]) == 0) {

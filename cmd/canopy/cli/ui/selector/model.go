@@ -13,11 +13,16 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
 
+// Config holds configuration options for the selector UI.
 type Config struct {
-	ID    string
+	// ID is the unique identifier for this selector instance, displayed in the UI footer.
+	ID string
+	// Debug enables debug logging for the selector.
 	Debug bool
 }
 
+// filterKeyBindings holds key bindings for individual letter characters used in filtering.
+// initialized in init() to include all a-z and A-Z characters.
 var filterKeyBindings []key.Binding
 
 func init() {
@@ -37,22 +42,37 @@ func init() {
 	}
 }
 
+// Model is the Bubble Tea model for the interactive test selector UI.
+// it manages the list of test references, user selections, and visual styling.
 type Model struct {
+	// config holds the selector configuration.
 	config Config
-	size   tea.WindowSizeMsg
-	list   list.Model
+	// size tracks the current terminal window dimensions.
+	size tea.WindowSizeMsg
+	// list is the underlying Bubble Tea list component displaying test items.
+	list list.Model
+	// keyMap defines the keyboard shortcuts for selector actions.
 	keyMap keyMap
 
-	selected  gotest.References // the currently selected references
-	finished  bool
+	// selected holds the test references currently selected by the user.
+	selected gotest.References
+	// finished indicates whether the user has confirmed their selection.
+	finished bool
+	// cancelled indicates whether the user has cancelled test selection.
 	cancelled bool
 
-	titleStyle       lipgloss.Style
-	cancelledStyle   lipgloss.Style
-	auxStyle         lipgloss.Style
+	// titleStyle is the style used for the main title text.
+	titleStyle lipgloss.Style
+	// cancelledStyle is the style used when displaying cancellation status.
+	cancelledStyle lipgloss.Style
+	// auxStyle is the style used for auxiliary UI elements like stats and ID.
+	auxStyle lipgloss.Style
+	// filterTitleStyle is the style used for the filter indicator.
 	filterTitleStyle lipgloss.Style
 }
 
+// New creates a new selector model with the given configuration.
+// it initializes the list component with custom filtering and key bindings.
 func New(config Config) Model {
 	// zone.NewGlobal()
 
@@ -97,6 +117,8 @@ func New(config Config) Model {
 	}
 }
 
+// Selected returns the test references selected by the user.
+// it returns nil if the selection was cancelled or not yet finished.
 func (m Model) Selected() []gotest.Reference {
 	if !m.finished || m.cancelled {
 		return nil
@@ -105,10 +127,13 @@ func (m Model) Selected() []gotest.Reference {
 	return m.selected
 }
 
+// Init implements tea.Model and returns the initial command for the model.
 func (m Model) Init() tea.Cmd {
 	return nil
 }
 
+// Update handles incoming messages and updates the model state accordingly.
+// it processes window resize events, selection events, and keyboard input.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
@@ -142,6 +167,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// updateList handles list-specific updates and manages filter state transitions.
+// it ensures that reference display format (short/long) is updated appropriately
+// when entering or exiting filter mode.
 func (m *Model) updateList(msg any) tea.Cmd {
 	var cmds []tea.Cmd
 	// get a sense of the current filter state before anything is updated/applied
@@ -192,15 +220,18 @@ func (m *Model) updateList(msg any) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// completed returns true if the selection process has finished or been cancelled.
 func (m Model) completed() bool {
 	return m.finished || m.cancelled
 }
 
+// View renders the complete selector UI.
 func (m Model) View() string {
 	return m.view()
 	// return zone.Scan(m.view())
 }
 
+// view builds the complete UI by joining the top, references, and bottom views.
 func (m Model) view() string {
 	views := []string{
 		m.topView(),
@@ -216,6 +247,8 @@ func (m Model) view() string {
 	)
 }
 
+// joinedView creates a horizontal layout with left and right content justified
+// to the edges of the terminal, with spacing in between.
 func (m Model) joinedView(left, right string) string {
 	leftWidth := lipgloss.Width(left)
 	rightWidth := lipgloss.Width(right)
@@ -231,6 +264,7 @@ func (m Model) joinedView(left, right string) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, spacing, right)
 }
 
+// topView renders the title bar with selection status and filter indicator.
 func (m Model) topView() string {
 	msg := "Search/Select tests to run"
 	st := m.titleStyle
@@ -258,6 +292,7 @@ func (m Model) topView() string {
 	return m.auxStyle.Render(m.config.ID) + " " + title
 }
 
+// bottomView renders the pagination indicator, help text, and config ID.
 func (m Model) bottomView() string {
 	var page string
 	if m.list.Paginator.TotalPages > 1 {
@@ -269,6 +304,7 @@ func (m Model) bottomView() string {
 	)
 }
 
+// statsView renders the selection statistics (e.g., "selected 5 tests").
 func (m Model) statsView() string {
 	tests := 0
 	for _, ref := range m.selected {
@@ -291,6 +327,7 @@ func (m Model) statsView() string {
 	return m.auxStyle.Render(selection)
 }
 
+// refrencesView renders the list of test references.
 func (m Model) refrencesView() string {
 	return m.list.View()
 }

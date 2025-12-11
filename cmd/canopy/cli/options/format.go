@@ -21,14 +21,22 @@ var _ interface {
 	fangs.PostLoader
 } = (*Format)(nil)
 
+// Format configures output formatting options for test results, supporting multiple concurrent output formats.
 type Format struct {
-	Output           string        `yaml:"-" json:"-" mapstructure:"-"`
-	Outputs          []string      `yaml:"output" json:"output" mapstructure:"output"`
-	AllowableFormats []string      `yaml:"-" json:"-" mapstructure:"-"`
-	Aliases          []string      `yaml:"-" json:"-" mapstructure:"-"`
-	Writers          FormatWriters `yaml:"-" json:"-" mapstructure:"-"`
-	FileDisallowed   []string      `yaml:"-" json:"-" mapstructure:"-"`
-	AllowMultiple    bool          `yaml:"-" json:"-" mapstructure:"-"`
+	// Output is a single output format (used when AllowMultiple is false).
+	Output string `yaml:"-" json:"-" mapstructure:"-"`
+	// Outputs is a list of output formats to use (e.g., "go", "json", "jest=results.json").
+	Outputs []string `yaml:"output" json:"output" mapstructure:"output"`
+	// AllowableFormats lists the valid format names that can be specified.
+	AllowableFormats []string `yaml:"-" json:"-" mapstructure:"-"`
+	// Aliases contains alternative names for formats (e.g., "fn" for "function").
+	Aliases []string `yaml:"-" json:"-" mapstructure:"-"`
+	// Writers holds the configured output writers after post-load processing.
+	Writers FormatWriters `yaml:"-" json:"-" mapstructure:"-"`
+	// FileDisallowed lists formats that cannot be written to files (only stdout).
+	FileDisallowed []string `yaml:"-" json:"-" mapstructure:"-"`
+	// AllowMultiple controls whether multiple output formats can be specified simultaneously.
+	AllowMultiple bool `yaml:"-" json:"-" mapstructure:"-"`
 
 	// internal
 
@@ -36,15 +44,18 @@ type Format struct {
 	NamedFlagSet *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
 }
 
+// DefaultTestFormat returns format options configured for test output with the "go" format as default.
+// Jest and dot formats are experimental and added via Experiment options.
 func DefaultTestFormat() Format {
 	return Format{
 		Outputs:          []string{"go"},
 		AllowMultiple:    true,
-		AllowableFormats: []string{"go", "json", "log", "jest", "dot"}, // go++
-		FileDisallowed:   []string{"jest", "dot", "log"},               // TODO: log should not be on this list
+		AllowableFormats: []string{"go", "json", "log"}, // jest and dot are experimental (added via Experiment options)
+		FileDisallowed:   []string{"log"},               // jest and dot added via Experiment options
 	}
 }
 
+// PostLoad validates format specifications and creates output writers (files or stdout) for each format.
 func (o *Format) PostLoad() error {
 	if len(o.Output) > 0 {
 		o.Outputs = append(o.Outputs, o.Output)
@@ -116,6 +127,7 @@ func (o *Format) PostLoad() error {
 	return nil
 }
 
+// AddFlags registers the output format flag with the flag set.
 func (o *Format) AddFlags(flags fangs.FlagSet) {
 	o.NamedFlagSet = xflagset.NewNamed()
 	o.tracker = xflagset.NewDecorator(flags, o.NamedFlagSet.FlagSet("Format"))
@@ -136,16 +148,24 @@ func (o *Format) AddFlags(flags fangs.FlagSet) {
 	}
 }
 
+// FormatWriters is a collection of FormatWriter instances representing all configured output destinations.
 type FormatWriters []FormatWriter
 
+// FormatWriter represents a single output destination for formatted test results.
 type FormatWriter struct {
-	Path      string
-	Writer    io.WriteCloser
-	IsTTY     bool
+	// Path is the file path if writing to a file (empty for stdout).
+	Path string
+	// Writer is the underlying writer for output (file or stdout).
+	Writer io.WriteCloser
+	// IsTTY indicates whether the output destination is a terminal.
+	IsTTY bool
+	// PrimaryUI indicates if this is the main UI output (affects logging behavior).
 	PrimaryUI bool
-	Name      string
+	// Name is the format name (e.g., "go", "json", "jest").
+	Name string
 }
 
+// Close closes the underlying writer, ignoring "already closed" errors.
 func (f FormatWriter) Close() error {
 	if f.Writer != nil {
 		// return error unless it's an "already closed" error
@@ -159,6 +179,7 @@ func (f FormatWriter) Close() error {
 	return nil
 }
 
+// Close closes all writers in the collection, accumulating any errors.
 func (f FormatWriters) Close() error {
 	var errs error
 	for _, w := range f {
@@ -169,6 +190,7 @@ func (f FormatWriters) Close() error {
 	return errs
 }
 
+// isATTY checks if the given file descriptor is a terminal, respecting the NO_TTY environment variable.
 func isATTY(fd int) bool {
 	if val := os.Getenv("NO_TTY"); val != "" {
 		return !isPositive(val)
@@ -176,6 +198,7 @@ func isATTY(fd int) bool {
 	return term.IsTerminal(fd)
 }
 
+// isPositive returns true if the string value represents a truthy value.
 func isPositive(val string) bool {
 	switch strings.ToLower(strings.TrimSpace(val)) {
 	case "true", "yes", "y", "1", "t":

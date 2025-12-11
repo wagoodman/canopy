@@ -15,16 +15,23 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 )
 
-// Definition represents a test function within go source code discovered by crawling the AST.
-// It is primarily useful to discover t.Run cases embedded within test functions (something
-// that is not readily observable from go test commands).
+// Definition represents a test function discovered by parsing Go source code AST.
+// Definitions identify test functions and their embedded t.Run cases, which are not
+// readily observable from `go test` output alone. This enables interactive selection
+// of individual subtests before execution.
 type Definition struct {
-	Module     string
+	// Module is the Go module path containing this test.
+	Module string
+	// ImportPath is the package import path where the test is defined.
 	ImportPath string
-	FnName     string
-	Start      token.Position
-	End        token.Position
-	Cases      []string
+	// FnName is the test function name (e.g., "TestFoo").
+	FnName string
+	// Start is the source position where the test function begins.
+	Start token.Position
+	// End is the source position where the test function ends.
+	End token.Position
+	// Cases contains the names of t.Run subtests discovered within the function.
+	Cases []string
 }
 
 // References converts a test definition into executable test references.
@@ -49,8 +56,10 @@ func (d Definition) References() []Reference {
 	return refs
 }
 
+// Definitions is a collection of test definitions with helper methods.
 type Definitions []Definition
 
+// Module returns the module path from any definition in the collection.
 func (d Definitions) Module() string {
 	for _, def := range d {
 		if def.Module != "" {
@@ -171,7 +180,7 @@ func FindDefinitions(collection *golist.PackageCollection, runsStatements ...str
 	return tests, nil
 }
 
-// findTestsInFile returns a slice of all test functions in the given file AST
+// findTestsInFile returns a slice of all test functions in the given file AST.
 func findTestsInFile(file *ast.File) []*ast.FuncDecl {
 	var tests []*ast.FuncDecl
 	for _, decl := range file.Decls {

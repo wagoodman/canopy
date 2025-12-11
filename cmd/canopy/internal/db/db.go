@@ -1,3 +1,4 @@
+// Package db provides SQLite database persistence for test sessions and results.
 package db
 
 import (
@@ -15,11 +16,14 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// Store provides database operations for test session persistence using SQLite and GORM.
 type Store struct {
 	db *gorm.DB
 }
 
-// New creates a new instance of the store.
+// New creates a new database store instance at the specified file path.
+// It automatically runs schema migrations and configures SQLite performance optimizations.
+// The dbFilePath can be ":memory:" for an in-memory database or a file path for persistent storage.
 func New(dbFilePath string) (*Store, error) {
 	db, err := open(dbFilePath)
 	if err != nil {
@@ -50,6 +54,7 @@ func New(dbFilePath string) (*Store, error) {
 	}, nil
 }
 
+// GetTestSession retrieves a test session by its UUID, preloading all associated test runs.
 func (s Store) GetTestSession(sessionID uuid.UUID) (TestSession, error) {
 	var session TestSession
 	if err := s.db.Preload("TestRuns").Where("uuid = ?", sessionID.String()).First(&session).Error; err != nil {
@@ -58,6 +63,7 @@ func (s Store) GetTestSession(sessionID uuid.UUID) (TestSession, error) {
 	return session, nil
 }
 
+// GetTestSessions retrieves all test sessions from the database, preloading their test runs.
 func (s Store) GetTestSessions() ([]TestSession, error) {
 	var sessions []TestSession
 	if err := s.db.Preload("TestRuns").Find(&sessions).Error; err != nil {
@@ -66,6 +72,7 @@ func (s Store) GetTestSessions() ([]TestSession, error) {
 	return sessions, nil
 }
 
+// StartTestSession creates a new test session with the current timestamp and returns its UUID.
 func (s Store) StartTestSession() (uuid.UUID, error) {
 	session := TestSession{
 		UUID:    uuid.NewString(),
@@ -77,6 +84,7 @@ func (s Store) StartTestSession() (uuid.UUID, error) {
 	return uuid.Parse(session.UUID)
 }
 
+// EndTestSession marks a test session as completed by setting its ended timestamp.
 func (s Store) EndTestSession(sessionID uuid.UUID) error {
 	session, err := s.GetTestSession(sessionID)
 	if err != nil {
@@ -90,6 +98,8 @@ func (s Store) EndTestSession(sessionID uuid.UUID) error {
 	return nil
 }
 
+// StartTestRun creates a new test run within a session with the given configuration.
+// The configuration is JSON-encoded and stored for future reference.
 func (s Store) StartTestRun(sessionID uuid.UUID, cfg gotest.RunnerConfig) (uuid.UUID, error) {
 	session, err := s.GetTestSession(sessionID)
 	if err != nil {
@@ -115,6 +125,7 @@ func (s Store) StartTestRun(sessionID uuid.UUID, cfg gotest.RunnerConfig) (uuid.
 	return uuid.Parse(run.UUID)
 }
 
+// EndTestRun marks a test run as completed, setting its ended timestamp and optional coverage percentage.
 func (s Store) EndTestRun(runID uuid.UUID, coverage *float64) error {
 	run, err := s.GetTestRun(runID)
 	if err != nil {
@@ -129,6 +140,7 @@ func (s Store) EndTestRun(runID uuid.UUID, coverage *float64) error {
 	return nil
 }
 
+// GetTestRun retrieves a test run by its UUID without loading associated events.
 func (s Store) GetTestRun(runID uuid.UUID) (TestRun, error) {
 	var run TestRun
 	if err := s.db.Where("uuid = ?", runID.String()).First(&run).Error; err != nil {
@@ -137,6 +149,7 @@ func (s Store) GetTestRun(runID uuid.UUID) (TestRun, error) {
 	return run, nil
 }
 
+// GetTestEvents retrieves all test events for a run, preloading references and annotations.
 func (s Store) GetTestEvents(runID uuid.UUID) ([]TestEvent, error) {
 	var run TestRun
 	if err := s.db.Preload("Events.Reference").Preload("Events.Annotations").Where("uuid = ?", runID.String()).First(&run).Error; err != nil {
@@ -150,6 +163,8 @@ func (s Store) GetTestEvents(runID uuid.UUID) ([]TestEvent, error) {
 	return *run.Events, nil
 }
 
+// GetSessionTestRuns retrieves all test runs for a session.
+// If infoOnly is true, events and other associations are omitted for faster queries.
 func (s Store) GetSessionTestRuns(sessionID uuid.UUID, infoOnly bool) ([]TestRun, error) {
 	var runs []TestRun
 
@@ -164,6 +179,8 @@ func (s Store) GetSessionTestRuns(sessionID uuid.UUID, infoOnly bool) ([]TestRun
 	return runs, nil
 }
 
+// GetOrCreateReference finds an existing test reference or creates a new one if it doesn't exist.
+// This ensures references are deduplicated across test runs for historical tracking.
 func (s Store) GetOrCreateReference(ref *Reference) error {
 	if err := s.db.Where("package = ? AND function = ? AND t_run_name = ?", ref.Package, ref.FuncName, ref.TRunName).FirstOrCreate(ref).Error; err != nil {
 		return fmt.Errorf("unable to get or create reference: %w", err)
@@ -171,6 +188,8 @@ func (s Store) GetOrCreateReference(ref *Reference) error {
 	return nil
 }
 
+// AddTestEvent creates a new test event record from a gotest.Event.
+// It automatically creates or reuses references and converts annotations.
 func (s Store) AddTestEvent(runID uuid.UUID, event gotest.Event) error {
 	run, err := s.GetTestRun(runID)
 	if err != nil {
@@ -214,7 +233,8 @@ func (s Store) AddTestEvent(runID uuid.UUID, event gotest.Event) error {
 	return nil
 }
 
-// open a new connection to a sqlite3 database file
+// open creates a new connection to a SQLite database file.
+// It creates parent directories if necessary and applies custom logger configuration.
 func open(path string) (*gorm.DB, error) {
 	log.WithFields("path", path).Debug("opening db connection")
 
@@ -239,7 +259,8 @@ func open(path string) (*gorm.DB, error) {
 	return dbObj, nil
 }
 
-// connectionString creates a connection string for sqlite3
+// connectionString creates a SQLite connection string from a file path.
+// It supports ":memory:" for in-memory databases and file paths with shared cache mode.
 func connectionString(path string) (string, error) {
 	if path == ":memory:" {
 		return path, nil

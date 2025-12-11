@@ -1,3 +1,5 @@
+// Package syncspinner provides a synchronized spinner component for Bubble Tea
+// applications, ensuring consistent animation timing across multiple spinner instances.
 package syncspinner
 
 import (
@@ -19,7 +21,7 @@ var (
 	idMtx  sync.Mutex
 )
 
-// Return the next ID we should use on the Model.
+// nextID returns the next unique ID for a spinner model.
 func nextID() int {
 	idMtx.Lock()
 	defer idMtx.Unlock()
@@ -27,7 +29,7 @@ func nextID() int {
 	return lastID
 }
 
-// New returns a model with default values.
+// New creates a spinner model with default values and optional configuration.
 func New(opts ...spinner.Option) Model {
 	m := spinner.Model{
 		Spinner: spinner.MiniDot,
@@ -44,26 +46,37 @@ func New(opts ...spinner.Option) Model {
 	}
 }
 
-// Model contains the state for the spinner. Use New to create new models
-// rather than using Model as a struct literal.
+// Model is a synchronized spinner that uses ID-based message filtering to
+// prevent cross-talk between multiple spinner instances.
 type Model struct {
-	// Spinner settings to use. See type Spinner.
+	// Spinner is the spinner configuration (frames, FPS).
 	Spinner spinner.Spinner
 
-	// Style sets the styling for the spinner. Most of the time you'll just
-	// want foreground and background coloring, and potentially some padding.
+	// Style is the lipgloss style applied to the spinner.
 	Style lipgloss.Style
 
+	// frame is the current animation frame index.
 	frame int
-	tag   int
-	id    int
+
+	// tag is used to filter duplicate messages.
+	tag int
+
+	// id is the unique identifier for this spinner instance.
+	id int
 }
 
-// TickMsg indicates that the timer has ticked and we should render a frame.
+// TickMsg is sent on each animation frame to update the spinner.
 type TickMsg struct {
+	// Time is when the tick occurred.
 	Time time.Time
-	Tag  int
-	ID   int
+
+	// Tag is used to filter stale messages.
+	Tag int
+
+	// ID is the spinner instance ID.
+	ID int
+
+	// View is the current rendered spinner frame.
 	View string
 }
 
@@ -72,7 +85,7 @@ func (m Model) ID() int {
 	return m.id
 }
 
-// Update is the Tea update function.
+// Update processes Bubble Tea messages and advances the spinner animation.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case TickMsg:
@@ -102,7 +115,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	}
 }
 
-// String renders the model's String.
+// String returns the current spinner frame with styling applied.
 func (m Model) String() string {
 	if m.frame >= len(m.Spinner.Frames) {
 		return "(error)"
@@ -111,6 +124,7 @@ func (m Model) String() string {
 	return m.Style.Render(m.Spinner.Frames[m.frame])
 }
 
+// CurrentTick returns a tick message for the current spinner state.
 func (m Model) CurrentTick() TickMsg {
 	return TickMsg{
 		Tag:  m.tag,
@@ -119,14 +133,14 @@ func (m Model) CurrentTick() TickMsg {
 	}
 }
 
-// Tick is the command used to advance the spinner one frame. Use this command
-// to effectively start the spinner.
+// Tick generates an immediate tick message for starting the spinner.
 func (m Model) Tick() tea.Msg {
 	t := m.CurrentTick()
 	t.Time = time.Now()
 	return t
 }
 
+// tick generates a command to advance the spinner after a delay based on FPS.
 func (m Model) tick() tea.Cmd {
 	return tea.Tick(m.Spinner.FPS, func(t time.Time) tea.Msg {
 		s := m.CurrentTick()

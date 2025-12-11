@@ -13,16 +13,21 @@ var (
 	_ fangs.PostLoader = (*Coverage)(nil)
 )
 
+// Coverage configures test coverage analysis options including whether to collect coverage and minimum coverage thresholds.
 type Coverage struct {
+	// Disabled prevents coverage flags from being added to the command.
 	Disabled bool `yaml:"-" json:"-" mapstructure:"-"`
 
-	Cover    bool    `yaml:"cover" json:"cover" mapstructure:"cover"`          // custom flag
+	// Cover enables coverage analysis during test execution.
+	Cover bool `yaml:"cover" json:"cover" mapstructure:"cover"` // custom flag
+	// CoverMin specifies the minimum coverage percentage required (0-100). Setting this also enables coverage.
 	CoverMin float64 `yaml:"covermin" json:"covermin" mapstructure:"covermin"` // custom flag
 
 	tracker      *xflagset.Decorator
 	NamedFlagSet *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
 }
 
+// DefaultCoverage returns coverage options with coverage disabled by default.
 func DefaultCoverage() Coverage {
 	return Coverage{
 		Cover:    false,
@@ -30,6 +35,7 @@ func DefaultCoverage() Coverage {
 	}
 }
 
+// PostLoad validates coverage configuration and auto-enables coverage if a minimum is specified.
 func (o *Coverage) PostLoad() error {
 	if o.Disabled {
 		return nil
@@ -46,6 +52,7 @@ func (o *Coverage) PostLoad() error {
 	return nil
 }
 
+// AddFlags registers coverage-related flags with the flag set.
 func (o *Coverage) AddFlags(fangFlags fangs.FlagSet) {
 	o.NamedFlagSet = xflagset.NewNamed()
 	o.tracker = xflagset.NewDecorator(fangFlags, o.NamedFlagSet.FlagSet("Test"))

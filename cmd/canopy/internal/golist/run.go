@@ -10,8 +10,11 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 )
 
+// processorFn is a callback function that processes the stdout of a `go list` command.
 type processorFn func(output io.ReadCloser) error
 
+// run executes `go list` with the given arguments and packages, streaming output to the processor function.
+// It handles both successful and error exit codes from the go command.
 func run(moreArgs []string, fn processorFn, pkgs ...string) error {
 	args := []string{"list"}
 	args = append(args, moreArgs...)

@@ -17,6 +17,7 @@ import (
 	"github.com/anchore/clio"
 )
 
+// NewTestGoUI creates a new UI for displaying results in a similar format to the default go test output.
 func NewTestGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
 	if cfg.IsTTY && cfg.Writer == nil {
 		return newDynamicGoUI(cfg, maxPkgNameLength)

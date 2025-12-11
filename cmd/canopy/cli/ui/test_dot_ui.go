@@ -13,6 +13,8 @@ import (
 	"github.com/anchore/clio"
 )
 
+// NewTestDotUI creates a new UI for displaying test results in a dot-style format.
+// Today this is experimental thus requires opting into via configuration.
 func NewTestDotUI(config TestUIConfig) clio.UI {
 	rowCfg := dottestrow.Config{
 		Color:                  config.Color,

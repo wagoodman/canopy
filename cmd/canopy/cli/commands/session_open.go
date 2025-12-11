@@ -20,6 +20,8 @@ import (
 //	SessionID      string `yaml:"session-id" json:"session-id" mapstructure:"session-id"`
 //}
 
+// SessionOpen creates a command to open an interactive UI session from previously stored test results.
+// If no session ID is provided, the most recent session is opened.
 func SessionOpen(app clio.Application) *cobra.Command {
 	storeCfg := options.DefaultStore()
 	storeCfg.Enabled = true
@@ -51,6 +53,7 @@ func runSessionOpen(ux *ui.StudioUI) error {
 	return nil
 }
 
+// setupSessionOpen loads the most recent test session and initializes the Studio UI for interactive browsing.
 func setupSessionOpen(app clio.Application, storeConfig options.Store) (*ui.StudioUI, error) {
 	// get the session
 	s, err := test.NewManager(

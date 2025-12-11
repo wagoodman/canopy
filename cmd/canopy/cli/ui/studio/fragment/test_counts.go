@@ -7,14 +7,25 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// TestCounts renders test pass/fail/skip counts with appropriate styling.
 type TestCounts struct {
-	FailedCountStyle  lipgloss.Style
-	PassedCountStyle  lipgloss.Style
+	// FailedCountStyle is applied to the failed test count.
+	FailedCountStyle lipgloss.Style
+
+	// PassedCountStyle is applied to the passed test count.
+	PassedCountStyle lipgloss.Style
+
+	// SkippedCountStyle is applied to the skipped test count.
 	SkippedCountStyle lipgloss.Style
-	DefaultStyle      lipgloss.Style
-	AuxStyle          lipgloss.Style
+
+	// DefaultStyle is used for counts when not highlighted.
+	DefaultStyle lipgloss.Style
+
+	// AuxStyle is used for separators and auxiliary text.
+	AuxStyle lipgloss.Style
 }
 
+// NewTestCounts creates a TestCounts with default color styling.
 func NewTestCounts() TestCounts {
 	return TestCounts{
 		FailedCountStyle:  lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
@@ -25,6 +36,9 @@ func NewTestCounts() TestCounts {
 	}
 }
 
+// View renders test counts in the format "X passed / Y failed / Z skipped".
+// Failed tests are shown first if present. Passed tests use default styling
+// when failures exist, otherwise use the passed style.
 func (tc TestCounts) View(passed, failed, skipped int) string {
 	var sections []string
 
@@ -56,6 +70,8 @@ func (tc TestCounts) View(passed, failed, skipped int) string {
 	return strings.Join(sections, "")
 }
 
+// insertBetween inserts str between each element of slice. Returns a new slice
+// with interleaved values.
 func insertBetween(slice []string, str string) []string {
 	if len(slice) == 0 {
 		return slice

@@ -22,34 +22,68 @@ import (
 	"github.com/wagoodman/go-partybus"
 )
 
+// Config holds configuration options for the studio UI.
 type Config struct {
-	ID              string
-	RunController   state.RunController
-	RunStore        state.RunStore
-	SessionInfo     test.SessionInfo
-	Debug           bool
+	// ID is the unique identifier for this studio session.
+	ID string
+
+	// RunController manages the execution of test runs.
+	RunController state.RunController
+
+	// RunStore provides access to historical test run data.
+	RunStore state.RunStore
+
+	// SessionInfo contains metadata about the current test session.
+	SessionInfo test.SessionInfo
+
+	// Debug enables debug mode with additional logging output.
+	Debug bool
+
+	// FailedTestsOnly when true shows only failed tests in the references pane.
 	FailedTestsOnly bool
 
-	// hidden options
+	// showVerticalBorder controls whether to show a vertical border between panes.
 	showVerticalBorder bool
 }
 
+// setHiddenDefaults applies default values to unexported configuration fields.
 func setHiddenDefaults(cfg *Config) {
 	cfg.showVerticalBorder = false
 }
 
+// Model is the main Bubble Tea model for the studio UI, coordinating the
+// references pane, output pane, help system, and test execution controls.
 type Model struct {
-	config                    Config
-	controller                *controller
-	running                   *sync.WaitGroup
-	help                      xhelp.Model
-	state                     state.RunViewer
-	selection                 model.Dispatch
+	// config holds the studio configuration.
+	config Config
+
+	// controller manages test execution and re-running.
+	controller *controller
+
+	// running is a WaitGroup that tracks if the UI is still active.
+	running *sync.WaitGroup
+
+	// help provides the help/keybinding display system.
+	help xhelp.Model
+
+	// state is the current test run being viewed.
+	state state.RunViewer
+
+	// selection manages the dispatch of events to active UI panes.
+	selection model.Dispatch
+
+	// alphaNumericInputDisabled indicates whether alphanumeric input should be
+	// blocked (e.g., during filtering operations).
 	alphaNumericInputDisabled bool
-	lastWindowSize            tea.WindowSizeMsg
+
+	// lastWindowSize stores the most recent terminal dimensions.
+	lastWindowSize tea.WindowSizeMsg
+
 	*keyMap
 }
 
+// New creates a new studio Model with the given configuration. The WaitGroup
+// is used to signal when the UI has shut down.
 func New(config Config, wg *sync.WaitGroup) Model {
 	zone.NewGlobal()
 
@@ -103,10 +137,14 @@ func New(config Config, wg *sync.WaitGroup) Model {
 	return m
 }
 
+// Init implements tea.Model, returning the initial command to load the latest
+// stored test run.
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(m.selection.Init(), m.controller.switchToLatestStoredTestRun(m.config))
 }
 
+// Update implements tea.Model, handling all UI events including window resizing,
+// test run switches, selection changes, and keybindings.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// if x, ok := msg.(partybus.Event); ok {
 	//	eventStr := fmt.Sprintf("%#v", x)
@@ -184,6 +222,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// respondToGlobalKeybindings processes global keyboard shortcuts for help,
+// quitting, and test re-running. Returns a command if an action was triggered.
 func (m *Model) respondToGlobalKeybindings(msg tea.Msg) tea.Cmd {
 	// respond to global keybindings...
 	switch x := msg.(type) {
@@ -220,6 +260,8 @@ func (m *Model) respondToGlobalKeybindings(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
+// onReRunTests initiates a test re-run. If all is true, all tests are re-run;
+// otherwise only the current selection is re-run.
 func (m Model) onReRunTests(all bool) tea.Cmd {
 	cmd := m.controller.startTestReRun(context.TODO(), all) // TODO: can we even use context in a valid capacity here?
 	if cmd != nil {
@@ -229,15 +271,20 @@ func (m Model) onReRunTests(all bool) tea.Cmd {
 	return cmd
 }
 
+// onRunTestsCompletion re-enables the test re-run keybindings after a test
+// run completes.
 func (m Model) onRunTestsCompletion() {
 	m.ReRunTestSelection.SetEnabled(true)
 	m.ReRunAllTests.SetEnabled(true)
 }
 
+// Wait blocks until the studio UI has been shut down.
 func (m Model) Wait() {
 	m.running.Wait()
 }
 
+// dispatchView renders the main content area by joining the references pane
+// and output pane horizontally.
 func (m Model) dispatchView(dispatch model.Dispatch) string {
 	refPaneView := dispatch.Get(referencespane.Name).View()
 	if m.config.showVerticalBorder {
@@ -262,6 +309,8 @@ func (m Model) dispatchView(dispatch model.Dispatch) string {
 	)
 }
 
+// View implements tea.Model, rendering the complete studio UI including panes,
+// borders, debug output (if enabled), and help text.
 func (m Model) View() string {
 	var rows []string
 

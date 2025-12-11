@@ -11,14 +11,18 @@ import (
 
 var _ Presenter = (*ReportEvent)(nil)
 
+// ReportEvent presents CLI report events to stdout, trimming trailing whitespace.
 type ReportEvent struct {
+	// event is the report event to present.
 	event partybus.Event
 }
 
+// NewReportEvent creates a presenter for CLI report events.
 func NewReportEvent(e partybus.Event) Presenter {
 	return ReportEvent{event: e}
 }
 
+// Present writes the report text to stdout with trailing whitespace removed.
 func (p ReportEvent) Present(stdout, _ io.Writer) error {
 	_, report, err := parser.ParseCLIReport(p.event)
 	if err != nil {

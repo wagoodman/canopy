@@ -6,12 +6,11 @@ import (
 	"strings"
 )
 
-// copied from the go source repo:
-// https://github.com/golang/go/blob/3367475e83eeccd79a5c73c2cc2e91e85e482295/src/testing/match.go
-
-// matcher sanitizes, uniques, and filters names of subtests and subbenchmarks.
+// matcher sanitizes, deduplicates, and numbers subtest names following Go's testing framework behavior.
+// This implementation is copied from the Go source repository to ensure test name handling
+// matches exactly what Go's testing package does internally.
+// See: https://github.com/golang/go/blob/3367475e83eeccd79a5c73c2cc2e91e85e482295/src/testing/match.go
 type matcher struct {
-
 	// subNames is used to deduplicate subtest names.
 	// Each key is the subtest name joined to the deduplicated name of the parent test.
 	// Each value is the count of the number of occurrences of the given subtest name
@@ -25,8 +24,9 @@ func newMatcher() *matcher {
 	}
 }
 
-// unique creates a unique name for the given parent and subname by affixing it
-// with one or more counts, if necessary.
+// unique creates a unique name for the given subtest by affixing it with one or more counts
+// if necessary. This ensures each subtest invocation has a distinct identifier even when
+// t.Run is called multiple times with the same name.
 func (m *matcher) unique(subname string) string {
 	base := subname
 
@@ -60,8 +60,9 @@ func (m *matcher) unique(subname string) string {
 	}
 }
 
-// parseSubtestNumber splits a subtest name into a "#%02d"-formatted int32
-// suffix (if present), and a prefix preceding that suffix (always).
+// parseSubtestNumber splits a subtest name into a "#%02d"-formatted int32 suffix (if present)
+// and a prefix preceding that suffix (always). Returns the original string and 0 if no
+// valid numbered suffix is found.
 func parseSubtestNumber(s string) (prefix string, nn int64) {
 	i := strings.LastIndex(s, "#")
 	if i < 0 {

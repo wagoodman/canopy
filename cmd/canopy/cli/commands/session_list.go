@@ -17,9 +17,12 @@ import (
 type sessionListConfig struct {
 	options.Config `yaml:",inline" mapstructure:",squash"`
 	options.Store  `yaml:"store" json:"store" mapstructure:"store"`
-	SessionID      string `yaml:"session-id" json:"session-id" mapstructure:"session-id"`
+	// SessionID specifies which session to list runs for (if empty, lists all sessions).
+	SessionID string `yaml:"session-id" json:"session-id" mapstructure:"session-id"`
 }
 
+// SessionList creates a command to display all test sessions and their associated run information.
+// Sessions are shown with their UUID, start time, duration, and number of test runs.
 func SessionList(app clio.Application) *cobra.Command {
 	store := options.DefaultStore()
 	store.Enabled = true
@@ -86,6 +89,7 @@ func runSessionList(cfg sessionListConfig) error {
 	return nil
 }
 
+// fmtTime formats a time pointer as a string in "YYYY-MM-DD HH:MM:SS" format.
 func fmtTime(t *time.Time) string {
 	if t == nil {
 		return ""
@@ -93,6 +97,7 @@ func fmtTime(t *time.Time) string {
 	return t.Format("2006-01-02 15:04:05")
 }
 
+// fmtElapsed calculates and formats the duration between a start time and optional end time.
 func fmtElapsed(started time.Time, ended *time.Time) string {
 	if ended == nil {
 		return ""

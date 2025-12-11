@@ -2,23 +2,52 @@ package style
 
 import "github.com/charmbracelet/lipgloss"
 
+// Go holds styling configuration for Go test output formatting.
 type Go struct {
-	Bold         lipgloss.Style
-	Success      lipgloss.Style
-	Failed       lipgloss.Style
-	Running      lipgloss.Style
-	Skipped      lipgloss.Style
-	Aux          lipgloss.Style
-	Info         lipgloss.Style
-	Waiting      lipgloss.Style
-	PanicGroup   lipgloss.Style
-	PanicTitle   lipgloss.Style
-	PanicFunc    lipgloss.Style
+	// Bold is the style for bold text.
+	Bold lipgloss.Style
+
+	// Success is the style for successful test output.
+	Success lipgloss.Style
+
+	// Failed is the style for failed test output.
+	Failed lipgloss.Style
+
+	// Running is the style for currently running tests.
+	Running lipgloss.Style
+
+	// Skipped is the style for skipped tests.
+	Skipped lipgloss.Style
+
+	// Aux is the style for auxiliary information (timestamps, metadata).
+	Aux lipgloss.Style
+
+	// Info is the style for informational messages.
+	Info lipgloss.Style
+
+	// Waiting is the style for waiting/pending states.
+	Waiting lipgloss.Style
+
+	// PanicGroup is the style for panic output grouping markers.
+	PanicGroup lipgloss.Style
+
+	// PanicTitle is the style for panic titles/headers.
+	PanicTitle lipgloss.Style
+
+	// PanicFunc is the style for function names in panic output.
+	PanicFunc lipgloss.Style
+
+	// PanicFuncAux is the style for auxiliary function information in panics.
 	PanicFuncAux lipgloss.Style
-	PanicFile    lipgloss.Style
+
+	// PanicFile is the style for file names in panic output.
+	PanicFile lipgloss.Style
+
+	// PanicFileAux is the style for auxiliary file information in panics.
 	PanicFileAux lipgloss.Style
 }
 
+// NewGo creates a new Go style configuration with optional color support.
 func NewGo(color bool) Go {
 	if color {
 		return Go{
