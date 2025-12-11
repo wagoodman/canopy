@@ -16,10 +16,7 @@ import (
 	"github.com/anchore/fangs"
 )
 
-var (
-	_ fangs.FlagAdder  = (*formatCoreConfig)(nil)
-	_ fangs.PostLoader = (*formatCoreConfig)(nil)
-)
+var _ fangs.FlagAdder = (*formatCoreConfig)(nil)
 
 // canopy show FILE                          Read go test json output from a file and reformat as go-std to stdout
 // go test -json | canopy show -o jest       Get test output from stdin and reformat as jest to stdout
@@ -33,20 +30,26 @@ var (
 // ... alternative name: view
 // show vs view vs open... we're getting a little too close to each other
 
+// formatCoreConfig holds all configuration options for the format command, including where to read test output
+// and how to display it.
 type formatCoreConfig struct {
-	options.Config `yaml:",inline" mapstructure:",squash"`
-	options.Store  `yaml:"store" json:"store" mapstructure:"store"`
+	options.Config     `yaml:",inline" mapstructure:",squash"`
+	options.Experiment `yaml:"exp" json:"exp" mapstructure:"exp"`
+	options.Store      `yaml:"store" json:"store" mapstructure:"store"`
 
 	Test showTestConfig `yaml:"test" json:"test" mapstructure:"test"`
 	Show formatConfig   `yaml:"show" json:"show" mapstructure:"show"`
 }
 
+// formatConfig specifies the source file for test output (file path or "-" for stdin).
 type formatConfig struct {
+	// File specifies the path to read test JSON output from, or "-" for stdin.
 	File string `yaml:"file" json:"file" mapstructure:"file"`
 
 	reader io.ReadCloser
 }
 
+// PostLoad opens the file or stdin for reading test JSON output based on the File field.
 func (o *formatConfig) PostLoad() error {
 	switch o.File {
 	case "-":
@@ -67,6 +70,8 @@ func (o *formatConfig) PostLoad() error {
 }
 
 // TODO: make this a shared struct between test and show commands... this is brittle when using with the config command
+
+// showTestConfig contains formatting and display options for reformatting test output.
 type showTestConfig struct {
 	options.Format     `yaml:",inline" json:"" mapstructure:",squash"`
 	options.Open       `yaml:",inline" json:"" mapstructure:",squash"`
@@ -76,13 +81,16 @@ type showTestConfig struct {
 
 func defaultShowOptions() *formatCoreConfig {
 	return &formatCoreConfig{
-		Store: options.DefaultStore(),
+		Experiment: options.DefaultExperiment(),
+		Store:      options.DefaultStore(),
 		Test: showTestConfig{
 			Format: options.DefaultTestFormat(),
 		},
 	}
 }
 
+// Format creates a command to reformat previously generated `go test -json` output using different output formats.
+// It accepts input from a file or stdin and can optionally store results in a database session.
 func Format(app clio.Application) *cobra.Command {
 	opts := defaultShowOptions()
 
