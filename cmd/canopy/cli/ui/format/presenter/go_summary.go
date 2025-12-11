@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/scylladb/go-set/strset"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
@@ -36,6 +37,9 @@ type GoSummaryConfig struct {
 
 	// RunningState is a short string indicating a spinner if running, or the conclusion state if not running
 	RunningState string
+
+	// Window is the current terminal window size, used to determine how much space is available for rendering
+	Window tea.WindowSizeMsg
 
 	// DurationFromEvents controls whether the timer should be driven by event timestamps or by the wall clock
 	DurationFromEvents bool
@@ -152,7 +156,6 @@ func (c GoSummaryConfig) New(runs ...gotest.Run) Presenter {
 	return GoTestResultSummary{
 		config:  c,
 		style:   style.NewGo(c.Color),
-		runs:    runs,
 		results: newJoinedResults(runs...),
 	}
 }
@@ -160,7 +163,6 @@ func (c GoSummaryConfig) New(runs ...gotest.Run) Presenter {
 type GoTestResultSummary struct {
 	config  GoSummaryConfig
 	style   style.Go
-	runs    []gotest.Run
 	results result
 }
 
@@ -442,6 +444,7 @@ func (s GoTestResultSummary) renderStats(stats gotest.ResultStats, asAux bool) s
 	switch {
 	case total == 0:
 		tests = append(tests, s.style.Waiting.Render("(waiting for tests results)"))
+		// tests = append(tests, s.style.Waiting.Render("∅"))
 		testCountSuffix = ""
 	case s.config.ShowTotalTestCount && total != stats.Passed:
 		totalStr := fmt.Sprintf("%d total", stats.Total())

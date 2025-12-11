@@ -125,6 +125,7 @@ func (m *Model) updateRunResult(testEvent gotest.Event) {
 func (m Model) View() string {
 	sb := strings.Builder{}
 	m.config.RunningState = m.common.Spinner.View
+	m.config.Window = m.common.Window
 	err := m.config.New(m.runs...).Present(&sb, &sb)
 	if err != nil {
 		// TODO

@@ -132,7 +132,7 @@ func defaultTestOptions(opts ...func(*TestCoreConfig)) *TestCoreConfig {
 	return t
 }
 
-func Test(app clio.Application) *cobra.Command {
+func Test(app clio.Application) *cobra.Command { //nolint:funlen
 	opts := defaultTestOptions()
 
 	var logTestFailuresAsErrors bool

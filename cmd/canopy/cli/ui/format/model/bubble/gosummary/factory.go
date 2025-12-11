@@ -9,9 +9,15 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
+
+	"github.com/anchore/bubbly"
 )
 
-var _ tea.Model = (*Model)(nil)
+var (
+	_ tea.Model              = (*Model)(nil)
+	_ partybus.Responder     = (*Factory)(nil)
+	_ bubbly.MessageListener = (*Factory)(nil)
+)
 
 type Factory struct {
 	config presenter.GoSummaryConfig
@@ -29,6 +35,10 @@ func NewFactory(cfg presenter.GoSummaryConfig, common state.Common) *Factory {
 
 func (f Factory) RespondsTo() []partybus.EventType {
 	return []partybus.EventType{event.GoTestType, event.GoTestRunType, event.GoTestRunRequestType}
+}
+
+func (f *Factory) OnMessage(msg tea.Msg) {
+	f.common.OnMessage(msg)
 }
 
 func (f Factory) Handle(e partybus.Event) ([]tea.Model, tea.Cmd) {
