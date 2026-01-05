@@ -85,7 +85,7 @@ type UI struct {
 type TeaUIConfig struct {
 	handler       *bubbly.HandlerCollection
 	footerHandler *bubbly.HandlerCollection
-	simpleUI      *simpleUI
+	coreUI        *coreUI
 	printReaders  []io.Reader
 	spinner       *syncspinner.Model
 
@@ -94,16 +94,16 @@ type TeaUIConfig struct {
 
 func NewTeaUIConfig(handlers ...bubbly.EventHandler) *TeaUIConfig {
 	fc := &TeaUIConfig{
-		handler:  bubbly.NewHandlerCollection(handlers...),
-		simpleUI: nil,
-		frame:    newFrameWithFooter(),
+		handler: bubbly.NewHandlerCollection(handlers...),
+		coreUI:  nil,
+		frame:   newFrameWithFooter(),
 	}
 
 	return fc
 }
 
-func (c *TeaUIConfig) WithSimpleUI(u *simpleUI) *TeaUIConfig {
-	c.simpleUI = u
+func (c *TeaUIConfig) WithCoreUI(u *coreUI) *TeaUIConfig {
+	c.coreUI = u
 	return c
 }
 
@@ -167,7 +167,7 @@ func (m *UI) Setup(subscription partybus.Unsubscribable) error {
 		}(m.config.printReaders[i])
 	}
 
-	return m.config.simpleUI.Setup(subscription)
+	return m.config.coreUI.Setup(subscription)
 }
 
 // expandTabs replaces tab characters in a string with spaces, expanding each tab to a fixed width. Tabs in the terminal
@@ -267,7 +267,7 @@ func (m *UI) Handle(e partybus.Event) error {
 	if m.program != nil {
 		m.program.Send(e)
 	}
-	return m.config.simpleUI.Handle(e)
+	return m.config.coreUI.Handle(e)
 }
 
 func (m *UI) Teardown(force bool) error {
@@ -280,7 +280,7 @@ func (m *UI) Teardown(force bool) error {
 	m.teardownCalled = true
 
 	// we need to make certain that any writers are closed before attempting to wait for them to complete
-	err := m.config.simpleUI.Teardown(force)
+	err := m.config.coreUI.Teardown(force)
 
 	if !force {
 		// just wow... tea commands are racy

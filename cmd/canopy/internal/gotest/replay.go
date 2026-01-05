@@ -66,6 +66,7 @@ func StartReplayRun(reader io.Reader, runnerCfg RunnerConfig, resultCfg ResultCo
 		defer close(evs)
 
 		for e := range ReplayEvents(reader, runnerCfg.Packages) {
+			e.RunID = run.ID // assign the run ID to the event (ReplayEvents is stateless and uses uuid.Nil)
 			run.Result.Update(e)
 			evs <- &e
 		}

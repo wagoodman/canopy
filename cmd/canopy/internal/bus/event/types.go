@@ -24,6 +24,9 @@ const (
 	// Value: gotest.Run
 	GoTestRunType partybus.EventType = prefix + "go-test-run-event"
 
+	// PrintType is published for general print output messages.
+	PrintType partybus.EventType = prefix + "print"
+
 	// CLIReport is published for longer-form CLI output messages.
 	// Value: string, Source: string (optional context)
 	CLIReport partybus.EventType = cliTypePrefix + "report"

@@ -1,3 +1,6 @@
+// Package parser provides utilities for extracting typed payloads from
+// partybus events. It includes error handling for malformed event data
+// and convenience functions for common event parsing patterns.
 package parser
 
 import (
@@ -129,4 +132,17 @@ func ParseGoTestRunRequestType(e partybus.Event) (*gotest.RunnerConfig, *uuid.UU
 	}
 
 	return &obj, &id, nil
+}
+
+func ParsePrintType(e partybus.Event) (string, error) {
+	if err := checkEventType(e.Type, event.PrintType); err != nil {
+		return "", err
+	}
+
+	msg, ok := e.Value.(string)
+	if !ok {
+		return "", newPayloadErr(e.Type, "Value", e.Value)
+	}
+
+	return msg, nil
 }

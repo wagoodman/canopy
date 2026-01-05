@@ -1,0 +1,12 @@
+{"Time":"2026-01-02T10:13:49.531012-05:00","Action":"start","Package":"github.com/wagoodman/canopy/internal/test-fixtures/simple"}
+{"Time":"2026-01-02T10:13:49.931339-05:00","Action":"run","Package":"github.com/wagoodman/canopy/internal/test-fixtures/simple","Test":"TestFail"}
+{"Time":"2026-01-02T10:13:49.93158-05:00","Action":"output","Package":"github.com/wagoodman/canopy/internal/test-fixtures/simple","Test":"TestFail","Output":"=== RUN   TestFail\n"}
+{"Time":"2026-01-02T10:13:49.931638-05:00","Action":"output","Package":"github.com/wagoodman/canopy/internal/test-fixtures/simple","Test":"TestFail","Output":"--- FAIL: TestFail (0.00s)\n"}
+{"Time":"2026-01-02T10:13:49.931653-05:00","Action":"fail","Package":"github.com/wagoodman/canopy/internal/test-fixtures/simple","Test":"TestFail","Elapsed":0}
+{"Time":"2026-01-02T10:13:49.931668-05:00","Action":"run","Package":"github.com/wagoodman/canopy/internal/test-fixtures/simple","Test":"TestPass"}
+{"Time":"2026-01-02T10:13:49.931678-05:00","Action":"output","Package":"github.com/wagoodman/canopy/internal/test-fixtures/simple","Test":"TestPass","Output":"=== RUN   TestPass\n"}
+{"Time":"2026-01-02T10:13:49.93169-05:00","Action":"output","Package":"github.com/wagoodman/canopy/internal/test-fixtures/simple","Test":"TestPass","Output":"--- PASS: TestPass (0.00s)\n"}
+{"Time":"2026-01-02T10:13:49.931702-05:00","Action":"pass","Package":"github.com/wagoodman/canopy/internal/test-fixtures/simple","Test":"TestPass","Elapsed":0}
+{"Time":"2026-01-02T10:13:49.931713-05:00","Action":"output","Package":"github.com/wagoodman/canopy/internal/test-fixtures/simple","Output":"FAIL\n"}
+{"Time":"2026-01-02T10:13:49.932339-05:00","Action":"output","Package":"github.com/wagoodman/canopy/internal/test-fixtures/simple","Output":"FAIL\tgithub.com/wagoodman/canopy/internal/test-fixtures/simple\t0.401s\n"}
+{"Time":"2026-01-02T10:13:49.932401-05:00","Action":"fail","Package":"github.com/wagoodman/canopy/internal/test-fixtures/simple","Elapsed":0.401}

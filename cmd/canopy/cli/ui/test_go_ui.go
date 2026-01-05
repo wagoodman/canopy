@@ -55,7 +55,7 @@ func newDynamicGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
 		h = gostd.NewQuietHandler(reportWriter, handlerPkgConfig)
 	}
 
-	ux := newSimpleUI().
+	ux := newCoreUI().
 		withNotifications().
 		withReports().
 		withHandlers(h).
@@ -75,7 +75,7 @@ func newDynamicGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
 	)
 
 	c := NewTeaUIConfig().
-		WithSimpleUI(ux).
+		WithCoreUI(ux).
 		WithSyncSpinner(spin).
 		WithPrintReader(reportReader, notificationReader).
 		WithFooter(summaryHandler)
@@ -117,25 +117,27 @@ func newSafeGoUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 		)
 	}
 
-	ux := newSimpleUI().
+	ux := newCoreUI().
 		withNotifications().
 		withReports().
 		withHandlers(h).
 		withStdout(reportWriter).
 		withStderr(notificationWriter).
 		withHandledPresenters(
-			adapter.NewTestRun(presenter.GoSummaryConfig{
-				WriteToStderr:    writeToStderr,
-				PackageNameWidth: maxPkgName,
-				Color:            cfg.Color,
-				// we're running with a true wall clock, so we want to use that. Otherwise you'll see the timers jitter,
-				// only updating when there is a test event that arrives.
-				DurationFromEvents:               false,
-				ShowElapsedForRunningPackages:    true,
-				ShowSummaryForUnrenderedPackages: true,
-				ShowRunningTests:                 false, // it's safer to not thrash the number of lines we're writing to the terminal
-				CombineMultipleRuns:              cfg.CombineMultipleRuns,
-			}.New),
+			adapter.NewTestRun(
+				presenter.GoSummaryConfig{
+					WriteToStderr:    writeToStderr,
+					PackageNameWidth: maxPkgName,
+					Color:            cfg.Color,
+					// we're running with a true wall clock, so we want to use that. Otherwise you'll see the timers jitter,
+					// only updating when there is a test event that arrives.
+					DurationFromEvents:               false,
+					ShowElapsedForRunningPackages:    true,
+					ShowSummaryForUnrenderedPackages: true,
+					ShowRunningTests:                 false, // it's safer to not thrash the number of lines we're writing to the terminal
+					CombineMultipleRuns:              cfg.CombineMultipleRuns,
+				}.New,
+			),
 		)
 
 	return ux

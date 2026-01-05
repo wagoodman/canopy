@@ -15,9 +15,9 @@ import (
 	"github.com/anchore/clio"
 )
 
-var _ clio.UI = (*simpleUI)(nil)
+var _ clio.UI = (*coreUI)(nil)
 
-type simpleUI struct {
+type coreUI struct {
 	presenters     []presenter.Presenter
 	handlers       []partybus.Handler
 	stdout         io.WriteCloser
@@ -25,29 +25,34 @@ type simpleUI struct {
 	teardownCalled bool
 }
 
-func newSimpleUI() *simpleUI {
-	return &simpleUI{}
+func newCoreUI() *coreUI {
+	// we always respond to simple print events by default (for debugging and such)
+	return (&coreUI{}).withPrintEvents()
 }
 
-func (n *simpleUI) withNotifications() *simpleUI {
+func (n *coreUI) withNotifications() *coreUI {
 	return n.withHandledPresenters(adapter.NewAllEvents(event.CLINotification, presenter.NewNotificationEvent))
 }
 
-func (n *simpleUI) withReports() *simpleUI {
+func (n *coreUI) withReports() *coreUI {
 	return n.withHandledPresenters(adapter.NewAllEvents(event.CLIReport, presenter.NewReportEvent))
 }
 
-func (n *simpleUI) withStdout(writer io.WriteCloser) *simpleUI {
+func (n *coreUI) withPrintEvents() *coreUI {
+	return n.withHandledPresenters(adapter.NewAllEvents(event.PrintType, presenter.NewPrintEvent))
+}
+
+func (n *coreUI) withStdout(writer io.WriteCloser) *coreUI {
 	n.stdout = writer
 	return n
 }
 
-func (n *simpleUI) withStderr(writer io.WriteCloser) *simpleUI {
+func (n *coreUI) withStderr(writer io.WriteCloser) *coreUI {
 	n.stderr = writer
 	return n
 }
 
-func (n *simpleUI) withHandledPresenters(adapters ...adapter.HandledPresenter) *simpleUI {
+func (n *coreUI) withHandledPresenters(adapters ...adapter.HandledPresenter) *coreUI {
 	for _, a := range adapters {
 		n.handlers = append(n.handlers, a)
 		n.presenters = append(n.presenters, a)
@@ -55,12 +60,12 @@ func (n *simpleUI) withHandledPresenters(adapters ...adapter.HandledPresenter) *
 	return n
 }
 
-func (n *simpleUI) withHandlers(handlers ...partybus.Handler) *simpleUI {
+func (n *coreUI) withHandlers(handlers ...partybus.Handler) *coreUI {
 	n.handlers = append(n.handlers, handlers...)
 	return n
 }
 
-// func (n *simpleUI) withPresenters(presenters ...presenter.Presenter) *simpleUI {
+// func (n *coreUI) withPresenters(presenters ...presenter.Presenter) *coreUI {
 //	n.presenters = append(n.presenters, presenters...)
 //	return n
 //}
@@ -82,7 +87,7 @@ func newNopWriteCloser(writer io.Writer) io.WriteCloser {
 	}
 }
 
-func (n *simpleUI) Setup(_ partybus.Unsubscribable) error {
+func (n *coreUI) Setup(_ partybus.Unsubscribable) error {
 	if n.stdout == nil {
 		n.stdout = newNopWriteCloser(os.Stdout)
 	}
@@ -93,7 +98,7 @@ func (n *simpleUI) Setup(_ partybus.Unsubscribable) error {
 	return nil
 }
 
-func (n *simpleUI) Handle(e partybus.Event) error {
+func (n *coreUI) Handle(e partybus.Event) error {
 	// if n.teardownCalled {
 	//	return nil
 	//}
@@ -106,7 +111,7 @@ func (n *simpleUI) Handle(e partybus.Event) error {
 	return errs
 }
 
-func (n *simpleUI) Teardown(_ bool) error {
+func (n *coreUI) Teardown(_ bool) error {
 	var errs error
 	if n.teardownCalled {
 		return nil

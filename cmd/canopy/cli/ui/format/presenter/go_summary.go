@@ -443,7 +443,7 @@ func (s GoTestResultSummary) renderStats(stats gotest.ResultStats, asAux bool) s
 	}
 	switch {
 	case total == 0:
-		tests = append(tests, s.style.Waiting.Render("(waiting for tests results)"))
+		tests = append(tests, s.style.Waiting.Render("(waiting for test results)"))
 		// tests = append(tests, s.style.Waiting.Render("∅"))
 		testCountSuffix = ""
 	case s.config.ShowTotalTestCount && total != stats.Passed:

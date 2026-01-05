@@ -55,7 +55,7 @@ func newVerboseDynamicGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 		},
 	)
 
-	ux := newSimpleUI().
+	ux := newCoreUI().
 		withNotifications().
 		withReports().
 		withHandlers(handler).
@@ -72,7 +72,7 @@ func newVerboseDynamicGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 	)
 
 	c := NewTeaUIConfig().
-		WithSimpleUI(ux).
+		WithCoreUI(ux).
 		WithSyncSpinner(spin).
 		WithPrintReader(reportReader, notificationReader).
 		WithFooter(summaryHandler)
@@ -143,7 +143,7 @@ func newDefaultDynamicGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 	)
 
 	c := NewTeaUIConfig(bodyHandler).
-		WithSimpleUI(newSimpleUI().
+		WithCoreUI(newCoreUI().
 			withNotifications().
 			withReports(),
 		).
@@ -189,7 +189,7 @@ func newSafeGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 		)
 	}
 
-	ux := newSimpleUI().
+	ux := newCoreUI().
 		withNotifications().
 		withReports().
 		withHandlers(handler).

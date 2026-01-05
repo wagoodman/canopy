@@ -17,7 +17,7 @@ func NewTestJSONUI(cfg TestUIConfig) clio.UI {
 		reportWriter = os.Stdout
 	}
 
-	ux := newSimpleUI().
+	ux := newCoreUI().
 		withNotifications().
 		withReports().
 		withHandlers(json.NewHandler(reportWriter)).

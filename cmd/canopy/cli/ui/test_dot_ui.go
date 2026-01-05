@@ -52,7 +52,7 @@ func NewTestDotUI(config TestUIConfig) clio.UI {
 	)
 
 	c := NewTeaUIConfig(bodyHandler).
-		WithSimpleUI(newSimpleUI().
+		WithCoreUI(newCoreUI().
 			withNotifications().
 			withReports(),
 		).

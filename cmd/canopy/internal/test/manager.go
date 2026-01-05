@@ -10,8 +10,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
+	"github.com/wagoodman/go-partybus"
 )
 
 // Manager coordinates test session lifecycle, including creation, persistence, and retrieval.
@@ -172,7 +174,7 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 				log.WithFields("error", err).Error("unable to end test run")
 			}
 
-			bus.TestRun(*r)
+			publishTestRun(*r)
 			return
 		}
 
@@ -181,7 +183,7 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 
 		logEvent(e, cfg.LogTestFailuresAsErrors)
 
-		bus.TestEvent(e)
+		publishTestEvent(e)
 
 		if runModel != nil {
 			if err := runModel.addEvent(e); err != nil {
@@ -212,7 +214,7 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 		r, errs = gotest.NewRunner(cfg.Runner).Start(ctx, cfg.Result, onEvent)
 	}
 
-	bus.TestRunRequest(r.ID, cfg.Runner)
+	publishTestRunRequest(r.ID, cfg.Runner)
 
 	return r, errs
 }
@@ -260,4 +262,32 @@ func (s *Manager) Close() error {
 		return s.end()
 	}
 	return nil
+}
+
+// publishTestRun publishes a go test run event to the bus.
+// This represents the overall status of a test run execution.
+func publishTestRun(r gotest.Run) {
+	bus.Publish(partybus.Event{
+		Type:  event.GoTestRunType,
+		Value: r,
+	})
+}
+
+// publishTestEvent publishes a go test event to the bus.
+// This is used to broadcast individual test execution events (run, pass, fail, output, etc).
+func publishTestEvent(e gotest.Event) {
+	bus.Publish(partybus.Event{
+		Type:  event.GoTestType,
+		Value: e,
+	})
+}
+
+// publishTestRunRequest publishes a test run request event to the bus.
+// The request includes a unique ID and the runner configuration to execute.
+func publishTestRunRequest(id uuid.UUID, r gotest.RunnerConfig) {
+	bus.Publish(partybus.Event{
+		Type:   event.GoTestRunRequestType,
+		Value:  r,
+		Source: id,
+	})
 }

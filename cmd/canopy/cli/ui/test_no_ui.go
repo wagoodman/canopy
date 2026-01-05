@@ -10,7 +10,7 @@ import (
 // TestNoUI creates a minimal UI that only handles notifications and reports without a terminal interface.
 // This is suitable for non-interactive scenarios or when the primary output goes to a file.
 func TestNoUI() clio.UI {
-	return newSimpleUI().
+	return newCoreUI().
 		withNotifications().
 		withReports().
 		withHandledPresenters(
