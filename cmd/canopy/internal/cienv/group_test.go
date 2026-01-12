@@ -10,7 +10,8 @@ import (
 
 func TestGroupWriter_Write(t *testing.T) {
 	var buf bytes.Buffer
-	gw := NewGroupWriter(&buf, "Test Group")
+	// Use GitHub CI type explicitly for predictable output
+	gw := NewGroupWriterForCI(&buf, "Test Group", &Environment{Type: CITypeGitHub})
 
 	n, err := gw.Write([]byte("line 1\n"))
 	require.NoError(t, err)
@@ -59,12 +60,65 @@ func TestGroupWriter_Reset(t *testing.T) {
 
 func TestGroupWriter_WriteString(t *testing.T) {
 	var buf bytes.Buffer
-	gw := NewGroupWriter(&buf, "String Test")
+	// Use GitHub CI type explicitly for predictable output
+	gw := NewGroupWriterForCI(&buf, "String Test", &Environment{Type: CITypeGitHub})
 
 	_, _ = gw.WriteString("hello world\n")
 	_, _ = gw.Flush()
 
 	expected := "::group::String Test\nhello world\n::endgroup::\n"
+	assert.Equal(t, expected, buf.String())
+}
+
+func TestGroupWriter_AzurePipelines(t *testing.T) {
+	var buf bytes.Buffer
+	gw := NewGroupWriterForCI(&buf, "Azure Test", &Environment{Type: CITypeAzure})
+
+	_, _ = gw.WriteString("azure content\n")
+	_, _ = gw.Flush()
+
+	expected := "##[group]Azure Test\nazure content\n##[endgroup]\n"
+	assert.Equal(t, expected, buf.String())
+}
+
+func TestGroupWriter_GitLabCI(t *testing.T) {
+	var buf bytes.Buffer
+	gw := NewGroupWriterForCI(&buf, "GitLab Test", &Environment{Type: CITypeGitLab})
+
+	_, _ = gw.WriteString("gitlab content\n")
+	_, _ = gw.Flush()
+
+	// GitLab output contains timestamps and section IDs, so just check key parts
+	output := buf.String()
+	assert.Contains(t, output, "section_start:")
+	assert.Contains(t, output, "[collapsed=true]")
+	assert.Contains(t, output, "GitLab Test")
+	assert.Contains(t, output, "gitlab content")
+	assert.Contains(t, output, "section_end:")
+}
+
+func TestGroupWriter_UnknownCI(t *testing.T) {
+	var buf bytes.Buffer
+	// Unknown CI type should just output content without markers
+	gw := NewGroupWriterForCI(&buf, "No CI Test", &Environment{Type: CITypeUnknown})
+
+	_, _ = gw.WriteString("plain content\n")
+	_, _ = gw.Flush()
+
+	// Content should be output without any CI markers
+	expected := "plain content\n"
+	assert.Equal(t, expected, buf.String())
+}
+
+func TestGroupWriter_NilEnvironment(t *testing.T) {
+	var buf bytes.Buffer
+	// Nil environment should just output content without markers
+	gw := NewGroupWriterForCI(&buf, "Nil Env Test", nil)
+
+	_, _ = gw.WriteString("plain content\n")
+	_, _ = gw.Flush()
+
+	expected := "plain content\n"
 	assert.Equal(t, expected, buf.String())
 }
 

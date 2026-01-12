@@ -4,7 +4,12 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync/atomic"
+	"time"
 )
+
+// groupCounter is used to generate unique section IDs for GitLab CI.
+var groupCounter uint64
 
 // GroupWriter wraps an io.Writer to add CI-specific group markers around output.
 // It buffers writes and flushes them with appropriate group commands when Flush is called.
@@ -12,15 +17,27 @@ type GroupWriter struct {
 	writer  io.Writer
 	title   string
 	buffer  strings.Builder
+	ciType  CIType
 	started bool
 }
 
 // NewGroupWriter creates a new GroupWriter that will wrap output in a collapsible group.
 // The title is the name displayed for the collapsed section.
+// It auto-detects the CI environment to use the correct syntax.
 func NewGroupWriter(w io.Writer, title string) *GroupWriter {
+	return NewGroupWriterForCI(w, title, Detect())
+}
+
+// NewGroupWriterForCI creates a new GroupWriter for a specific CI environment.
+func NewGroupWriterForCI(w io.Writer, title string, env *Environment) *GroupWriter {
+	ciType := CITypeUnknown
+	if env != nil {
+		ciType = env.Type
+	}
 	return &GroupWriter{
 		writer: w,
 		title:  title,
+		ciType: ciType,
 	}
 }
 
@@ -45,8 +62,30 @@ func (g *GroupWriter) Flush() (int, error) {
 	content := g.buffer.String()
 	g.buffer.Reset()
 
-	// Write the group start, content, and group end
-	output := fmt.Sprintf("::group::%s\n%s::endgroup::\n", g.title, content)
+	var output string
+	switch g.ciType {
+	case CITypeGitHub:
+		// GitHub Actions: ::group::Title / ::endgroup::
+		output = fmt.Sprintf("::group::%s\n%s::endgroup::\n", g.title, content)
+
+	case CITypeAzure:
+		// Azure Pipelines: ##[group]Title / ##[endgroup]
+		output = fmt.Sprintf("##[group]%s\n%s##[endgroup]\n", g.title, content)
+
+	case CITypeGitLab:
+		// GitLab CI: \e[0Ksection_start:TIMESTAMP:NAME\r\e[0KTitle / \e[0Ksection_end:TIMESTAMP:NAME\r\e[0K
+		// Use [collapsed=true] to start collapsed
+		ts := time.Now().Unix()
+		id := atomic.AddUint64(&groupCounter, 1)
+		sectionName := fmt.Sprintf("section_%d", id)
+		output = fmt.Sprintf("\x1b[0Ksection_start:%d:%s[collapsed=true]\r\x1b[0K%s\n%s\x1b[0Ksection_end:%d:%s\r\x1b[0K\n",
+			ts, sectionName, g.title, content, ts, sectionName)
+
+	default:
+		// Unknown CI or not in CI - just output the content without markers
+		output = content
+	}
+
 	return g.writer.Write([]byte(output))
 }
 
@@ -66,16 +105,15 @@ type GroupConfig struct {
 	// If nil, auto-detection based on CI environment is used.
 	Enabled *bool
 
-	// GroupPassedPackages causes passed package output to be grouped (collapsed).
+	// GroupPassedPackages causes passed output to be grouped (collapsed).
 	GroupPassedPackages bool
 
-	// GroupFailedPackages causes failed package output to be grouped.
-	// Note: In GitHub Actions, failed groups may auto-expand.
+	// GroupFailedPackages causes failed output to be grouped.
 	GroupFailedPackages bool
 }
 
 // DefaultGroupConfig returns the default grouping configuration.
-// By default, passed packages are grouped, failed packages are not.
+// By default, passed output is grouped, failed output is not.
 func DefaultGroupConfig() GroupConfig {
 	return GroupConfig{
 		Enabled:             nil, // auto-detect
@@ -102,7 +140,7 @@ func (c GroupConfig) IsEnabledWith(detect func() *Environment) bool {
 	return env != nil && env.SupportsGrouping
 }
 
-// ShouldGroup returns whether the given package result should be grouped.
+// ShouldGroup returns whether the given result should be grouped.
 func (c GroupConfig) ShouldGroup(passed bool) bool {
 	if passed {
 		return c.GroupPassedPackages

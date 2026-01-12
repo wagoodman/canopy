@@ -77,7 +77,6 @@ type showTestConfig struct {
 	options.Open       `yaml:",inline" json:"" mapstructure:",squash"`
 	options.Coverage   `yaml:",inline" json:"" mapstructure:",squash"`
 	options.Appearance `yaml:"appearance" json:"appearance" mapstructure:"appearance"`
-	options.GitHub     `yaml:"github" json:"github" mapstructure:"github"`
 }
 
 func defaultShowOptions() *formatCoreConfig {
@@ -85,8 +84,8 @@ func defaultShowOptions() *formatCoreConfig {
 		Experiment: options.DefaultExperiment(),
 		Store:      options.DefaultStore(),
 		Test: showTestConfig{
-			Format: options.DefaultTestFormat(),
-			GitHub: options.DefaultGitHub(),
+			Format:     options.DefaultTestFormat(),
+			Appearance: options.DefaultAppearance(),
 		},
 	}
 }
@@ -121,7 +120,7 @@ func Format(app clio.Application) *cobra.Command {
 				log.Debug("reading test json from stdin")
 			}
 			var err error
-			logTestFailuresAsErrors, err = setupTestUIs(app, opts.Test.Writers, opts.Test.Appearance, opts.Test.GitHub, 30, "") // TODO: we do not support module prefix stripping here yet for format-only operations
+			logTestFailuresAsErrors, err = setupTestUIs(app, opts.Test.Writers, opts.Test.Appearance, 30, "") // TODO: we do not support module prefix stripping here yet for format-only operations
 			return err
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {

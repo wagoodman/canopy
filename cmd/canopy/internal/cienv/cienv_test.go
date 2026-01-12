@@ -17,6 +17,7 @@ func TestDetectWith_GitHubActions(t *testing.T) {
 
 	require.NotNil(t, env)
 	assert.Equal(t, "GitHub Actions", env.Name)
+	assert.Equal(t, CITypeGitHub, env.Type)
 	assert.True(t, env.SupportsGrouping)
 }
 
@@ -30,6 +31,21 @@ func TestDetectWith_AzurePipelines(t *testing.T) {
 
 	require.NotNil(t, env)
 	assert.Equal(t, "Azure Pipelines", env.Name)
+	assert.Equal(t, CITypeAzure, env.Type)
+	assert.True(t, env.SupportsGrouping)
+}
+
+func TestDetectWith_GitLabCI(t *testing.T) {
+	env := DetectWith(func(key string) string {
+		if key == "GITLAB_CI" {
+			return "true"
+		}
+		return ""
+	})
+
+	require.NotNil(t, env)
+	assert.Equal(t, "GitLab CI", env.Name)
+	assert.Equal(t, CITypeGitLab, env.Type)
 	assert.True(t, env.SupportsGrouping)
 }
 
