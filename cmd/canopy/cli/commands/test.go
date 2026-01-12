@@ -68,6 +68,7 @@ type testConfig struct {
 	options.Format     `yaml:",inline" json:"" mapstructure:",squash"`
 	options.Open       `yaml:",inline" json:"" mapstructure:",squash"`
 	options.Appearance `yaml:"appearance" json:"appearance" mapstructure:"appearance"`
+	options.GitHub     `yaml:"github" json:"github" mapstructure:"github"`
 	ExtraFlags         []string `yaml:"extra-flags" json:"extra-flags" mapstructure:"extra-flags"`
 
 	// post parse
@@ -121,6 +122,7 @@ func defaultTestOptions(opts ...func(*TestCoreConfig)) *TestCoreConfig {
 			Format:     options.DefaultTestFormat(),
 			Open:       options.DefaultOpen(),
 			Appearance: options.DefaultAppearance(),
+			GitHub:     options.DefaultGitHub(),
 		},
 	}
 
@@ -167,7 +169,7 @@ func Test(app clio.Application) *cobra.Command { //nolint:funlen
 			}
 
 			maxPkgName := maxPkgNameLength(testPkgs.ImportPaths(), module)
-			logTestFailuresAsErrors, err = setupTestUIs(app, opts.Test.Writers, opts.Test.Appearance, maxPkgName, module)
+			logTestFailuresAsErrors, err = setupTestUIs(app, opts.Test.Writers, opts.Test.Appearance, opts.Test.GitHub, maxPkgName, module)
 			return err
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -307,12 +309,12 @@ func evaluateResult(run *gotest.Run, logTestFailuresAsErrors bool, coverMin floa
 	return passed, resultErr
 }
 
-func setupTestUIs(app clio.Application, writers []options.FormatWriter, appearance options.Appearance, maxPkgName int, module string) (bool, error) {
+func setupTestUIs(app clio.Application, writers []options.FormatWriter, appearance options.Appearance, github options.GitHub, maxPkgName int, module string) (bool, error) {
 	var logTestFailuresAsErrors bool
 
 	var uxs []clio.UI
 	for _, writer := range writers {
-		ux, ltaf, err := setupTestUI(app, writer, appearance, maxPkgName, module)
+		ux, ltaf, err := setupTestUI(app, writer, appearance, github, maxPkgName, module)
 		if err != nil {
 			return false, fmt.Errorf("unable to setup UI %q: %w", writer.Name, err)
 		}
@@ -335,7 +337,7 @@ func setupTestUIs(app clio.Application, writers []options.FormatWriter, appearan
 	return logTestFailuresAsErrors, nil
 }
 
-func setupTestUI(app clio.Application, format options.FormatWriter, appearance options.Appearance, maxPkgName int, module string) (clio.UI, bool, error) {
+func setupTestUI(app clio.Application, format options.FormatWriter, appearance options.Appearance, github options.GitHub, maxPkgName int, module string) (clio.UI, bool, error) {
 	var ux clio.UI
 
 	fields := logger.Fields{
@@ -352,7 +354,7 @@ func setupTestUI(app clio.Application, format options.FormatWriter, appearance o
 
 	state := app.(Stater).State()
 
-	uiConfig := getUIConfig(appearance, state.Config, format, module)
+	uiConfig := getUIConfig(appearance, github, state.Config, format, module)
 
 	var logTestFailuresAsErrors bool
 	switch format.Name {
@@ -398,7 +400,7 @@ func setupTestUI(app clio.Application, format options.FormatWriter, appearance o
 	return ux, logTestFailuresAsErrors, nil
 }
 
-func getUIConfig(appearance options.Appearance, clioCfg clio.Config, format options.FormatWriter, module string) ui.TestUIConfig {
+func getUIConfig(appearance options.Appearance, github options.GitHub, clioCfg clio.Config, format options.FormatWriter, module string) ui.TestUIConfig {
 	var removePrefix string
 	if appearance.UseShortNames {
 		removePrefix = module
@@ -411,7 +413,7 @@ func getUIConfig(appearance options.Appearance, clioCfg clio.Config, format opti
 		Writer:                  format.Writer,
 		IsTTY:                   format.IsTTY,
 		CombineMultipleRuns:     appearance.CombineMultipleRuns,
-		CIGrouping:              appearance.CIGrouping.ToGroupConfig(),
+		CIGrouping:              github.Grouping.ToGroupConfig(),
 	}
 }
 

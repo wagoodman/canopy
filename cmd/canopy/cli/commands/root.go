@@ -205,7 +205,7 @@ func prepareTestExecution(app clio.Application, rootCfg rootConfig, testDefs got
 	// set the UI dynamically
 	module := testDefs.Module()
 	maxPkgName := maxPkgNameLength(refs.Packages(), module)
-	logTestFailuresAsErrors, err := setupTestUIs(app, rootCfg.Test.Writers, rootCfg.Test.Appearance, maxPkgName, module)
+	logTestFailuresAsErrors, err := setupTestUIs(app, rootCfg.Test.Writers, rootCfg.Test.Appearance, rootCfg.Test.GitHub, maxPkgName, module)
 	if err != nil {
 		return nil, fmt.Errorf("unable to setup test UIs: %w", err)
 	}
