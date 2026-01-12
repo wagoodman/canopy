@@ -130,32 +130,32 @@ func TestGroupConfig_IsEnabledWith(t *testing.T) {
 		want    bool
 	}{
 		{
-			name:   "explicit true",
-			config: GroupConfig{Enabled: ptr(true)},
+			name:   "explicit on",
+			config: GroupConfig{Enabled: ToggleOn},
 			detect: func() *Environment { return nil },
 			want:   true,
 		},
 		{
-			name:   "explicit false in CI",
-			config: GroupConfig{Enabled: ptr(false)},
+			name:   "explicit off in CI",
+			config: GroupConfig{Enabled: ToggleOff},
 			detect: func() *Environment { return &Environment{SupportsGrouping: true} },
 			want:   false,
 		},
 		{
 			name:   "auto-detect in CI with grouping",
-			config: GroupConfig{Enabled: nil},
+			config: GroupConfig{Enabled: ToggleAuto},
 			detect: func() *Environment { return &Environment{SupportsGrouping: true} },
 			want:   true,
 		},
 		{
 			name:   "auto-detect in CI without grouping",
-			config: GroupConfig{Enabled: nil},
+			config: GroupConfig{Enabled: ToggleAuto},
 			detect: func() *Environment { return &Environment{SupportsGrouping: false} },
 			want:   false,
 		},
 		{
 			name:   "auto-detect not in CI",
-			config: GroupConfig{Enabled: nil},
+			config: GroupConfig{Enabled: ToggleAuto},
 			detect: func() *Environment { return nil },
 			want:   false,
 		},
@@ -213,11 +213,7 @@ func TestGroupConfig_ShouldGroup(t *testing.T) {
 func TestDefaultGroupConfig(t *testing.T) {
 	cfg := DefaultGroupConfig()
 
-	assert.Nil(t, cfg.Enabled)
+	assert.True(t, cfg.Enabled.IsAuto())
 	assert.True(t, cfg.GroupPassedPackages)
 	assert.False(t, cfg.GroupFailedPackages)
-}
-
-func ptr(b bool) *bool {
-	return &b
 }

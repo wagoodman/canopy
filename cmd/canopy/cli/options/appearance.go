@@ -36,8 +36,10 @@ type Appearance struct {
 // Azure Pipelines, and GitLab CI. When enabled and running in a supported CI, output
 // is wrapped in collapsible groups.
 type Grouping struct {
-	// Enabled explicitly enables or disables CI grouping. When nil, auto-detection is used.
-	Enabled *bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	// Enabled controls whether CI grouping is active.
+	// Values: "auto" (detect from CI environment), "on" (always enable), "off" (always disable).
+	// Also accepts: true/false, "true"/"false", "enabled"/"disabled", "always"/"never".
+	Enabled cienv.Toggle `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
 	// Passed controls whether passed output is grouped (collapsed by default).
 	Passed bool `yaml:"passed" json:"passed" mapstructure:"passed"`
 	// Failed controls whether failed output is grouped.
@@ -49,7 +51,7 @@ type Grouping struct {
 // and failed output is not grouped (so failures are immediately visible).
 func DefaultGrouping() Grouping {
 	return Grouping{
-		Enabled: nil, // auto-detect
+		Enabled: cienv.ToggleAuto,
 		Passed:  true,
 		Failed:  false,
 	}

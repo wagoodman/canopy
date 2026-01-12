@@ -102,8 +102,8 @@ func (g *GroupWriter) Reset() {
 // GroupConfig controls how output is grouped in CI environments.
 type GroupConfig struct {
 	// Enabled controls whether grouping is active.
-	// If nil, auto-detection based on CI environment is used.
-	Enabled *bool
+	// Use ToggleAuto for auto-detection, ToggleOn to always enable, ToggleOff to always disable.
+	Enabled Toggle
 
 	// GroupPassedPackages causes passed output to be grouped (collapsed).
 	GroupPassedPackages bool
@@ -116,7 +116,7 @@ type GroupConfig struct {
 // By default, passed output is grouped, failed output is not.
 func DefaultGroupConfig() GroupConfig {
 	return GroupConfig{
-		Enabled:             nil, // auto-detect
+		Enabled:             ToggleAuto,
 		GroupPassedPackages: true,
 		GroupFailedPackages: false,
 	}
@@ -130,9 +130,12 @@ func (c GroupConfig) IsEnabled() bool {
 
 // IsEnabledWith returns whether grouping should be enabled, using a custom detector.
 func (c GroupConfig) IsEnabledWith(detect func() *Environment) bool {
-	// Explicit configuration takes precedence
-	if c.Enabled != nil {
-		return *c.Enabled
+	// Explicit on/off takes precedence
+	if c.Enabled.IsOn() {
+		return true
+	}
+	if c.Enabled.IsOff() {
+		return false
 	}
 
 	// Auto-detect: enable if in a CI that supports grouping
