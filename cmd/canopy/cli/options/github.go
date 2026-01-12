@@ -15,10 +15,10 @@ type GitHub struct {
 type Grouping struct {
 	// Enabled explicitly enables or disables CI grouping. When nil, auto-detection is used.
 	Enabled *bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
-	// PassedPackages controls whether passed package output is grouped (collapsed by default).
-	PassedPackages bool `yaml:"passed-packages" json:"passed-packages" mapstructure:"passed-packages"`
-	// FailedPackages controls whether failed package output is grouped.
-	FailedPackages bool `yaml:"failed-packages" json:"failed-packages" mapstructure:"failed-packages"`
+	// Passed controls whether passed output is grouped (collapsed by default).
+	Passed bool `yaml:"passed" json:"passed" mapstructure:"passed"`
+	// Failed controls whether failed output is grouped.
+	Failed bool `yaml:"failed" json:"failed" mapstructure:"failed"`
 }
 
 // DefaultGitHub returns GitHub options with sensible defaults for CI grouping.
@@ -29,13 +29,13 @@ func DefaultGitHub() GitHub {
 }
 
 // DefaultGrouping returns the default grouping configuration.
-// By default, grouping is auto-detected from the CI environment, passed packages are grouped,
-// and failed packages are not grouped (so failures are immediately visible).
+// By default, grouping is auto-detected from the CI environment, passed output is grouped,
+// and failed output is not grouped (so failures are immediately visible).
 func DefaultGrouping() Grouping {
 	return Grouping{
-		Enabled:        nil, // auto-detect
-		PassedPackages: true,
-		FailedPackages: false,
+		Enabled: nil, // auto-detect
+		Passed:  true,
+		Failed:  false,
 	}
 }
 
@@ -43,7 +43,7 @@ func DefaultGrouping() Grouping {
 func (g Grouping) ToGroupConfig() cienv.GroupConfig {
 	return cienv.GroupConfig{
 		Enabled:             g.Enabled,
-		GroupPassedPackages: g.PassedPackages,
-		GroupFailedPackages: g.FailedPackages,
+		GroupPassedPackages: g.Passed,
+		GroupFailedPackages: g.Failed,
 	}
 }
