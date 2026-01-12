@@ -14,6 +14,7 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/internal"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/cienv"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
@@ -48,6 +49,9 @@ type PackageConfig struct {
 
 	// StalePackageDuration is the threshold for considering a package stale.
 	StalePackageDuration time.Duration
+
+	// CIGrouping configures collapsible output groups for CI environments.
+	CIGrouping cienv.GroupConfig
 }
 
 // verboseHandler formats test output in verbose mode, showing all test output
@@ -67,6 +71,12 @@ type verboseHandler struct {
 
 	// formatter converts test events to formatted output.
 	formatter func(gotest.Event, bool) fmt.Stringer
+
+	// ciGrouping configures collapsible output groups for CI environments.
+	ciGrouping cienv.GroupConfig
+
+	// ciGroupingEnabled caches whether CI grouping is enabled.
+	ciGroupingEnabled bool
 }
 
 // NewVerboseHandler creates a handler that formats output in verbose mode,
@@ -86,6 +96,8 @@ func NewVerboseHandler(writer io.Writer, config PackageConfig) handler.Handler {
 				HideExecutionTestEvents: false,
 			},
 		).NewEvent,
+		ciGrouping:        config.CIGrouping,
+		ciGroupingEnabled: config.CIGrouping.IsEnabled(),
 	}
 }
 
@@ -153,15 +165,36 @@ func (h *verboseHandler) render() {
 
 // outputPackage writes all output for a package, including test logs and conclusions.
 func (h *verboseHandler) outputPackage(pkgRef gotest.Reference) {
+	// Determine if package passed for CI grouping decision
+	passed := h.result.ReferenceConclusiveAction(pkgRef) == gotest.PassAction
+
+	// Select the writer - use a group writer if CI grouping is enabled for this package status
+	writer := h.writer
+	var groupWriter *cienv.GroupWriter
+	if h.ciGroupingEnabled && h.ciGrouping.ShouldGroup(passed) {
+		groupWriter = cienv.NewGroupWriter(h.writer, pkgRef.Package)
+		writer = groupWriter
+	}
+
+	h.outputPackageToWriter(pkgRef, writer)
+
+	// Flush the group writer to emit ::group:: and ::endgroup:: markers
+	if groupWriter != nil {
+		_, _ = groupWriter.Flush()
+	}
+}
+
+// outputPackageToWriter writes all output for a package to the specified writer.
+func (h *verboseHandler) outputPackageToWriter(pkgRef gotest.Reference, writer io.Writer) {
 	for _, testRef := range h.result.Children(pkgRef) {
 		// output run/pause/continue and logs
-		h.outputTest(testRef, false, func(e gotest.Event) bool {
+		h.outputTestToWriter(testRef, writer, false, func(e gotest.Event) bool {
 			return !output.HasConclusionMarking(e.Output)
 		})
 	}
 	for _, testRef := range h.result.Children(pkgRef) {
 		// output pass/failed
-		h.outputTest(testRef, true, func(e gotest.Event) bool {
+		h.outputTestToWriter(testRef, writer, true, func(e gotest.Event) bool {
 			return output.HasConclusionMarking(e.Output)
 		})
 	}
@@ -175,23 +208,23 @@ func (h *verboseHandler) outputPackage(pkgRef gotest.Reference) {
 		}
 		fmtr := h.formatter(e, h.panic[e.Reference])
 		if strings.TrimSpace(e.Output) != "" {
-			fmt.Fprint(h.writer, fmtr.String())
+			fmt.Fprint(writer, fmtr.String())
 		}
 	}
 }
 
-// outputTest writes output for a test and its children, optionally indenting conclusions.
-func (h *verboseHandler) outputTest(testRef gotest.Reference, indent bool, include func(gotest.Event) bool) {
+// outputTestToWriter writes output for a test and its children to the specified writer.
+func (h *verboseHandler) outputTestToWriter(testRef gotest.Reference, writer io.Writer, indent bool, include func(gotest.Event) bool) {
 	outputEvents := h.getEvents(testRef, include)
 
 	for _, e := range outputEvents {
-		writer := h.writer
+		w := writer
 		if indent {
-			writer = internal.NewIndentWriterForReference(writer, e.Reference)
+			w = internal.NewIndentWriterForReference(writer, e.Reference)
 		}
 		fmtr := h.formatter(e, h.panic[e.Reference])
 		if strings.TrimSpace(e.Output) != "" {
-			fmt.Fprint(writer, fmtr.String())
+			fmt.Fprint(w, fmtr.String())
 		}
 	}
 }

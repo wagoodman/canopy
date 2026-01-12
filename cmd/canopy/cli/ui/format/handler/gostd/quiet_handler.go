@@ -14,6 +14,7 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/cienv"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
@@ -46,6 +47,12 @@ type quietHandler struct {
 
 	// formatter converts test events to formatted output.
 	formatter func(gotest.Event, bool) fmt.Stringer
+
+	// ciGrouping configures collapsible output groups for CI environments.
+	ciGrouping cienv.GroupConfig
+
+	// ciGroupingEnabled caches whether CI grouping is enabled.
+	ciGroupingEnabled bool
 }
 
 // NewQuietHandler creates a handler that formats output in quiet mode, showing
@@ -66,6 +73,8 @@ func NewQuietHandler(writer io.Writer, config PackageConfig) handler.Handler {
 				HideExecutionTestEvents: false,
 			},
 		).NewEvent,
+		ciGrouping:        config.CIGrouping,
+		ciGroupingEnabled: config.CIGrouping.IsEnabled(),
 	}
 }
 
@@ -137,13 +146,30 @@ func (h *quietHandler) render() {
 			return
 		}
 
-		h.outputPackage(
+		// Determine if package passed for CI grouping decision
+		passed := action == gotest.PassAction
+
+		// Select the writer - use a group writer if CI grouping is enabled for this package status
+		writer := h.writer
+		var groupWriter *cienv.GroupWriter
+		if h.ciGroupingEnabled && h.ciGrouping.ShouldGroup(passed) {
+			groupWriter = cienv.NewGroupWriter(h.writer, pkgRef.Package)
+			writer = groupWriter
+		}
+
+		h.outputPackageToWriter(
 			pkgRef,
+			writer,
 			h.hasFailure,
 			func(e gotest.Event) bool {
 				return !output.HasStateMarking(e.Output)
 			},
 		)
+
+		// Flush the group writer to emit ::group:: and ::endgroup:: markers
+		if groupWriter != nil {
+			_, _ = groupWriter.Flush()
+		}
 
 		h.packages.Delete(pkgRef)
 		pkgs = h.packages.Values()
@@ -163,12 +189,11 @@ func (h *quietHandler) hasFailure(testRef gotest.Reference) bool {
 	return false
 }
 
-// outputPackage writes output for a completed package, including all tests matching
-// the include filter.
-func (h *quietHandler) outputPackage(pkgRef gotest.Reference, include func(gotest.Reference) bool, render func(gotest.Event) bool) {
+// outputPackageToWriter writes output for a completed package to the specified writer.
+func (h *quietHandler) outputPackageToWriter(pkgRef gotest.Reference, writer io.Writer, include func(gotest.Reference) bool, render func(gotest.Event) bool) {
 	for _, testRef := range h.result.Children(pkgRef) {
 		if include(testRef) {
-			h.outputTest(testRef, include, render)
+			h.outputTestToWriter(testRef, writer, include, render)
 		}
 	}
 
@@ -181,13 +206,13 @@ func (h *quietHandler) outputPackage(pkgRef gotest.Reference, include func(gotes
 		}
 		fmtr := h.formatter(e, h.panic[e.Reference])
 		if strings.TrimSpace(e.Output) != "" {
-			fmt.Fprint(h.writer, fmtr.String())
+			fmt.Fprint(writer, fmtr.String())
 		}
 	}
 }
 
-// outputTest writes output for a test and its children, applying include and render filters.
-func (h *quietHandler) outputTest(testRef gotest.Reference, include func(gotest.Reference) bool, render func(gotest.Event) bool) {
+// outputTestToWriter writes output for a test and its children to the specified writer.
+func (h *quietHandler) outputTestToWriter(testRef gotest.Reference, writer io.Writer, include func(gotest.Reference) bool, render func(gotest.Event) bool) {
 	outputEvents := h.getEvents(testRef, include)
 
 	sort.Slice(outputEvents, func(i, j int) bool {
@@ -200,7 +225,7 @@ func (h *quietHandler) outputTest(testRef gotest.Reference, include func(gotest.
 		}
 		fmtr := h.formatter(e, h.panic[e.Reference])
 		if strings.TrimSpace(e.Output) != "" {
-			fmt.Fprint(h.writer, fmtr.String())
+			fmt.Fprint(writer, fmtr.String())
 		}
 	}
 }
