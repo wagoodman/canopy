@@ -190,17 +190,7 @@ type Handler interface {
 }
 ```
 
-**Implementations:**
-
-| Handler | Location | Purpose |
-|---------|----------|---------|
-| `gostd.QuietHandler` | `format/handler/gostd/quiet_handler.go` | Shows only failures and package summaries |
-| `gostd.VerboseHandler` | `format/handler/gostd/verbose_handler.go` | Shows all test events (RUN, PASS, FAIL) |
-| `goxx.QuietPackage` | `format/handler/goxx/quiet_handler.go` | Enhanced quiet mode with better formatting |
-| `handler.TestRun` | `format/handler/test_run.go` | Captures final test run result |
-| `handler.Aggregator` | `format/handler/aggregator.go` | Collects all events of a specific type |
-
-**Event Processing Example:**
+**Example:** `gostd.QuietHandler` processes events and only renders output when a package completes:
 
 ```go
 // gostd/quiet_handler.go
@@ -229,20 +219,14 @@ type Presenter interface {
 
 **Factory Pattern:**
 
+Presenter factories allow configuration-time binding, enabling the same handler to produce different output formats:
+
 ```go
-// Presenter factories allow configuration-time binding
 type EventFactory func(e partybus.Event) Presenter
 type TestRunFactory func(tr ...gotest.Run) Presenter
 ```
 
-**Implementations:**
-
-| Presenter | Location | Purpose |
-|-----------|----------|---------|
-| `goQuietEvent` | `format/presenter/go_quiet_event.go` | Formats individual events for quiet mode |
-| `goVerboseEvent` | `format/presenter/go_verbose_event.go` | Formats events for verbose mode |
-| `goSummary` | `format/presenter/go_summary.go` | Formats test run summary |
-| `PrintEvent` | `format/presenter/print_event.go` | Simple string output |
+For example, `goSummary` formats test run statistics, while `goVerboseEvent` formats individual test events with full detail.
 
 ### Adapters
 
@@ -259,14 +243,7 @@ type HandledPresenter interface {
 
 **This pattern eliminates coupling:** The adapter accumulates events during `Handle()` and formats them during `Present()`.
 
-**Implementations:**
-
-| Adapter | Location | Purpose |
-|---------|----------|---------|
-| `AllEvents` | `format/adapter/all_events.go` | Collects events, presents each with factory |
-| `TestRun` | `format/adapter/test_run.go` | Captures test run, presents summary |
-
-**Example:**
+**Example:** The `AllEvents` adapter collects events then presents each with a factory:
 
 ```go
 // adapter/all_events.go
@@ -290,15 +267,9 @@ func (p AllEvents) Present(stdout, stderr io.Writer) error {
 
 ### Components (Bubble Tea Models)
 
-**Purpose:** Interactive UI elements for TeaUI mode.
+**Purpose:** Interactive UI elements for TeaUI mode, located in `format/model/bubble/`.
 
-**Location:** `format/model/bubble/`
-
-| Component | Purpose |
-|-----------|---------|
-| `syncspinner` | Animated spinner synchronized across renders |
-| `gosummary` | Live test statistics footer |
-| `jestsummary` | Jest-style summary display |
+Components implement the `tea.Model` interface and are created by handlers when specific events arrive. For example, `gosummary` creates a live test statistics footer that updates as tests complete.
 
 **How Components Connect to TeaUI:**
 
@@ -824,20 +795,9 @@ func (r *Runner) startEventStream() (<-chan JSONL, error) {
 
 ---
 
-## File Reference
+## Key Files
 
-| File | Purpose |
-|------|---------|
-| `core_ui.go` | CoreUI implementation |
-| `tea_ui.go` | TeaUI implementation |
-| `test_go_ui.go` | UI factory for go test format |
-| `format/handler/handler.go` | Handler interface |
-| `format/handler/gostd/` | Standard Go test handlers |
-| `format/presenter/presenter.go` | Presenter interface |
-| `format/adapter/handled_presenters.go` | Adapter interface |
-| `format/model/bubble/` | Bubble Tea components |
-| `internal/gotest/runner.go` | Test runner |
-| `internal/gotest/result.go` | State aggregator |
-| `internal/gotest/action.go` | Test action types |
-| `internal/bus/event/types.go` | Event type definitions |
-| `internal/test/manager.go` | Test session manager |
+- **UI Layer:** `core_ui.go`, `tea_ui.go`, `test_go_ui.go`
+- **Abstractions:** `format/handler/handler.go`, `format/presenter/presenter.go`, `format/adapter/handled_presenters.go`
+- **Test Runner:** `internal/gotest/runner.go`, `internal/gotest/result.go`
+- **Event System:** `internal/bus/event/types.go`, `internal/test/manager.go`
