@@ -21,7 +21,7 @@ func TestVerboseHandler_CIGrouping(t *testing.T) {
 		{
 			name: "grouping enabled for passed package",
 			ciGrouping: cienv.GroupConfig{
-				Enabled:             boolPtr(true),
+				Enabled:             cienv.ToggleOn,
 				GroupPassedPackages: true,
 				GroupFailedPackages: false,
 			},
@@ -36,7 +36,7 @@ func TestVerboseHandler_CIGrouping(t *testing.T) {
 		{
 			name: "grouping disabled",
 			ciGrouping: cienv.GroupConfig{
-				Enabled:             boolPtr(false),
+				Enabled:             cienv.ToggleOff,
 				GroupPassedPackages: true,
 				GroupFailedPackages: false,
 			},
@@ -51,7 +51,7 @@ func TestVerboseHandler_CIGrouping(t *testing.T) {
 		{
 			name: "grouping enabled but failed package not grouped",
 			ciGrouping: cienv.GroupConfig{
-				Enabled:             boolPtr(true),
+				Enabled:             cienv.ToggleOn,
 				GroupPassedPackages: true,
 				GroupFailedPackages: false,
 			},
@@ -66,7 +66,7 @@ func TestVerboseHandler_CIGrouping(t *testing.T) {
 		{
 			name: "grouping enabled for failed package",
 			ciGrouping: cienv.GroupConfig{
-				Enabled:             boolPtr(true),
+				Enabled:             cienv.ToggleOn,
 				GroupPassedPackages: false,
 				GroupFailedPackages: true,
 			},
@@ -121,7 +121,7 @@ func TestQuietHandler_CIGrouping(t *testing.T) {
 		{
 			name: "grouping enabled for passed package",
 			ciGrouping: cienv.GroupConfig{
-				Enabled:             boolPtr(true),
+				Enabled:             cienv.ToggleOn,
 				GroupPassedPackages: true,
 				GroupFailedPackages: false,
 			},
@@ -136,7 +136,7 @@ func TestQuietHandler_CIGrouping(t *testing.T) {
 		{
 			name: "grouping disabled",
 			ciGrouping: cienv.GroupConfig{
-				Enabled:             boolPtr(false),
+				Enabled:             cienv.ToggleOff,
 				GroupPassedPackages: true,
 				GroupFailedPackages: false,
 			},
@@ -178,8 +178,4 @@ func TestQuietHandler_CIGrouping(t *testing.T) {
 			}
 		})
 	}
-}
-
-func boolPtr(b bool) *bool {
-	return &b
 }

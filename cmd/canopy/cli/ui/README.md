@@ -1,88 +1,216 @@
 # UI Architecture
 
+This document describes Canopy's UI architecture: how events flow from the test runner to the terminal, how components interact, and how state is managed.
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [CoreUI vs TeaUI](#coreui-vs-teaui)
+3. [Component Architecture](#component-architecture)
+4. [Event Propagation](#event-propagation)
+5. [State Management](#state-management)
+6. [Output Streams: Stderr vs Stdout](#output-streams-stderr-vs-stdout)
+7. [Putting It All Together](#putting-it-all-together)
+8. [Extending the Architecture](#extending-the-architecture)
+
+---
+
 ## Overview
 
-Canopy's UI system uses a layered, event-driven architecture that cleanly separates event processing, data transformation, and output presentation. This design supports both interactive terminal interfaces (via Bubble Tea) and streaming text output for CI/CD environments.
+Canopy's UI system is built on an **event-driven, layered architecture** that separates:
 
-## Architecture at a Glance
+- **Event production** (test runner)
+- **Event routing** (event bus)
+- **Event processing** (handlers)
+- **Data transformation** (adapters)
+- **Output formatting** (presenters)
+- **Display rendering** (UI layer)
 
-```mermaid
-graph TD
-    E[Events from partybus] --> UI[UI Layer]
-    UI --> H[Event Handlers]
-    H --> A[Adapters]
-    A --> P[Presenters]
-    P --> O[Output Streams]
-
-    UI --> |coordinates| S[Shared State]
-    H --> |processes| ES[Event Data]
-    A --> |bridges| DF[Data Flow]
-    P --> |formats| FO[Display Output]
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              Test Runner                                    │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                     │
+│  │  go test    │───▶│   JSONL     │───▶│   Event     │                     │
+│  │  -json      │    │   Parser    │    │   Stream    │                     │
+│  └─────────────┘    └─────────────┘    └──────┬──────┘                     │
+└────────────────────────────────────────────────┼────────────────────────────┘
+                                                 │
+                                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              Event Bus (partybus)                           │
+│                                                                             │
+│    GoTestType ──────┬────────────────────────────────────────────────────   │
+│    GoTestRunType ───┤                                                       │
+│    PrintType ───────┤                                                       │
+│    CLINotification ─┘                                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                                 │
+                         ┌───────────────────────┴───────────────────────┐
+                         │                                               │
+                         ▼                                               ▼
+              ┌──────────────────┐                            ┌──────────────────┐
+              │     CoreUI       │                            │      TeaUI       │
+              │  (non-interactive)│                            │   (interactive)  │
+              └──────────────────┘                            └──────────────────┘
 ```
 
-The flow is straightforward: **Events** → **Handlers** → **Adapters** → **Presenters** → **Output**
+---
 
-## Core Components
+## CoreUI vs TeaUI
 
-### UI Layer: Environment Detection & Orchestration
+The UI system provides two implementations of the `clio.UI` interface for different environments.
 
-The UI layer detects the runtime environment and coordinates all other components.
+### CoreUI (`core_ui.go`)
 
-#### SimpleUI (`simple_ui.go`)
-For non-interactive environments (CI/CD, piped output):
+**CoreUI** handles **non-interactive environments** such as CI/CD pipelines, piped output, or any context where a TTY is not available.
+
 ```go
-// handles streaming text output
-ui := newSimpleUI().
-    withHandlers(testHandler).
-    withStdout(os.Stdout).
-    withStderr(os.Stderr)
+type coreUI struct {
+    presenters     []presenter.Presenter   // Format final output
+    handlers       []partybus.Handler      // Process events in real-time
+    stdout         io.WriteCloser          // Output stream for reports
+    stderr         io.WriteCloser          // Output stream for notifications
+    teardownCalled bool                    // Prevents duplicate teardown
+}
 ```
 
-#### TeaUI (`tea_ui.go`)
-For interactive terminal sessions:
+**Characteristics:**
+
+| Aspect | CoreUI Behavior |
+|--------|-----------------|
+| **Output Model** | Buffered - handlers accumulate data, presenters write at teardown |
+| **Interactivity** | None - events only, no keyboard/mouse input |
+| **Display Updates** | No real-time updates, output is final when written |
+| **Lifecycle** | `Setup()` → `Handle()` (repeated) → `Teardown()` |
+| **Use Case** | CI/CD, file output, piped commands |
+
+**Builder Pattern:**
+
 ```go
-// wraps SimpleUI + adds Bubble Tea interactivity
-teaUI := NewTeaUI(config).
-    WithSimpleUI(simpleUI).
-    WithFooter(summaryHandler).
-    WithSyncSpinner(spinner)
+ux := newCoreUI().
+    withNotifications().           // Handle CLINotification events
+    withReports().                 // Handle CLIReport events
+    withHandlers(testHandler).     // Add custom event handlers
+    withHandledPresenters(adapter) // Add handler+presenter combinations
+    withStdout(reportWriter).      // Set output destination
+    withStderr(notificationWriter)
 ```
 
-**Key Insight**: TeaUI wraps SimpleUI rather than replacing it, ensuring consistent event handling across both modes.
+### TeaUI (`tea_ui.go`)
 
-### Handlers: Event Processing
+**TeaUI** wraps CoreUI and adds **interactive terminal capabilities** using the [Bubble Tea](https://github.com/charmbracelet/bubbletea) framework for **TTY environments**.
 
-Handlers convert raw events into structured data. They implement a simple interface:
+```go
+type UI struct {
+    config         TeaUIConfig           // Configuration including embedded CoreUI
+    program        *tea.Program          // Bubble Tea program for rendering
+    running        *sync.WaitGroup       // Tracks goroutine lifecycle
+    subscription   partybus.Unsubscribable
+    teardownCalled bool
+}
+
+type TeaUIConfig struct {
+    handler       *bubbly.HandlerCollection   // Body event handlers (creates models)
+    footerHandler *bubbly.HandlerCollection   // Footer event handlers
+    coreUI        *coreUI                     // Embedded CoreUI for base functionality
+    printReaders  []io.Reader                 // Streams handler output to display
+    spinner       *syncspinner.Model          // Animation spinner
+    frame         frameWithFooter             // Body + footer layout
+}
+```
+
+**Characteristics:**
+
+| Aspect | TeaUI Behavior |
+|--------|----------------|
+| **Output Model** | Real-time - renders to stderr, updates continuously |
+| **Interactivity** | Full - keyboard input, escape to cancel |
+| **Display Updates** | Live spinner, progress, running test indicators |
+| **Lifecycle** | Same as CoreUI + Bubble Tea program lifecycle |
+| **Use Case** | Interactive terminal sessions |
+
+TeaUI **wraps** CoreUI rather than replacing it:
+- Event handling is consistent across both modes
+- CoreUI handles data accumulation and final presentation
+- TeaUI adds interactivity
+
+```go
+// TeaUI delegates to CoreUI for core event handling
+func (m *UI) Handle(e partybus.Event) error {
+    if m.program != nil {
+        m.program.Send(e)           // Send to Bubble Tea for visual updates
+    }
+    return m.config.coreUI.Handle(e) // Delegate to CoreUI for processing
+}
+```
+
+### Comparison Table
+
+| Feature | CoreUI | TeaUI |
+|---------|--------|-------|
+| **Primary Output** | stdout/stderr directly | stderr via Bubble Tea |
+| **Animation** | None | Spinner, progress indicators |
+| **Keyboard Input** | None | Ctrl+C, Esc to interrupt |
+| **Running Tests Display** | Not shown | Shown in footer |
+| **Memory Model** | Event handlers write or buffer | Same + frame buffer for display |
+| **Dependency** | Standard library | Requires Bubble Tea |
+
+### When Each is Used
+
+```go
+// test_go_ui.go
+func NewTestGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
+    if cfg.IsTTY && cfg.Writer == nil {
+        return newDynamicGoUI(cfg, maxPkgNameLength)  // → TeaUI
+    }
+    return newSafeGoUI(cfg, maxPkgNameLength)         // → CoreUI
+}
+```
+
+---
+
+## Component Architecture
+
+The UI system uses four main component types that form a processing pipeline:
+
+```
+Events → Handlers → Adapters → Presenters → Output
+```
+
+### Handlers
+
+**Purpose:** Process events in real-time, track state, transform raw events into structured data.
+
+**Interface:** (`format/handler/handler.go`)
 
 ```go
 type Handler interface {
-    BusHandler           // Handle(event) error
+    BusHandler           // Handle(partybus.Event) error
     TestEventHandler     // OnGoTestEvent(gotest.Event) error
-    fmt.Stringer        // String() string (buffered output)
+    fmt.Stringer         // String() - returns buffered output
 }
 ```
 
-**Common Handlers**:
-- `VerboseHandler`: Detailed output with timing and package information
-- `QuietHandler`: Shows only failures and final results
-- `SummaryHandler`: Aggregates statistics for footer display
-
-### Adapters: Interface Bridge
-
-Adapters solve a common problem: handlers process events but presenters format output. Adapters implement both interfaces, acting as a bridge:
+**Example:** `gostd.QuietHandler` processes events and only renders output when a package completes:
 
 ```go
-type HandledPresenter interface {
-    partybus.Handler     // processes events
-    presenter.Presenter  // formats output
+// gostd/quiet_handler.go
+func (h *quietHandler) OnGoTestEvent(event gotest.Event) error {
+    h.result.Update(event)  // Update internal state
+
+    // When a package completes, render its output
+    if event.Action == gotest.PassAction && event.Reference.IsPackage() {
+        h.render(event.Reference)
+    }
+    return nil
 }
 ```
 
-This pattern eliminates the need for complex component coupling.
+### Presenters
 
-### Presenters: Output Formatting
+**Purpose:** Format processed data into output strings with styling and structure.
 
-Presenters take processed data and generate formatted output:
+**Interface:** (`format/presenter/presenter.go`)
 
 ```go
 type Presenter interface {
@@ -90,41 +218,98 @@ type Presenter interface {
 }
 ```
 
-**Factory Pattern**: Presenters are created via factories that can produce different presenters based on configuration:
+**Factory Pattern:**
+
+Presenter factories allow configuration-time binding, enabling the same handler to produce different output formats:
 
 ```go
-factory := gostd.NewFactory(config)
-presenter := factory.Create(eventType)
-presenter.Present(stdout, stderr)
+type EventFactory func(e partybus.Event) Presenter
+type TestRunFactory func(tr ...gotest.Run) Presenter
 ```
 
-## Data Flow in Action
+For example, `goSummary` formats test run statistics, while `goVerboseEvent` formats individual test events with full detail.
 
-Here's how a test failure flows through the system:
+### Adapters
 
+**Purpose:** Bridge handlers and presenters by implementing both interfaces.
+
+**Interface:** (`format/adapter/handled_presenters.go`)
+
+```go
+type HandledPresenter interface {
+    partybus.Handler     // Receives and processes events
+    presenter.Presenter  // Formats output
+}
 ```
-1. Go test fails → partybus.Event
-2. UI routes event → Handler
-3. Handler processes test data → structured failure info
-4. Adapter bridges → Presenter
-5. Presenter formats → colored error output
-6. Output streams → terminal/file
+
+The adapter accumulates events during `Handle()` and formats them during `Present()`.
+
+**Example:** The `AllEvents` adapter collects events then presents each with a factory:
+
+```go
+// adapter/all_events.go
+type AllEvents struct {
+    *handler.Aggregator           // Embedded handler (collects events)
+    factory presenter.EventFactory // Factory to create presenters
+}
+
+func (p AllEvents) Handle(e partybus.Event) error {
+    return p.Aggregator.Handle(e)  // Delegate to embedded handler
+}
+
+func (p AllEvents) Present(stdout, stderr io.Writer) error {
+    for _, e := range p.Events() {
+        pres := p.factory(e)       // Create presenter for each event
+        pres.Present(stdout, stderr)
+    }
+    return nil
+}
 ```
 
-## Real Example: Test Runner UI
+### Components (Bubble Tea Models)
 
-The `test_go_ui.go` file shows how components work together:
+**Purpose:** Interactive UI elements for TeaUI mode, located in `format/model/bubble/`.
+
+Components implement the `tea.Model` interface and are created by handlers when specific events arrive. For example, `gosummary` creates a live test statistics footer that updates as tests complete.
+
+**How Components Connect to TeaUI:**
+
+```go
+// TeaUI creates models via handlers when events arrive
+func (m UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+    switch msg := msg.(type) {
+    case partybus.Event:
+        // Body handlers create new models
+        models, cmd := m.config.handler.Handle(msg)
+        for _, newModel := range models {
+            m.config.frame.body.AppendModel(newModel)
+        }
+
+        // Footer handlers create footer models
+        if m.config.footerHandler != nil {
+            footerModels, cmd := m.config.footerHandler.Handle(msg)
+            for _, newModel := range footerModels {
+                m.config.frame.footer.AppendModel(newModel)
+            }
+        }
+    }
+}
+```
+
+### Component Assembly Example
+
+Components wire together in `test_go_ui.go`:
 
 ```go
 func newDynamicGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
-    // shared state for spinner animation
+    // 1. Create shared state
     spin := syncspinner.New()
 
-    // separate I/O streams for different output types
+    // 2. Create I/O pipes (handlers write, UI reads)
     reportReader, reportWriter := readerWriterPair()
     notificationReader, notificationWriter := readerWriterPair()
 
-    // handler selection based on verbosity
+    // 3. Create handler (processes events, writes to reportWriter)
     var h handler.Handler
     if cfg.Verbose > 0 {
         h = gostd.NewVerboseHandler(reportWriter, config)
@@ -132,82 +317,484 @@ func newDynamicGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
         h = gostd.NewQuietHandler(reportWriter, config)
     }
 
-    // build the base UI with streaming capability
-    ux := newSimpleUI().
+    // 4. Build CoreUI with handlers
+    ux := newCoreUI().
         withNotifications().
         withReports().
         withHandlers(h).
         withStdout(reportWriter).
         withStderr(notificationWriter)
 
-    // add interactive footer for live updates
+    // 5. Create footer handler (creates Bubble Tea models)
     summaryHandler := gosummary.NewFactory(config, common)
 
-    // wrap in interactive UI if terminal supports it
-    return NewTeaUI(NewTeaUIConfig().
-        WithSimpleUI(ux).
-        WithSyncSpinner(spin).
-        WithPrintReader(reportReader, notificationReader).
-        WithFooter(summaryHandler))
+    // 6. Wrap in TeaUI
+    c := NewTeaUIConfig().
+        WithCoreUI(ux).                                   // Embed CoreUI
+        WithSyncSpinner(spin).                            // Add animation
+        WithPrintReader(reportReader, notificationReader). // Read handler output
+        WithFooter(summaryHandler)                        // Add footer
+
+    return NewTeaUI(c)
 }
 ```
 
-## Component Responsibilities
+---
 
-### Clear Boundaries
+## Event Propagation
 
-| Component | Owns | Never Does |
-|-----------|------|------------|
-| **UI** | Event routing, lifecycle management, component coordination | Content formatting, event modification |
-| **Handler** | Event processing, state tracking, data transformation | Direct output writing |
-| **Presenter** | Output formatting, styling, stream writing | Raw event processing |
-| **Adapter** | Interface bridging, data flow coordination | Core business logic |
+### Event Types
 
-### Why This Separation Matters
+Defined in `internal/bus/event/types.go`:
 
 ```go
-// ❌ Bad: Handler directly formats and writes output
-func (h *handler) Handle(event partybus.Event) error {
-    fmt.Fprintf(h.writer, "\033[32m✓ %s passed\033[0m\n", event.TestName)
+const (
+    GoTestRunRequestType  // Test run initiated (Value: RunnerConfig, Source: UUID)
+    GoTestType            // Individual test event (Value: gotest.Event)
+    GoTestRunType         // Test run completed (Value: gotest.Run)
+    PrintType             // Debug/informational output
+    CLIReport             // Longer-form CLI output
+    CLINotification       // Short status messages
+)
+```
+
+### Test Action Lifecycle
+
+Defined in `internal/gotest/action.go`:
+
+```
+┌─────────┐     ┌─────────┐     ┌─────────────┐
+│  start  │────▶│   run   │────▶│   output    │──┐
+│(package)│     │ (test)  │     │  (multiple) │  │
+└─────────┘     └─────────┘     └─────────────┘  │
+                                                  │
+                     ┌────────────────────────────┘
+                     │
+                     ▼
+              ┌─────────────┐
+              │ pass/fail/  │  ◀── Terminal states
+              │    skip     │
+              └─────────────┘
+```
+
+- **`start`**: First event for a package (package-level only)
+- **`run`**: First event for a test/subtest
+- **`output`**: Test produces output (can occur multiple times)
+- **`pass`/`fail`/`skip`**: Terminal state (exactly one per test)
+
+### Complete Event Flow
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 1. TEST RUNNER (internal/gotest/runner.go)                                   │
+│                                                                              │
+│    go test -json  ──▶  stdout (JSONL)  ──▶  Parse  ──▶  gotest.Event        │
+│                   ──▶  stderr (errors) ──▶  Buffer ──▶  ErrRunStderr        │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 2. TEST MANAGER (internal/test/manager.go)                                   │
+│                                                                              │
+│    onEvent callback:                                                         │
+│      ├── logEvent(event)           // Log for debugging                      │
+│      ├── publishTestEvent(event)   // Publish to event bus                   │
+│      └── runModel.addEvent(event)  // Persist to storage                     │
+│                                                                              │
+│    On completion:                                                            │
+│      └── publishTestRun(run)       // Publish final run state                │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 3. EVENT BUS (internal/bus/bus.go)                                           │
+│                                                                              │
+│    bus.Publish(partybus.Event{                                               │
+│        Type:  event.GoTestType,                                              │
+│        Value: gotest.Event,                                                  │
+│    })                                                                        │
+│                                                                              │
+│    Subscribers receive events via subscription                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                    ┌───────────────┴───────────────┐
+                    ▼                               ▼
+┌────────────────────────────┐    ┌────────────────────────────────────────────┐
+│ 4a. COREUI                 │    │ 4b. TEAUI                                   │
+│                            │    │                                            │
+│ Handle(event):             │    │ Handle(event):                             │
+│   for _, h := range        │    │   program.Send(event) // Bubble Tea        │
+│       handlers {           │    │   coreUI.Handle(event) // Delegate         │
+│     h.Handle(event)        │    │                                            │
+│   }                        │    │ Update(msg):                               │
+│                            │    │   case partybus.Event:                     │
+│ Teardown():                │    │     // Create models via handlers          │
+│   for _, p := range        │    │     // Append to frame                     │
+│       presenters {         │    │                                            │
+│     p.Present(stdout,      │    │ View():                                    │
+│               stderr)      │    │   return frame.View() // Render to term    │
+│   }                        │    │                                            │
+└────────────────────────────┘    └────────────────────────────────────────────┘
+```
+
+### Event Flow Example: Test Failure
+
+```
+1. go test outputs:  {"Action":"fail","Package":"pkg","Test":"TestFoo",...}
+                              │
+2. Runner parses to:  gotest.Event{Action: FailAction, Reference: {Package: "pkg", FuncName: "TestFoo"}}
+                              │
+3. Manager publishes: partybus.Event{Type: GoTestType, Value: event}
+                              │
+4. CoreUI routes to:  handler.Handle(event)
+         │                    │
+         │                    ▼
+         │            quietHandler.OnGoTestEvent(event)
+         │              └── result.Update(event)
+         │              └── (buffers failure output)
+         │
+         └───────────▶ adapter.Handle(event)
+                         └── aggregator.events = append(events, event)
+
+5. On teardown:       presenter.Present(stdout, stderr)
+                         └── Writes formatted failure output
+```
+
+---
+
+## State Management
+
+### The Result Struct (`internal/gotest/result.go`)
+
+The `Result` struct aggregates state for test execution. It maintains thread-safe, queryable state with multiple indices for different access patterns.
+
+```go
+type Result struct {
+    lock   *sync.RWMutex    // Thread safety
+    config ResultConfig
+
+    // Primary indices
+    references *orderedset.OrderedSet[Reference]   // All test references (ordered)
+    packages   *orderedset.OrderedSet[Reference]   // Package-level refs only
+    children   map[Reference]*orderedset.OrderedSet[Reference]  // Hierarchy tree
+
+    // Event storage
+    testEventsByReference  map[Reference][]Event   // All events per reference
+    testOutputByReference  map[Reference][]Event   // Only "output" actions
+
+    // Action indices (for quick lookups by state)
+    referencesByAction     map[Action]*orderedset.OrderedSet[Reference]
+    testReferencesByAction map[Action]*orderedset.OrderedSet[Reference]
+
+    // Terminal state
+    conclusionEvent        map[Reference]Event     // Final event per reference
+
+    // Timing
+    start         time.Time
+    lastEventTime time.Time
+    totalElapsed  time.Duration
+
+    // Coverage
+    coverage *float64
 }
+```
 
-// ✅ Good: Handler processes, Presenter formats
-func (h *handler) Handle(event partybus.Event) error {
-    h.results = append(h.results, TestResult{
-        Name: event.TestName,
-        Status: Passed,
-    })
+### State Update Flow
+
+```go
+func (r *Result) Update(e Event) {
+    r.lock.Lock()
+    defer r.lock.Unlock()
+
+    // 1. Update timing
+    if r.start.IsZero() {
+        r.start = e.Time
+    }
+    r.lastEventTime = e.Time
+
+    // 2. Maintain hierarchy (parent-child relationships)
+    parentRef := e.Reference.ParentRef()
+    if parentRef != nil {
+        r.children[*parentRef].Add(e.Reference)
+    }
+
+    // 3. Process by action type
+    switch e.Action {
+    case OutputAction:
+        // Accumulate output
+        r.testOutputByReference[e.Reference] = append(r.testOutputByReference[e.Reference], e)
+
+    case PassAction, SkipAction:
+        // Clear output for passing tests (memory optimization)
+        if !r.config.TrackOtherOutput {
+            r.testOutputByReference[e.Reference] = nil
+        }
+        fallthrough
+
+    case FailAction:
+        // Record conclusion
+        r.conclusionEvent[e.Reference] = e
+        r.referencesByAction[RunAction].Delete(e.Reference)  // No longer "running"
+    }
+
+    // 4. Update action indices
+    r.referencesByAction[e.Action].Add(e.Reference)
+    r.references.Add(e.Reference)
 }
 ```
 
-## Key Architectural Patterns
+### Determining Test Status
 
-### 1. Factory Pattern for Configuration
 ```go
-// different configurations produce different behaviors
-verboseFactory := gostd.NewFactory(VerboseConfig)
-quietFactory := gostd.NewFactory(QuietConfig)
-```
+func (r Result) Passed() (passed bool, stillRunning bool) {
+    r.lock.RLock()
+    defer r.lock.RUnlock()
 
-### 2. Builder Pattern for Assembly
-```go
-// fluent interface for component composition
-ui := newSimpleUI().
-    withHandlers(testHandler).
-    withNotifications().
-    withReports()
-```
+    runningTestRefs := r.testReferencesByAction[RunAction]
+    failedTestRefs := r.testReferencesByAction[FailAction]
 
-### 3. Adapter Pattern for Interface Bridging
-```go
-// one component implements multiple interfaces
-type EventAdapter struct {
-    handler handler.Handler
+    // Tests are still running if:
+    // 1. Any tests are in RunAction state
+    // 2. Not all references have conclusion events
+    hasMirroredRefs := len(r.conclusionEvent) == r.references.Size()
+    isStillRunning := runningTestRefs.Size() > 0 || !hasMirroredRefs
+
+    // Passed is true only if no tests failed
+    passed = failedTestRefs.Size() == 0
+
+    return passed, isStillRunning
 }
-
-func (a *EventAdapter) Handle(e partybus.Event) error { /* delegate to handler */ }
-func (a *EventAdapter) Present(w io.Writer) error { /* format handler data */ }
 ```
+
+### ResultConfig Options
+
+```go
+type ResultConfig struct {
+    TrackOtherOutput   bool  // Keep output from passing/skipped tests
+    TrackFailingOutput bool  // Keep output from failing tests
+}
+```
+
+| Use Case | TrackOtherOutput | TrackFailingOutput |
+|----------|------------------|-------------------|
+| Live testing (memory efficient) | `false` | `false` |
+| Replay/history (full data) | `true` | `true` |
+
+---
+
+## Output Streams: Stderr vs Stdout
+
+Canopy uses stderr and stdout to separate **active/updating content** from **final/immutable content**.
+
+### The Two-Stream Model
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           STDERR (Active State)                         │
+│                                                                         │
+│  • Continuously rewritten by Bubble Tea                                 │
+│  • Contains spinner, progress, running tests                            │
+│  • Ephemeral - content changes with each render                         │
+│  • User sees "live" updates                                             │
+│                                                                         │
+│  Example: "⠋ Running tests... 3 passed, 0 failed (2.3s)"               │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           STDOUT (Final State)                          │
+│                                                                         │
+│  • Written once, never rewritten                                        │
+│  • Contains completed test results, final summaries                     │
+│  • Permanent - safe to pipe to files                                    │
+│  • Appears "above" the active stderr content                            │
+│                                                                         │
+│  Example: "✓ pkg/foo           (0.42s)"                                 │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Implementation in TeaUI
+
+```go
+// tea_ui.go
+func (m *UI) Setup(subscription partybus.Unsubscribable) error {
+    // Bubble Tea renders to stderr (active, rewritable)
+    m.program = tea.NewProgram(m, tea.WithOutput(os.Stderr), ...)
+
+    // Handler output appears via program.Println (permanent)
+    go func(reader io.Reader) {
+        scanner := bufio.NewScanner(reader)
+        for scanner.Scan() {
+            m.program.Println(scanner.Text())  // Writes above the active UI
+        }
+    }(printReader)
+
+    return m.config.coreUI.Setup(subscription)
+}
+```
+
+### Visual Representation
+
+```
+Terminal Display:
+┌──────────────────────────────────────────────────────────────────────┐
+│ ✓ github.com/user/pkg/foo                              0.42s        │ ◀─ stdout (permanent)
+│ ✓ github.com/user/pkg/bar                              0.31s        │
+│ ✗ github.com/user/pkg/baz                              1.02s        │
+│     --- FAIL: TestBaz (1.02s)                                       │
+│         baz_test.go:42: expected 1, got 2                           │
+├──────────────────────────────────────────────────────────────────────┤
+│ ⠋ Running tests... 2 passed, 1 failed, 3 running (3.2s)             │ ◀─ stderr (updating)
+│   └─ TestQux, TestCorge, TestGrault                                 │
+└──────────────────────────────────────────────────────────────────────┘
+        ▲                                                      ▲
+        │                                                      │
+   Scrolls up as                                        Stays at bottom,
+   new results arrive                                   continuously updated
+```
+
+### Source of stdout vs stderr Content
+
+| Content Type | Stream | Source |
+|--------------|--------|--------|
+| Package results | stdout | Handler writes to `reportWriter` |
+| Test failure details | stdout | Handler writes to `reportWriter` |
+| Notifications | stderr | CoreUI writes to `notificationWriter` |
+| Spinner/progress | stderr | TeaUI renders via Bubble Tea |
+| Running test list | stderr | Footer model in TeaUI |
+| Final summary | stdout | Presenter at teardown (CoreUI mode) |
+| Final summary | stderr | Footer model (TeaUI mode) |
+
+### From go test Perspective
+
+The test runner itself produces two streams:
+
+```go
+// runner.go
+func (r *Runner) startEventStream() (<-chan JSONL, error) {
+    stdout, _ := cmd.StdoutPipe()  // JSONL test events (structured)
+    stderr, _ := cmd.StderrPipe()  // Compilation errors, warnings
+
+    // stdout is parsed line-by-line into events
+    go jsonLFromReader(stdout, events)
+
+    // stderr is accumulated and reported as error at END
+    var sb strings.Builder
+    go func() {
+        reader := bufio.NewReader(stderr)
+        for {
+            line, _ := reader.ReadString('\n')
+            sb.WriteString(line)
+        }
+    }()
+
+    // stderr only surfaces after run completes
+    go func() {
+        wg.Wait()
+        if sb.Len() > 0 {
+            events <- JSONL{Index: math.MaxInt64, Error: ErrRunStderr{Output: sb.String()}}
+        }
+        close(events)
+    }()
+}
+```
+
+Test runner stderr (compilation errors) is deferred until the run completes, then surfaced as a special error event. This prevents interleaving of error messages with structured test output.
+
+---
+
+## Putting It All Together
+
+### Complete Data Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐  │
+│  │  go test    │───▶│   JSONL     │───▶│  gotest.    │───▶│   Manager   │  │
+│  │   -json     │    │   Parser    │    │   Event     │    │  onEvent()  │  │
+│  └─────────────┘    └─────────────┘    └─────────────┘    └──────┬──────┘  │
+│                                                                   │         │
+│                              TEST RUNNER                          │         │
+└───────────────────────────────────────────────────────────────────┼─────────┘
+                                                                    │
+                                                   publishTestEvent(e)
+                                                                    │
+                                                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              EVENT BUS                                      │
+│                                                                             │
+│                    partybus.Event{Type: GoTestType, Value: e}               │
+│                                                                             │
+└───────────────────────────────────────────────────────────────────┬─────────┘
+                                                                    │
+                                    ┌───────────────────────────────┤
+                                    │                               │
+                                    ▼                               ▼
+┌───────────────────────────────────────────────┐ ┌───────────────────────────┐
+│               CoreUI.Handle(e)                │ │  TeaUI.Update(msg)        │
+│                                               │ │                           │
+│  ┌─────────────────────────────────────────┐  │ │  ┌─────────────────────┐  │
+│  │  for _, h := range handlers:            │  │ │  │ handler.Handle(e)   │  │
+│  │    h.Handle(e)                          │  │ │  │   ↓                 │  │
+│  │      │                                  │  │ │  │ Create new models   │  │
+│  │      ├── quietHandler.OnGoTestEvent(e)  │  │ │  │   ↓                 │  │
+│  │      │     └── result.Update(e)         │  │ │  │ frame.AppendModel() │  │
+│  │      │     └── (buffer or write)        │  │ │  └─────────────────────┘  │
+│  │      │                                  │  │ │                           │
+│  │      └── adapter.Handle(e)              │  │ │  ┌─────────────────────┐  │
+│  │            └── aggregator.append(e)     │  │ │  │ View()              │  │
+│  │                                         │  │ │  │   ↓                 │  │
+│  └─────────────────────────────────────────┘  │ │  │ Render to stderr    │  │
+│                                               │ │  │ (active UI)         │  │
+│  ┌─────────────────────────────────────────┐  │ │  └─────────────────────┘  │
+│  │  Teardown():                            │  │ │                           │
+│  │    for _, p := range presenters:        │  │ │  ┌─────────────────────┐  │
+│  │      p.Present(stdout, stderr)          │  │ │  │ printReaders scan   │  │
+│  │        │                                │  │ │  │   ↓                 │  │
+│  │        └── Write final output           │  │ │  │ program.Println()   │  │
+│  │                                         │  │ │  │ (permanent output)  │  │
+│  └─────────────────────────────────────────┘  │ │  └─────────────────────┘  │
+│                                               │ │                           │
+└───────────────────────────────────────────────┘ └───────────────────────────┘
+                    │                                           │
+                    ▼                                           ▼
+            ┌───────────────┐                          ┌───────────────┐
+            │    stdout     │                          │    stderr     │
+            │   (final)     │                          │   (active)    │
+            └───────────────┘                          └───────────────┘
+```
+
+### Lifecycle Summary
+
+1. **Setup Phase**
+   - UI registers with event bus subscription
+   - TeaUI starts Bubble Tea program (renders to stderr)
+   - Print readers start scanning handler output pipes
+
+2. **Event Processing Phase** (repeated for each event)
+   - Test runner produces JSONL
+   - Manager publishes to event bus
+   - CoreUI routes to handlers
+   - Handlers update state, may write output
+   - TeaUI creates/updates models, re-renders
+
+3. **Teardown Phase**
+   - Close handler output pipes
+   - Wait for print readers to complete
+   - Call presenters to write final output
+   - Quit Bubble Tea program
+   - Final state written to stdout
+
+### Architectural Principles
+
+1. **Separation of Concerns**: Each component has a single responsibility
+2. **Composition over Inheritance**: Adapters compose handlers and presenters
+3. **Event-Driven**: Loose coupling via event bus
+4. **Factory Pattern**: Configurability without tight coupling
+5. **Builder Pattern**: Fluent API for UI construction
+6. **Dual-Stream Output**: Active (stderr) vs Final (stdout) content
+
+---
 
 ## Extending the Architecture
 
@@ -257,3 +844,12 @@ func (m ProgressModel) View() string { /* ... */ }
 // 3. Register with TeaUI
 teaUI.WithBodyModel(progressModel)
 ```
+
+---
+
+## Key Files
+
+- **UI Layer:** `core_ui.go`, `tea_ui.go`, `test_go_ui.go`
+- **Abstractions:** `format/handler/handler.go`, `format/presenter/presenter.go`, `format/adapter/handled_presenters.go`
+- **Test Runner:** `internal/gotest/runner.go`, `internal/gotest/result.go`
+- **Event System:** `internal/bus/event/types.go`, `internal/test/manager.go`
