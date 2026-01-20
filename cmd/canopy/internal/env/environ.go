@@ -63,3 +63,13 @@ func (e *SnapshotEnvironmentGetter) LookupEnv(key string) (string, bool) {
 	val, ok := e.Env[key]
 	return val, ok
 }
+
+// Truthy returns true if the string value represents a truthy/positive value.
+// Recognized truthy values (case-insensitive): "1", "t", "true", "yes", "y", "on"
+func Truthy(val string) bool {
+	switch strings.ToLower(strings.TrimSpace(val)) {
+	case "1", "t", "true", "yes", "y", "on":
+		return true
+	}
+	return false
+}

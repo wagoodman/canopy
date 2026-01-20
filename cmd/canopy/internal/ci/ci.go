@@ -2,8 +2,6 @@
 package ci
 
 import (
-	"strings"
-
 	"github.com/wagoodman/canopy/cmd/canopy/internal/env"
 )
 
@@ -30,29 +28,21 @@ func Detect() Provider {
 func DetectWith(e env.EnvironmentGetter) Provider {
 	// GitHub Actions detection
 	// https://docs.github.com/en/actions/learn-github-actions/environment-variables#default-environment-variables
-	if truthy(e.Getenv("GITHUB_ACTIONS")) {
+	if env.Truthy(e.Getenv("GITHUB_ACTIONS")) {
 		return ProviderGitHub
 	}
 
 	// Azure Pipelines detection
 	// https://learn.microsoft.com/en-us/azure/devops/pipelines/build/variables
-	if truthy(e.Getenv("TF_BUILD")) {
+	if env.Truthy(e.Getenv("TF_BUILD")) {
 		return ProviderAzure
 	}
 
 	// GitLab CI detection
 	// https://docs.gitlab.com/ee/ci/variables/predefined_variables.html
-	if truthy(e.Getenv("GITLAB_CI")) {
+	if env.Truthy(e.Getenv("GITLAB_CI")) {
 		return ProviderGitLab
 	}
 
 	return ProviderUnknown
-}
-
-func truthy(input string) bool {
-	switch strings.ToLower(input) {
-	case "1", "true", "yes", "on":
-		return true
-	}
-	return false
 }

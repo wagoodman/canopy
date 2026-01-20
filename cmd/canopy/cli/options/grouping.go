@@ -29,8 +29,8 @@ func DefaultGrouping() Grouping {
 	}
 }
 
-// ToGroupConfig converts Grouping to a group.Config for use with the grouping writer.
-func (o Grouping) ToGroupConfig() group.Config {
+// ToAPIConfig converts Grouping to a group.Config for use with the grouping writer.
+func (o Grouping) ToAPIConfig() group.Config {
 	return group.Config{
 		Formatter:   styleToFormatter(o.Style),
 		GroupPassed: o.Passed,

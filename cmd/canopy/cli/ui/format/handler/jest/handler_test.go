@@ -1,4 +1,4 @@
-package jeststd
+package jest
 
 import (
 	"bytes"

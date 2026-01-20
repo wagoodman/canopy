@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/scylladb/go-set/strset"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/env"
 	"golang.org/x/term"
 
 	"github.com/anchore/fangs"
@@ -206,21 +207,12 @@ func (f FormatWriters) Close() error {
 // isATTY checks if the given file descriptor is a terminal, respecting the NO_TTY environment variable.
 func isATTY(fd int) bool {
 	if val := os.Getenv("NO_TTY"); val != "" {
-		return !isPositive(val)
+		return !env.Truthy(val)
 	}
 	return term.IsTerminal(fd)
 }
 
-// isPositive returns true if the string value represents a truthy value.
-func isPositive(val string) bool {
-	switch strings.ToLower(strings.TrimSpace(val)) {
-	case "true", "yes", "y", "1", "t":
-		return true
-	}
-	return false
-}
-
 // isEnvEnabled checks if the given environment variable is set to a truthy value.
 func isEnvEnabled(key string) bool {
-	return isPositive(os.Getenv(key))
+	return env.Truthy(os.Getenv(key))
 }

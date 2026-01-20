@@ -98,3 +98,47 @@ func TestNewSnapshotEnvironmentGetterFromOSEnv(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "test_value", value)
 }
+
+func TestTruthy(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		// truthy values
+		{"1", true},
+		{"t", true},
+		{"T", true},
+		{"true", true},
+		{"True", true},
+		{"TRUE", true},
+		{"yes", true},
+		{"Yes", true},
+		{"YES", true},
+		{"y", true},
+		{"Y", true},
+		{"on", true},
+		{"On", true},
+		{"ON", true},
+		// with whitespace
+		{"  true  ", true},
+		{"\ttrue\n", true},
+		// falsy values
+		{"", false},
+		{"0", false},
+		{"f", false},
+		{"false", false},
+		{"False", false},
+		{"no", false},
+		{"No", false},
+		{"n", false},
+		{"off", false},
+		{"random", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := Truthy(tt.input)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

@@ -14,26 +14,38 @@ func TestConfig_ShouldGroup(t *testing.T) {
 		want   bool
 	}{
 		{
-			name:   "passed with GroupPassed true",
-			config: Config{GroupPassed: true},
+			name:   "passed with GroupPassed true and formatter set",
+			config: Config{Formatter: GitHub, GroupPassed: true},
 			passed: true,
 			want:   true,
 		},
 		{
 			name:   "passed with GroupPassed false",
-			config: Config{GroupPassed: false},
+			config: Config{Formatter: GitHub, GroupPassed: false},
 			passed: true,
 			want:   false,
 		},
 		{
-			name:   "failed with GroupFailed true",
-			config: Config{GroupFailed: true},
+			name:   "failed with GroupFailed true and formatter set",
+			config: Config{Formatter: GitHub, GroupFailed: true},
 			passed: false,
 			want:   true,
 		},
 		{
 			name:   "failed with GroupFailed false",
-			config: Config{GroupFailed: false},
+			config: Config{Formatter: GitHub, GroupFailed: false},
+			passed: false,
+			want:   false,
+		},
+		{
+			name:   "nil formatter returns false even with GroupPassed true",
+			config: Config{Formatter: nil, GroupPassed: true},
+			passed: true,
+			want:   false,
+		},
+		{
+			name:   "nil formatter returns false even with GroupFailed true",
+			config: Config{Formatter: nil, GroupFailed: true},
 			passed: false,
 			want:   false,
 		},

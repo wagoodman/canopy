@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/adapter"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/jeststd"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/jest"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/jestsummary"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/jesttestrow"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/pkgframe"
@@ -86,9 +86,9 @@ func newSafeJestUI(config TestUIConfig) clio.UI {
 	reportWriter := os.Stdout
 	notificationWriter := os.Stderr
 
-	h := jeststd.NewHandler(
+	h := jest.NewHandler(
 		reportWriter,
-		jeststd.Config{
+		jest.Config{
 			Color:                       config.Color,
 			Grouping:                    config.Grouping,
 			HidePackagesWithNoTestFiles: !config.ShowPackagesWithNoTests,
