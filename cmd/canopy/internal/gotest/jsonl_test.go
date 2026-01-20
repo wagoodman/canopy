@@ -65,6 +65,54 @@ func TestNewJSONL(t *testing.T) {
 				Error: fmt.Errorf("unable to unmarshal go test JSONL: invalid character 'i' looking for beginning of value"),
 			},
 		},
+		{
+			name:   "build-output with ImportPath",
+			ogLine: `{"ImportPath":"internal/unsafeheader","Action":"build-output","Output":"# internal/unsafeheader\n"}`,
+			idx:    5,
+			expected: JSONL{
+				Index:      5,
+				Raw:        `{"ImportPath":"internal/unsafeheader","Action":"build-output","Output":"# internal/unsafeheader\n"}`,
+				Action:     "build-output",
+				ImportPath: "internal/unsafeheader",
+				Output:     "# internal/unsafeheader\n",
+			},
+		},
+		{
+			name:   "build-output with compiler error",
+			ogLine: `{"ImportPath":"internal/unsafeheader","Action":"build-output","Output":"compile: version \"go1.24.4\" does not match go tool version \"go1.24.9\"\n"}`,
+			idx:    6,
+			expected: JSONL{
+				Index:      6,
+				Raw:        `{"ImportPath":"internal/unsafeheader","Action":"build-output","Output":"compile: version \"go1.24.4\" does not match go tool version \"go1.24.9\"\n"}`,
+				Action:     "build-output",
+				ImportPath: "internal/unsafeheader",
+				Output:     "compile: version \"go1.24.4\" does not match go tool version \"go1.24.9\"\n",
+			},
+		},
+		{
+			name:   "build-fail with ImportPath",
+			ogLine: `{"ImportPath":"internal/unsafeheader","Action":"build-fail"}`,
+			idx:    7,
+			expected: JSONL{
+				Index:      7,
+				Raw:        `{"ImportPath":"internal/unsafeheader","Action":"build-fail"}`,
+				Action:     "build-fail",
+				ImportPath: "internal/unsafeheader",
+			},
+		},
+		{
+			name:   "fail with FailedBuild",
+			ogLine: `{"Time":"2026-01-20T10:42:43.974154-05:00","Action":"fail","Package":"github.com/wagoodman/canopy/cmd/canopy","Elapsed":0,"FailedBuild":"github.com/lindell/go-ordered-set/orderedset"}`,
+			idx:    8,
+			expected: JSONL{
+				Index:       8,
+				Raw:         `{"Time":"2026-01-20T10:42:43.974154-05:00","Action":"fail","Package":"github.com/wagoodman/canopy/cmd/canopy","Elapsed":0,"FailedBuild":"github.com/lindell/go-ordered-set/orderedset"}`,
+				Time:        "2026-01-20T10:42:43.974154-05:00",
+				Action:      "fail",
+				Package:     "github.com/wagoodman/canopy/cmd/canopy",
+				FailedBuild: "github.com/lindell/go-ordered-set/orderedset",
+			},
+		},
 	}
 
 	for _, tt := range tests {

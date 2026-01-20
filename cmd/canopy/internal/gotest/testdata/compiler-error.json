@@ -1,0 +1,15 @@
+{"ImportPath":"internal/unsafeheader","Action":"build-output","Output":"# internal/unsafeheader\n"}
+{"ImportPath":"internal/unsafeheader","Action":"build-output","Output":"compile: version \"go1.24.4\" does not match go tool version \"go1.24.9\"\n"}
+{"ImportPath":"internal/unsafeheader","Action":"build-fail"}
+{"ImportPath":"internal/msan","Action":"build-output","Output":"# internal/msan\n"}
+{"ImportPath":"internal/msan","Action":"build-output","Output":"compile: version \"go1.24.4\" does not match go tool version \"go1.24.9\"\n"}
+{"ImportPath":"internal/msan","Action":"build-fail"}
+{"ImportPath":"github.com/lindell/go-ordered-set/orderedset","Action":"build-output","Output":"# github.com/lindell/go-ordered-set/orderedset\n"}
+{"ImportPath":"github.com/lindell/go-ordered-set/orderedset","Action":"build-output","Output":"compile: version \"go1.24.4\" does not match go tool version \"go1.24.9\"\n"}
+{"ImportPath":"github.com/lindell/go-ordered-set/orderedset","Action":"build-fail"}
+{"Time":"2026-01-20T10:42:43.97405-05:00","Action":"start","Package":"github.com/wagoodman/canopy/cmd/canopy"}
+{"Time":"2026-01-20T10:42:43.974127-05:00","Action":"output","Package":"github.com/wagoodman/canopy/cmd/canopy","Output":"FAIL\tgithub.com/wagoodman/canopy/cmd/canopy [build failed]\n"}
+{"Time":"2026-01-20T10:42:43.974154-05:00","Action":"fail","Package":"github.com/wagoodman/canopy/cmd/canopy","Elapsed":0,"FailedBuild":"github.com/lindell/go-ordered-set/orderedset"}
+{"Time":"2026-01-20T10:42:43.974164-05:00","Action":"start","Package":"github.com/wagoodman/canopy/cmd/canopy/cli"}
+{"Time":"2026-01-20T10:42:43.974166-05:00","Action":"output","Package":"github.com/wagoodman/canopy/cmd/canopy/cli","Output":"FAIL\tgithub.com/wagoodman/canopy/cmd/canopy/cli [build failed]\n"}
+{"Time":"2026-01-20T10:42:43.97417-05:00","Action":"fail","Package":"github.com/wagoodman/canopy/cmd/canopy/cli","Elapsed":0,"FailedBuild":"github.com/lindell/go-ordered-set/orderedset"}
