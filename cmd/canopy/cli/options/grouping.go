@@ -16,6 +16,10 @@ type Grouping struct {
 	Passed bool `yaml:"passed" json:"passed" mapstructure:"passed"`
 	// Failed controls whether failed output is grouped.
 	Failed bool `yaml:"failed" json:"failed" mapstructure:"failed"`
+	// AcrossTests groups consecutive passing/failing test conclusions within a package,
+	// even when the package itself isn't grouped. This helps reduce noise when a package
+	// has many passing tests and a few failures.
+	AcrossTests bool `yaml:"across-tests" json:"across-tests" mapstructure:"across-tests"`
 }
 
 // DefaultGrouping returns the default grouping configuration.
@@ -23,9 +27,10 @@ type Grouping struct {
 // and failed output is not grouped (so failures are immediately visible).
 func DefaultGrouping() Grouping {
 	return Grouping{
-		Style:  "auto", // resolved in PostLoad
-		Passed: true,
-		Failed: false,
+		Style:       "auto", // resolved in PostLoad
+		Passed:      true,
+		Failed:      false,
+		AcrossTests: true, // enable by default when grouping is active
 	}
 }
 
@@ -35,6 +40,7 @@ func (o Grouping) ToAPIConfig() group.Config {
 		Formatter:   styleToFormatter(o.Style),
 		GroupPassed: o.Passed,
 		GroupFailed: o.Failed,
+		AcrossTests: o.AcrossTests,
 	}
 }
 

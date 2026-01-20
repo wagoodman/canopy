@@ -13,6 +13,11 @@ type Config struct {
 
 	// GroupFailed causes failed output to be grouped.
 	GroupFailed bool
+
+	// AcrossTests groups consecutive passing/failing test conclusions within a package,
+	// even when the package itself isn't grouped. This helps reduce noise when a package
+	// has many passing tests and a few failures.
+	AcrossTests bool
 }
 
 // ShouldGroup returns whether output should be grouped based on pass/fail status.

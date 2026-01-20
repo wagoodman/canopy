@@ -188,11 +188,16 @@ func (h *verboseHandler) outputPackageToWriter(pkgRef gotest.Reference, writer i
 			return !output.HasConclusionMarking(e.Output)
 		})
 	}
-	for _, testRef := range h.result.Children(pkgRef) {
-		// output pass/failed
-		h.outputTestToWriter(testRef, writer, true, func(e gotest.Event) bool {
-			return output.HasConclusionMarking(e.Output)
-		})
+
+	// output pass/failed conclusions with optional consecutive grouping
+	if h.groupConfig.AcrossTests && h.groupConfig.Formatter != nil {
+		h.outputConclusionsWithGrouping(pkgRef, writer)
+	} else {
+		for _, testRef := range h.result.Children(pkgRef) {
+			h.outputTestToWriter(testRef, writer, true, func(e gotest.Event) bool {
+				return output.HasConclusionMarking(e.Output)
+			})
+		}
 	}
 
 	// output package conclusions
@@ -207,6 +212,56 @@ func (h *verboseHandler) outputPackageToWriter(pkgRef gotest.Reference, writer i
 			fmt.Fprint(writer, fmtr.String())
 		}
 	}
+}
+
+// outputConclusionsWithGrouping outputs test conclusions, grouping consecutive passing tests.
+// This helps reduce noise when a package has many passing tests and a few failures by collapsing
+// consecutive passing test conclusions into a single collapsible group.
+func (h *verboseHandler) outputConclusionsWithGrouping(pkgRef gotest.Reference, writer io.Writer) {
+	children := h.result.Children(pkgRef)
+
+	var passingBuffer []gotest.Reference
+
+	flushPassing := func() {
+		if len(passingBuffer) <= 1 {
+			// single test or empty - output without grouping
+			for _, ref := range passingBuffer {
+				h.outputTestToWriter(ref, writer, true, func(e gotest.Event) bool {
+					return output.HasConclusionMarking(e.Output)
+				})
+			}
+		} else {
+			// multiple consecutive passing tests - group them
+			title := fmt.Sprintf("%d passing tests", len(passingBuffer))
+			groupWriter := group.NewWriter(writer, title, h.groupConfig.Formatter)
+			for _, ref := range passingBuffer {
+				h.outputTestToWriter(ref, groupWriter, true, func(e gotest.Event) bool {
+					return output.HasConclusionMarking(e.Output)
+				})
+			}
+			_, _ = groupWriter.Flush()
+		}
+		passingBuffer = nil
+	}
+
+	for _, testRef := range children {
+		action := h.result.ReferenceConclusiveAction(testRef)
+		passed := action == gotest.PassAction
+
+		if passed && h.groupConfig.GroupPassed {
+			passingBuffer = append(passingBuffer, testRef)
+		} else {
+			// flush any accumulated passing tests
+			flushPassing()
+			// output this non-passing test directly
+			h.outputTestToWriter(testRef, writer, true, func(e gotest.Event) bool {
+				return output.HasConclusionMarking(e.Output)
+			})
+		}
+	}
+
+	// flush remaining passing tests
+	flushPassing()
 }
 
 // outputTestToWriter writes output for a test and its children to the specified writer.
