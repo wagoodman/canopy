@@ -125,13 +125,16 @@ func TestQuietHandler_CIGrouping(t *testing.T) {
 				GroupPassed: true,
 				GroupFailed: false,
 			},
+			// quiet handler only outputs package summary, so single-line output is not grouped.
+			// This test verifies that single-line output is passed through without group markers.
 			events: []gotest.Event{
 				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg", FuncName: "TestFoo"}, Output: "=== RUN   TestFoo\n"},
 				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg", FuncName: "TestFoo"}, Output: "--- PASS: TestFoo (0.01s)\n"},
 				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg"}, Output: "ok  \texample.com/pkg\t0.01s\n"},
 			},
-			wantGroupStart: true,
-			wantGroupEnd:   true,
+			// single-line output skips grouping (not worth collapsing)
+			wantGroupStart: false,
+			wantGroupEnd:   false,
 		},
 		{
 			name: "grouping disabled",

@@ -27,13 +27,15 @@ func TestHandler_CIGrouping(t *testing.T) {
 					GroupFailed: false,
 				},
 			},
+			// jest handler outputs single line " PASS  example.com/pkg\n" for passed packages,
+			// so single-line output is not grouped (not worth collapsing)
 			events: []gotest.Event{
 				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg", FuncName: "TestFoo"}, Output: "=== RUN   TestFoo\n"},
 				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg", FuncName: "TestFoo"}, Output: "--- PASS: TestFoo (0.01s)\n"},
 				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg"}, Output: "ok  \texample.com/pkg\t0.01s\n"},
 			},
-			wantGroupStart: true,
-			wantGroupEnd:   true,
+			wantGroupStart: false,
+			wantGroupEnd:   false,
 		},
 		{
 			name: "grouping disabled",
@@ -78,6 +80,7 @@ func TestHandler_CIGrouping(t *testing.T) {
 					GroupFailed: true,
 				},
 			},
+			// failed packages show header + failed test names (multiple lines), so grouping applies
 			events: []gotest.Event{
 				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg", FuncName: "TestFoo"}, Output: "=== RUN   TestFoo\n"},
 				{Action: gotest.FailAction, Reference: gotest.Reference{Package: "example.com/pkg", FuncName: "TestFoo"}, Output: "--- FAIL: TestFoo (0.01s)\n"},

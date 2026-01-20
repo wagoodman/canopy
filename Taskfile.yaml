@@ -162,7 +162,7 @@ tasks:
   ## Testing tasks #################################
 
   unit:
-    deps: [tmpdir]
+    deps: [tools]
     desc: Run unit tests
     vars:
       TEST_ARGS: ./cmd/...

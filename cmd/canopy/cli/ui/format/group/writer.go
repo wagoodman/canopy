@@ -39,14 +39,22 @@ func (g *Writer) WriteString(s string) (n int, err error) {
 
 // Flush writes the buffered content with group formatting to the underlying writer.
 // If there is no buffered content, nothing is written.
+// Single-line content (0 or 1 newline) is written without grouping since collapsing it adds no value.
 // Returns the number of bytes written and any error.
 func (g *Writer) Flush() (int, error) {
 	if g.buffer.Len() == 0 {
 		return 0, nil
 	}
 
-	output := g.formatter(g.title, g.buffer.String())
+	content := g.buffer.String()
 	g.buffer.Reset()
+
+	// skip grouping for single-line content (0 or 1 newline)
+	if strings.Count(content, "\n") <= 1 {
+		return g.writer.Write([]byte(content))
+	}
+
+	output := g.formatter(g.title, content)
 	return g.writer.Write([]byte(output))
 }
 

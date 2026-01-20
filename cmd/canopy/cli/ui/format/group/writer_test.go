@@ -38,9 +38,10 @@ func TestWriter_WriteString(t *testing.T) {
 	w := NewWriter(&buf, "String Test", GitHub)
 
 	_, _ = w.WriteString("hello world\n")
+	_, _ = w.WriteString("another line\n")
 	_, _ = w.Flush()
 
-	expected := "::group::String Test\nhello world\n::endgroup::\n"
+	expected := "::group::String Test\nhello world\nanother line\n::endgroup::\n"
 	assert.Equal(t, expected, buf.String())
 }
 
@@ -49,9 +50,10 @@ func TestWriter_Azure(t *testing.T) {
 	w := NewWriter(&buf, "Azure Test", Azure)
 
 	_, _ = w.WriteString("azure content\n")
+	_, _ = w.WriteString("more content\n")
 	_, _ = w.Flush()
 
-	expected := "##[group]Azure Test\nazure content\n##[endgroup]\n"
+	expected := "##[group]Azure Test\nazure content\nmore content\n##[endgroup]\n"
 	assert.Equal(t, expected, buf.String())
 }
 
@@ -60,6 +62,7 @@ func TestWriter_GitLab(t *testing.T) {
 	w := NewWriter(&buf, "GitLab Test", GitLab)
 
 	_, _ = w.WriteString("gitlab content\n")
+	_, _ = w.WriteString("more content\n")
 	_, _ = w.Flush()
 
 	// GitLab output contains timestamps and section IDs, so just check key parts
@@ -119,4 +122,46 @@ func TestWriter_Reset(t *testing.T) {
 	n, _ := w.Flush()
 	assert.Equal(t, 0, n)
 	assert.Empty(t, buf.String())
+}
+
+func TestWriter_SingleLineSkipsGrouping(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{
+			name:    "no newline",
+			content: "single line without newline",
+			want:    "single line without newline",
+		},
+		{
+			name:    "single trailing newline",
+			content: "single line with newline\n",
+			want:    "single line with newline\n",
+		},
+		{
+			name:    "two lines gets grouped",
+			content: "line one\nline two\n",
+			want:    "::group::Test\nline one\nline two\n::endgroup::\n",
+		},
+		{
+			name:    "multiple lines gets grouped",
+			content: "line one\nline two\nline three\n",
+			want:    "::group::Test\nline one\nline two\nline three\n::endgroup::\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			w := NewWriter(&buf, "Test", GitHub)
+
+			_, _ = w.WriteString(tt.content)
+			_, err := w.Flush()
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, buf.String())
+		})
+	}
 }
