@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"
-	"github.com/wagoodman/canopy/cmd/canopy/internal/cienv"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 
 	"github.com/anchore/fangs"
@@ -30,40 +29,6 @@ type Appearance struct {
 
 	tracker      *xflagset.Decorator
 	NamedFlagSet *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
-}
-
-// Grouping configures collapsible output groups for CI environments like GitHub Actions,
-// Azure Pipelines, and GitLab CI. When enabled and running in a supported CI, output
-// is wrapped in collapsible groups.
-type Grouping struct {
-	// Enabled controls whether CI grouping is active.
-	// Values: "auto" (detect from CI environment), "on" (always enable), "off" (always disable).
-	// Also accepts: true/false, "true"/"false", "enabled"/"disabled", "always"/"never".
-	Enabled cienv.Toggle `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
-	// Passed controls whether passed output is grouped (collapsed by default).
-	Passed bool `yaml:"passed" json:"passed" mapstructure:"passed"`
-	// Failed controls whether failed output is grouped.
-	Failed bool `yaml:"failed" json:"failed" mapstructure:"failed"`
-}
-
-// DefaultGrouping returns the default grouping configuration.
-// By default, grouping is auto-detected from the CI environment, passed output is grouped,
-// and failed output is not grouped (so failures are immediately visible).
-func DefaultGrouping() Grouping {
-	return Grouping{
-		Enabled: cienv.ToggleAuto,
-		Passed:  true,
-		Failed:  false,
-	}
-}
-
-// ToGroupConfig converts Grouping to a cienv.GroupConfig for use with the grouping writer.
-func (g Grouping) ToGroupConfig() cienv.GroupConfig {
-	return cienv.GroupConfig{
-		Enabled:             g.Enabled,
-		GroupPassedPackages: g.Passed,
-		GroupFailedPackages: g.Failed,
-	}
 }
 
 // DefaultAppearance returns appearance options with sensible defaults (color enabled, short names enabled).

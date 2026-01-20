@@ -3,7 +3,7 @@ package ui
 import (
 	"io"
 
-	"github.com/wagoodman/canopy/cmd/canopy/internal/cienv"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/group"
 )
 
 // TestUIConfig holds configuration for test output UI formatters, controlling visual presentation and behavior.
@@ -22,8 +22,8 @@ type TestUIConfig struct {
 	IsTTY bool
 	// CombineMultipleRuns controls whether to show a single summary for multiple test run sessions.
 	CombineMultipleRuns bool
-	// CIGrouping configures collapsible output groups for CI environments.
-	CIGrouping cienv.GroupConfig
+	// Grouping configures collapsible output groups (usually for CI environments).
+	Grouping group.Config
 }
 
 // DefaultTestUIConfig returns a configuration with sensible defaults (color enabled, quiet mode, no package filtering).
@@ -33,6 +33,6 @@ func DefaultTestUIConfig() TestUIConfig {
 		Verbose:                 0,
 		ShowPackagesWithNoTests: false,
 		StripPackagePrefix:      "",
-		CIGrouping:              cienv.DefaultGroupConfig(),
+		Grouping:                group.Config{}, // default to grouping disabled
 	}
 }

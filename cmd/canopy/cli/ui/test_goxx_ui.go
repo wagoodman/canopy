@@ -15,6 +15,7 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/env"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
 	"github.com/wagoodman/go-partybus"
@@ -49,7 +50,7 @@ func newVerboseDynamicGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 		goxx.VerbosePackageConfig{
 			PackageNameWidth:            maxPkgName,
 			Color:                       cfg.Color,
-			IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
+			IDE:                         ide.Select(&env.OSEnvironmentGetter{}),
 			HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
 			HideExecutionTestEvents:     true,
 		},
@@ -91,7 +92,7 @@ func newDefaultDynamicGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 	pkgConfig := goxx.QuietPackageConfig{
 		PackageNameWidth:            maxPkgName,
 		Color:                       cfg.Color,
-		IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
+		IDE:                         ide.Select(&env.OSEnvironmentGetter{}),
 		HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
 	}
 
@@ -172,7 +173,7 @@ func newSafeGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 			goxx.VerbosePackageConfig{
 				PackageNameWidth:            maxPkgName,
 				Color:                       cfg.Color,
-				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
+				IDE:                         ide.Select(&env.OSEnvironmentGetter{}),
 				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
 				HideExecutionTestEvents:     true,
 			},
@@ -183,7 +184,7 @@ func newSafeGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 			goxx.QuietPackageConfig{
 				PackageNameWidth:            maxPkgName,
 				Color:                       cfg.Color,
-				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
+				IDE:                         ide.Select(&env.OSEnvironmentGetter{}),
 				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
 			},
 		)

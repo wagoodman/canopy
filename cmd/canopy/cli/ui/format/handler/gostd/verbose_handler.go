@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/lindell/go-ordered-set/orderedset"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/group"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/internal"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/parser"
-	"github.com/wagoodman/canopy/cmd/canopy/internal/cienv"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
@@ -50,8 +50,8 @@ type PackageConfig struct {
 	// StalePackageDuration is the threshold for considering a package stale.
 	StalePackageDuration time.Duration
 
-	// CIGrouping configures collapsible output groups for CI environments.
-	CIGrouping cienv.GroupConfig
+	// Grouping configures collapsible output groups for CI environments.
+	Grouping group.Config
 }
 
 // verboseHandler formats test output in verbose mode, showing all test output
@@ -72,11 +72,8 @@ type verboseHandler struct {
 	// formatter converts test events to formatted output.
 	formatter func(gotest.Event, bool) fmt.Stringer
 
-	// ciGrouping configures collapsible output groups for CI environments.
-	ciGrouping cienv.GroupConfig
-
-	// ciGroupingEnabled caches whether CI grouping is enabled.
-	ciGroupingEnabled bool
+	// groupConfig configures collapsible output groups.
+	groupConfig group.Config
 }
 
 // NewVerboseHandler creates a handler that formats output in verbose mode,
@@ -96,8 +93,7 @@ func NewVerboseHandler(writer io.Writer, config PackageConfig) handler.Handler {
 				HideExecutionTestEvents: false,
 			},
 		).NewEvent,
-		ciGrouping:        config.CIGrouping,
-		ciGroupingEnabled: config.CIGrouping.IsEnabled(),
+		groupConfig: config.Grouping,
 	}
 }
 
@@ -165,20 +161,20 @@ func (h *verboseHandler) render() {
 
 // outputPackage writes all output for a package, including test logs and conclusions.
 func (h *verboseHandler) outputPackage(pkgRef gotest.Reference) {
-	// Determine if package passed for CI grouping decision
+	// determine if package passed for grouping decision
 	passed := h.result.ReferenceConclusiveAction(pkgRef) == gotest.PassAction
 
-	// Select the writer - use a group writer if CI grouping is enabled for this package status
+	// select the writer - use a group writer if grouping is enabled for this package status
 	writer := h.writer
-	var groupWriter *cienv.GroupWriter
-	if h.ciGroupingEnabled && h.ciGrouping.ShouldGroup(passed) {
-		groupWriter = cienv.NewGroupWriter(h.writer, pkgRef.Package)
+	var groupWriter *group.Writer
+	if h.groupConfig.ShouldGroup(passed) {
+		groupWriter = group.NewWriter(h.writer, pkgRef.Package, h.groupConfig.Formatter)
 		writer = groupWriter
 	}
 
 	h.outputPackageToWriter(pkgRef, writer)
 
-	// Flush the group writer to emit ::group:: and ::endgroup:: markers
+	// flush the group writer to emit group markers
 	if groupWriter != nil {
 		_, _ = groupWriter.Flush()
 	}

@@ -1,7 +1,11 @@
 package ui
 
 import (
+	"os"
+
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/adapter"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/jeststd"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/jestsummary"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/jesttestrow"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/pkgframe"
@@ -16,6 +20,14 @@ import (
 // NewTestJestUI creates a new UI for displaying test results in a Jest-style format.
 // Today this is experimental thus requires opting into via configuration.
 func NewTestJestUI(config TestUIConfig) clio.UI {
+	if config.IsTTY {
+		return newDynamicJestUI(config)
+	}
+	return newSafeJestUI(config)
+}
+
+// newDynamicJestUI creates an interactive Bubble Tea UI for TTY environments.
+func newDynamicJestUI(config TestUIConfig) clio.UI {
 	rowCfg := jesttestrow.Config{
 		Color:                       config.Color,
 		ShowPackages:                true,
@@ -66,4 +78,38 @@ func NewTestJestUI(config TestUIConfig) clio.UI {
 		WithFooter(summaryHandler)
 
 	return NewTeaUI(c)
+}
+
+// newSafeJestUI creates a non-interactive UI for non-TTY environments (like CI).
+// This uses the jeststd handler which supports CI grouping for collapsible output.
+func newSafeJestUI(config TestUIConfig) clio.UI {
+	reportWriter := os.Stdout
+	notificationWriter := os.Stderr
+
+	h := jeststd.NewHandler(
+		reportWriter,
+		jeststd.Config{
+			Color:                       config.Color,
+			Grouping:                    config.Grouping,
+			HidePackagesWithNoTestFiles: !config.ShowPackagesWithNoTests,
+			Verbose:                     config.Verbose > 0,
+		},
+	)
+
+	ux := newCoreUI().
+		withNotifications().
+		withReports().
+		withHandlers(h).
+		withStdout(reportWriter).
+		withStderr(notificationWriter).
+		withHandledPresenters(
+			adapter.NewTestRun(
+				presenter.JestTestResultSummaryConfig{
+					Color:       config.Color,
+					ShowElapsed: true,
+				}.New,
+			),
+		)
+
+	return ux
 }

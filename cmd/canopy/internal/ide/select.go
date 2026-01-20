@@ -1,8 +1,10 @@
 package ide
 
+import "github.com/wagoodman/canopy/cmd/canopy/internal/env"
+
 // Select detects and returns the currently active IDE Context by checking
 // environment variables. Returns a dummy context if no supported IDE is detected.
-func Select(env EnvironmentGetter) Context {
+func Select(e env.EnvironmentGetter) Context {
 	var available []Context
 	if c, err := NewZed(nil); err == nil {
 		available = append(available, c)
@@ -17,7 +19,7 @@ func Select(env EnvironmentGetter) Context {
 	}
 
 	for _, c := range available {
-		if c.isActive(env) {
+		if c.isActive(e) {
 			return c
 		}
 	}
@@ -30,7 +32,7 @@ type dummy struct {
 }
 
 // isActive always returns true for the dummy context.
-func (d dummy) isActive(_ EnvironmentGetter) bool {
+func (d dummy) isActive(_ env.EnvironmentGetter) bool {
 	return true
 }
 

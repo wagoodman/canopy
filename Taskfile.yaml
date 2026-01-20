@@ -20,6 +20,7 @@ vars:
   GOLANGCILINT: "{{ .TOOL_DIR }}/golangci-lint"
   BINNY: "{{ .TOOL_DIR }}/binny"
   GORELEASER: "{{ .TOOL_DIR }}/goreleaser"
+  CANOPY: "{{ .TOOL_DIR }}/canopy"
 
   # used for snapshot builds
   OS:
@@ -160,9 +161,16 @@ tasks:
   unit:
     deps: [tmpdir]
     desc: Run unit tests
-    # TODO: switch to canopy release invocation
+    vars:
+      TEST_ARGS: ./cmd/...
+    silent: true
     cmds:
-      - "go test -coverprofile {{ .TMP_DIR }}/unit-coverage-details.txt ./cmd/..."
+      - |
+        if [ -n "$USE_GO_TEST" ]; then
+          go test {{ .TEST_ARGS }}
+        else
+          {{ .CANOPY }} test {{ .TEST_ARGS }}
+        fi
 
 
   ## Build-related targets #################################

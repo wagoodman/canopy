@@ -17,6 +17,7 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/event"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/fragment"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/state"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/env"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
 )
@@ -122,7 +123,7 @@ func newViewModel(userArgs []string) viewModel {
 			goxx.VerbosePackageConfig{
 				Color:            true,
 				PackageNameWidth: 50,
-				IDE:              ide.Select(&ide.OSEnvironmentGetter{}),
+				IDE:              ide.Select(&env.OSEnvironmentGetter{}),
 			},
 		)
 	} else {
@@ -131,7 +132,7 @@ func newViewModel(userArgs []string) viewModel {
 			goxx.QuietPackageConfig{
 				Color:            true,
 				PackageNameWidth: 50,
-				IDE:              ide.Select(&ide.OSEnvironmentGetter{}),
+				IDE:              ide.Select(&env.OSEnvironmentGetter{}),
 			},
 		)
 	}

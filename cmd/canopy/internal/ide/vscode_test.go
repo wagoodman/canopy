@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/env"
 )
 
 func TestNewVSCode(t *testing.T) {
@@ -53,7 +54,7 @@ func TestVSCode_isActive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			envGetter := NewSnapshotEnvironmentGetter(tt.env)
+			envGetter := env.NewSnapshotEnvironmentGetter(tt.env)
 			v := VSCode{}
 
 			result := v.isActive(envGetter)

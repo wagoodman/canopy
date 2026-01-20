@@ -411,7 +411,7 @@ func getUIConfig(appearance options.Appearance, clioCfg clio.Config, format opti
 		Writer:                  format.Writer,
 		IsTTY:                   format.IsTTY,
 		CombineMultipleRuns:     appearance.CombineMultipleRuns,
-		CIGrouping:              appearance.Grouping.ToGroupConfig(),
+		Grouping:                appearance.Grouping.ToGroupConfig(),
 	}
 }
 

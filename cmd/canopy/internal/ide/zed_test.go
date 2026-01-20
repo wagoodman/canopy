@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/env"
 )
 
 func TestNewZed(t *testing.T) {
@@ -60,7 +61,7 @@ func TestZed_isActive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			envGetter := NewSnapshotEnvironmentGetter(tt.env)
+			envGetter := env.NewSnapshotEnvironmentGetter(tt.env)
 			z := Zed{}
 
 			result := z.isActive(envGetter)
