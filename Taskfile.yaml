@@ -40,6 +40,9 @@ vars:
   VERSION:
     sh: git describe --dirty --always --tags
 
+env:
+  GNUMAKEFLAGS: '--no-print-directory'
+
 tasks:
 
   ## High-level tasks #################################
@@ -166,7 +169,7 @@ tasks:
     silent: true
     cmds:
       - |
-        if [ -n "$USE_GO_TEST" ]; then
+        if [ "$USE_GO_TEST" = "true" ]; then
           go test {{ .TEST_ARGS }}
         else
           {{ .CANOPY }} test {{ .TEST_ARGS }}
