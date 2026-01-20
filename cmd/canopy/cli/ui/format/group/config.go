@@ -18,6 +18,10 @@ type Config struct {
 	// even when the package itself isn't grouped. This helps reduce noise when a package
 	// has many passing tests and a few failures.
 	AcrossTests bool
+
+	// AcrossPackages groups consecutive passing packages together, reducing noise when
+	// there are many passing packages before a failure.
+	AcrossPackages bool
 }
 
 // ShouldGroup returns whether output should be grouped based on pass/fail status.

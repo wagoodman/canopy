@@ -237,6 +237,161 @@ func TestVerboseHandler_AcrossTestsGrouping(t *testing.T) {
 	}
 }
 
+func TestVerboseHandler_AcrossPackagesGrouping(t *testing.T) {
+	tests := []struct {
+		name                       string
+		groupConfig                group.Config
+		events                     []gotest.Event
+		wantGroupCount             int    // number of ::group:: markers expected
+		wantPassingPackagesGrouped bool   // whether "passing packages" group is expected
+		wantGroupTitle             string // expected group title if wantPassingPackagesGrouped
+	}{
+		{
+			name: "consecutive passing packages grouped when AcrossPackages enabled",
+			groupConfig: group.Config{
+				Formatter:      group.GitHub,
+				GroupPassed:    true,
+				GroupFailed:    false,
+				AcrossPackages: true,
+			},
+			// packages complete in reverse alphabetical order, so they accumulate
+			// before being flushed when the first (alphabetically) package completes
+			events: []gotest.Event{
+				// packages start (adds them to h.packages in alphabetical order)
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg1"}, Output: ""},
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg2"}, Output: ""},
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg3"}, Output: ""},
+				// all tests run
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg1", FuncName: "Test1"}, Output: "=== RUN   Test1\n"},
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg2", FuncName: "Test1"}, Output: "=== RUN   Test1\n"},
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg3", FuncName: "Test1"}, Output: "=== RUN   Test1\n"},
+				// tests pass
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg3", FuncName: "Test1"}, Output: "--- PASS: Test1 (0.01s)\n"},
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg2", FuncName: "Test1"}, Output: "--- PASS: Test1 (0.01s)\n"},
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg1", FuncName: "Test1"}, Output: "--- PASS: Test1 (0.01s)\n"},
+				// packages complete in reverse order: pkg3, pkg2, pkg1
+				// when pkg3 completes, render blocks on pkg1 (not yet complete)
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg3"}, Output: "ok  \texample.com/pkg3\t0.01s\n"},
+				// when pkg2 completes, render still blocks on pkg1
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg2"}, Output: "ok  \texample.com/pkg2\t0.01s\n"},
+				// when pkg1 completes, all 3 packages are done and grouped together
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg1"}, Output: "ok  \texample.com/pkg1\t0.01s\n"},
+			},
+			wantGroupCount:             1, // all 3 packages grouped together
+			wantPassingPackagesGrouped: true,
+			wantGroupTitle:             "3 passing packages",
+		},
+		{
+			name: "consecutive passing packages with failure in middle",
+			groupConfig: group.Config{
+				Formatter:      group.GitHub,
+				GroupPassed:    true,
+				GroupFailed:    false,
+				AcrossPackages: true,
+			},
+			// packages complete in reverse alphabetical order within each group
+			// pkg1, pkg2 (pass), pkg3 (fail), pkg4, pkg5 (pass)
+			events: []gotest.Event{
+				// packages start (adds them to h.packages in alphabetical order)
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg1"}, Output: ""},
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg2"}, Output: ""},
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg3"}, Output: ""},
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg4"}, Output: ""},
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg5"}, Output: ""},
+				// all tests run
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg1", FuncName: "Test1"}, Output: "=== RUN   Test1\n"},
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg2", FuncName: "Test1"}, Output: "=== RUN   Test1\n"},
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg3", FuncName: "Test1"}, Output: "=== RUN   Test1\n"},
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg4", FuncName: "Test1"}, Output: "=== RUN   Test1\n"},
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg5", FuncName: "Test1"}, Output: "=== RUN   Test1\n"},
+				// tests complete
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg2", FuncName: "Test1"}, Output: "--- PASS: Test1 (0.01s)\n"},
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg1", FuncName: "Test1"}, Output: "--- PASS: Test1 (0.01s)\n"},
+				{Action: gotest.FailAction, Reference: gotest.Reference{Package: "example.com/pkg3", FuncName: "Test1"}, Output: "--- FAIL: Test1 (0.01s)\n"},
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg5", FuncName: "Test1"}, Output: "--- PASS: Test1 (0.01s)\n"},
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg4", FuncName: "Test1"}, Output: "--- PASS: Test1 (0.01s)\n"},
+				// packages complete: pkg2 (blocked by pkg1), pkg1 (flush pkg1+pkg2), pkg3 (fail, flush, no group), pkg5 (blocked), pkg4 (flush pkg4+pkg5)
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg2"}, Output: "ok  \texample.com/pkg2\t0.01s\n"},
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg1"}, Output: "ok  \texample.com/pkg1\t0.01s\n"},
+				{Action: gotest.FailAction, Reference: gotest.Reference{Package: "example.com/pkg3"}, Output: "FAIL\texample.com/pkg3\t0.01s\n"},
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg5"}, Output: "ok  \texample.com/pkg5\t0.01s\n"},
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg4"}, Output: "ok  \texample.com/pkg4\t0.01s\n"},
+			},
+			wantGroupCount:             2, // two groups of consecutive passing packages
+			wantPassingPackagesGrouped: true,
+			wantGroupTitle:             "2 passing packages",
+		},
+		{
+			name: "single passing package not grouped as multi-package",
+			groupConfig: group.Config{
+				Formatter:      group.GitHub,
+				GroupPassed:    true,
+				GroupFailed:    false,
+				AcrossPackages: true,
+			},
+			events: []gotest.Event{
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg1", FuncName: "Test1"}, Output: "=== RUN   Test1\n"},
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg1", FuncName: "Test1"}, Output: "--- PASS: Test1 (0.01s)\n"},
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg1"}, Output: "ok  \texample.com/pkg1\t0.01s\n"},
+			},
+			wantGroupCount:             1, // single package gets individual grouping
+			wantPassingPackagesGrouped: false,
+		},
+		{
+			name: "AcrossPackages disabled - individual package grouping",
+			groupConfig: group.Config{
+				Formatter:      group.GitHub,
+				GroupPassed:    true,
+				GroupFailed:    false,
+				AcrossPackages: false,
+			},
+			events: []gotest.Event{
+				// package 1
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg1", FuncName: "Test1"}, Output: "=== RUN   Test1\n"},
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg1", FuncName: "Test1"}, Output: "--- PASS: Test1 (0.01s)\n"},
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg1"}, Output: "ok  \texample.com/pkg1\t0.01s\n"},
+				// package 2
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg2", FuncName: "Test1"}, Output: "=== RUN   Test1\n"},
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg2", FuncName: "Test1"}, Output: "--- PASS: Test1 (0.01s)\n"},
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg2"}, Output: "ok  \texample.com/pkg2\t0.01s\n"},
+				// package 3
+				{Action: gotest.RunAction, Reference: gotest.Reference{Package: "example.com/pkg3", FuncName: "Test1"}, Output: "=== RUN   Test1\n"},
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg3", FuncName: "Test1"}, Output: "--- PASS: Test1 (0.01s)\n"},
+				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg3"}, Output: "ok  \texample.com/pkg3\t0.01s\n"},
+			},
+			wantGroupCount:             3, // each package gets its own group
+			wantPassingPackagesGrouped: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			h := NewVerboseHandler(&buf, PackageConfig{
+				Grouping: tt.groupConfig,
+			})
+
+			// process all events
+			for _, e := range tt.events {
+				err := h.(*verboseHandler).OnGoTestEvent(e)
+				assert.NoError(t, err)
+			}
+
+			output := buf.String()
+
+			// count ::group:: markers
+			groupCount := strings.Count(output, "::group::")
+			assert.Equal(t, tt.wantGroupCount, groupCount, "unexpected group count in output:\n%s", output)
+
+			if tt.wantPassingPackagesGrouped {
+				assert.Contains(t, output, tt.wantGroupTitle, "expected group title %q in output:\n%s", tt.wantGroupTitle, output)
+			} else {
+				assert.NotContains(t, output, "passing packages", "did not expect 'passing packages' group in output:\n%s", output)
+			}
+		})
+	}
+}
+
 func TestQuietHandler_CIGrouping(t *testing.T) {
 	tests := []struct {
 		name           string

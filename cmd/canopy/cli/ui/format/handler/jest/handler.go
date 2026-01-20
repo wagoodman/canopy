@@ -106,6 +106,12 @@ func (h *jestHandler) render() {
 	pkgs := h.packages.Values()
 	sort.Sort(gotest.References(pkgs))
 
+	// check if across-packages grouping is enabled
+	if h.groupConfig.AcrossPackages && h.groupConfig.Formatter != nil {
+		h.renderWithPackageGrouping(pkgs)
+		return
+	}
+
 	for len(pkgs) > 0 {
 		pkgRef := pkgs[0]
 		action := h.result.ReferenceConclusiveAction(pkgRef)
@@ -135,6 +141,72 @@ func (h *jestHandler) render() {
 		h.packages.Delete(pkgRef)
 		pkgs = h.packages.Values()
 	}
+}
+
+// renderWithPackageGrouping renders packages, grouping consecutive passing packages together.
+// This helps reduce noise when there are many passing packages before a failure by collapsing
+// consecutive passing packages into a single collapsible group.
+func (h *jestHandler) renderWithPackageGrouping(pkgs []gotest.Reference) {
+	var passingBuffer []gotest.Reference
+
+	flushPassing := func() {
+		if len(passingBuffer) == 0 {
+			return
+		}
+		if len(passingBuffer) == 1 {
+			// single passing package - output with individual grouping
+			pkgRef := passingBuffer[0]
+			action := h.result.ReferenceConclusiveAction(pkgRef)
+			writer := h.writer
+			var groupWriter *group.Writer
+			if h.groupConfig.ShouldGroup(true) {
+				groupWriter = group.NewWriter(h.writer, pkgRef.Package, h.groupConfig.Formatter)
+				writer = groupWriter
+			}
+			h.outputPackage(pkgRef, writer, action)
+			if groupWriter != nil {
+				_, _ = groupWriter.Flush()
+			}
+		} else {
+			// multiple consecutive passing packages - group them together
+			title := fmt.Sprintf("%d passing packages", len(passingBuffer))
+			groupWriter := group.NewWriter(h.writer, title, h.groupConfig.Formatter)
+			for _, pkgRef := range passingBuffer {
+				action := h.result.ReferenceConclusiveAction(pkgRef)
+				h.outputPackage(pkgRef, groupWriter, action)
+			}
+			_, _ = groupWriter.Flush()
+		}
+		passingBuffer = nil
+	}
+
+	for len(pkgs) > 0 {
+		pkgRef := pkgs[0]
+		action := h.result.ReferenceConclusiveAction(pkgRef)
+
+		if !action.Completed() {
+			// flush accumulated passing packages before blocking
+			flushPassing()
+			return
+		}
+
+		passed := action == gotest.PassAction
+
+		if passed && h.groupConfig.GroupPassed {
+			passingBuffer = append(passingBuffer, pkgRef)
+		} else {
+			// flush any accumulated passing packages
+			flushPassing()
+			// output this non-passing package directly (not grouped at package level)
+			h.outputPackage(pkgRef, h.writer, action)
+		}
+
+		h.packages.Delete(pkgRef)
+		pkgs = h.packages.Values()
+	}
+
+	// flush remaining passing packages
+	flushPassing()
 }
 
 // outputPackage writes jest-style output for a completed package.

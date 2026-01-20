@@ -141,6 +141,13 @@ func (h *verboseHandler) render() {
 	// this is the reason why we cannot use a package handler (since order of packages is important, independent of the order of completion)
 	pkgs := h.packages.Values()
 	sort.Sort(gotest.References(pkgs))
+
+	// check if across-packages grouping is enabled
+	if h.groupConfig.AcrossPackages && h.groupConfig.Formatter != nil {
+		h.renderWithPackageGrouping(pkgs)
+		return
+	}
+
 	for len(pkgs) > 0 {
 		pkgRef := pkgs[0]
 		action := h.result.ReferenceConclusiveAction(pkgRef)
@@ -157,6 +164,60 @@ func (h *verboseHandler) render() {
 		h.packages.Delete(pkgRef)
 		pkgs = h.packages.Values()
 	}
+}
+
+// renderWithPackageGrouping renders packages, grouping consecutive passing packages together.
+// This helps reduce noise when there are many passing packages before a failure by collapsing
+// consecutive passing packages into a single collapsible group.
+func (h *verboseHandler) renderWithPackageGrouping(pkgs []gotest.Reference) {
+	var passingBuffer []gotest.Reference
+
+	flushPassing := func() {
+		if len(passingBuffer) == 0 {
+			return
+		}
+		if len(passingBuffer) == 1 {
+			// single passing package - output with individual grouping
+			h.outputPackage(passingBuffer[0])
+		} else {
+			// multiple consecutive passing packages - group them together
+			title := fmt.Sprintf("%d passing packages", len(passingBuffer))
+			groupWriter := group.NewWriter(h.writer, title, h.groupConfig.Formatter)
+			for _, pkgRef := range passingBuffer {
+				h.outputPackageToWriter(pkgRef, groupWriter)
+			}
+			_, _ = groupWriter.Flush()
+		}
+		passingBuffer = nil
+	}
+
+	for len(pkgs) > 0 {
+		pkgRef := pkgs[0]
+		action := h.result.ReferenceConclusiveAction(pkgRef)
+
+		if !action.Completed() {
+			// flush accumulated passing packages before blocking
+			flushPassing()
+			return
+		}
+
+		passed := action == gotest.PassAction
+
+		if passed && h.groupConfig.GroupPassed {
+			passingBuffer = append(passingBuffer, pkgRef)
+		} else {
+			// flush any accumulated passing packages
+			flushPassing()
+			// output this non-passing package directly (not grouped at package level)
+			h.outputPackageToWriter(pkgRef, h.writer)
+		}
+
+		h.packages.Delete(pkgRef)
+		pkgs = h.packages.Values()
+	}
+
+	// flush remaining passing packages
+	flushPassing()
 }
 
 // outputPackage writes all output for a package, including test logs and conclusions.
