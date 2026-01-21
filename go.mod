@@ -24,7 +24,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/jedib0t/go-pretty/v6 v6.6.7
 	github.com/junegunn/fzf v0.64.0
-	github.com/lindell/go-ordered-set v1.0.2
+	github.com/lindell/go-ordered-set v1.1.0
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/magiconair/properties v1.8.7
 	github.com/muesli/termenv v0.16.0
