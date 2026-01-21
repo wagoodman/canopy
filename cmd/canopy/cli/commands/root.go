@@ -51,9 +51,6 @@ func defaultRootOptions() *rootConfig {
 			withCombineMultipleRuns(), // we want a single summary for multiple running sessions
 		),
 	}
-
-	c.Test.Specifiers = []string{"./..."} // default to all project packages
-
 	return &c
 }
 
@@ -77,7 +74,7 @@ func Root(app clio.Application) *cobra.Command {
 			// get the final set of packages to use
 			testPkgs, err := golist.SelectPackages(opts.Test.Specifiers, opts.Test.ExcludePatterns)
 			if err != nil {
-				return fmt.Errorf("unble to get test paths: %w", err)
+				return fmt.Errorf("unable to get test paths: %w", err)
 			}
 			if testPkgs.Size() == 0 {
 				return fmt.Errorf("no packages selected to test (given %q)", opts.Test.Specifiers)

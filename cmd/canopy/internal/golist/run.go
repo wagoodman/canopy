@@ -1,6 +1,7 @@
 package golist
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -28,6 +29,9 @@ func run(moreArgs []string, fn processorFn, pkgs ...string) error {
 		return fmt.Errorf("error creating stdout pipe: %v", err)
 	}
 
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("error starting command: %v", err)
 	}
@@ -40,6 +44,11 @@ func run(moreArgs []string, fn processorFn, pkgs ...string) error {
 		// handle exit gracefully (0 or non-0)
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
+			msg := stderrBuf.String()
+			log.WithFields("code", exitErr.ExitCode(), "message", msg).Trace("command exited with non-zero code")
+			if msg != "" {
+				return errors.New(msg)
+			}
 			return fmt.Errorf("error running command: %v", exitErr)
 		}
 		return fmt.Errorf("error running command: %v", err)

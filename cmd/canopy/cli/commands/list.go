@@ -78,7 +78,7 @@ func List(app clio.Application) *cobra.Command {
 func runList(cfg listConfig) error {
 	testPkgs, err := golist.SelectPackages(cfg.Specifiers, cfg.ExcludePatterns)
 	if err != nil {
-		return fmt.Errorf("unble to get test paths: %w", err)
+		return fmt.Errorf("unable to get test paths: %w", err)
 	}
 	if testPkgs.Size() == 0 {
 		return fmt.Errorf("no packages selected (given %q)", cfg.Specifiers)

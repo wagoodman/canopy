@@ -18,17 +18,9 @@ import (
 
 var _ fangs.FlagAdder = (*formatCoreConfig)(nil)
 
-// canopy show FILE                          Read go test json output from a file and reformat as go-std to stdout
-// go test -json | canopy show -o jest       Get test output from stdin and reformat as jest to stdout
-// canopy show --store FILE                  Import into DB, otherwise reformat as go-std to stdout
-//
-// config:
-// - test.format
-// - test.appearance
-// - test.open-on-failure
-// ^ ... by doing all of these you can use --profile to select test formats and behavior without test run and build flags
-// ... alternative name: view
-// show vs view vs open... we're getting a little too close to each other
+// canopy format test.json                     Read go test json output from a file and reformat as go-std to stdout
+// go test -json | canopy format -o jest       Get test output from stdin and reformat as jest to stdout
+// canopy format --store FILE                  Import into DB, otherwise reformat as go-std to stdout
 
 // formatCoreConfig holds all configuration options for the format command, including where to read test output
 // and how to display it.
@@ -37,16 +29,20 @@ type formatCoreConfig struct {
 	options.Experiment `yaml:"exp" json:"exp" mapstructure:"exp"`
 	options.Store      `yaml:"store" json:"store" mapstructure:"store"`
 
-	Test showTestConfig `yaml:"test" json:"test" mapstructure:"test"`
-	Show formatConfig   `yaml:"show" json:"show" mapstructure:"show"`
+	Test   formatTestConfig `yaml:"test" json:"test" mapstructure:"test"`
+	Format formatConfig     `yaml:"format" json:"format" mapstructure:"format"`
 }
 
 // formatConfig specifies the source file for test output (file path or "-" for stdin).
 type formatConfig struct {
-	// File specifies the path to read test JSON output from, or "-" for stdin.
+	// File specifies the path to read test JSON output from, or "-" for stdin (this is the format command argument).
 	File string `yaml:"file" json:"file" mapstructure:"file"`
 
 	reader io.ReadCloser
+}
+
+func (o *formatConfig) DescribeFields(descriptions clio.FieldDescriptionSet) {
+	descriptions.Add(&o.File, "the file path to read go test -json output from; use '-' to read from stdin (this is the format command argument)")
 }
 
 // PostLoad opens the file or stdin for reading test JSON output based on the File field.
@@ -71,19 +67,19 @@ func (o *formatConfig) PostLoad() error {
 
 // TODO: make this a shared struct between test and show commands... this is brittle when using with the config command
 
-// showTestConfig contains formatting and display options for reformatting test output.
-type showTestConfig struct {
+// formatTestConfig contains formatting and display options for reformatting test output.
+type formatTestConfig struct {
 	options.Format     `yaml:",inline" json:"" mapstructure:",squash"`
 	options.Open       `yaml:",inline" json:"" mapstructure:",squash"`
 	options.Coverage   `yaml:",inline" json:"" mapstructure:",squash"`
 	options.Appearance `yaml:"appearance" json:"appearance" mapstructure:"appearance"`
 }
 
-func defaultShowOptions() *formatCoreConfig {
+func defaultFormatOptions() *formatCoreConfig {
 	return &formatCoreConfig{
 		Experiment: options.DefaultExperiment(),
 		Store:      options.DefaultStore(),
-		Test: showTestConfig{
+		Test: formatTestConfig{
 			Format:     options.DefaultTestFormat(),
 			Appearance: options.DefaultAppearance(),
 		},
@@ -93,12 +89,12 @@ func defaultShowOptions() *formatCoreConfig {
 // Format creates a command to reformat previously generated `go test -json` output using different output formats.
 // It accepts input from a file or stdin and can optionally store results in a database session.
 func Format(app clio.Application) *cobra.Command {
-	opts := defaultShowOptions()
+	opts := defaultFormatOptions()
 
 	var logTestFailuresAsErrors bool
 	cmd := &cobra.Command{
 		Use:   "format [FILE]",
-		Short: "Show formatted test output from a given `go test -json` input (from a file or stdin)",
+		Short: "Format formatted test output from a given `go test -json` input (from a file or stdin)",
 		Args: func(_ *cobra.Command, args []string) error {
 			switch len(args) {
 			case 0:
@@ -112,11 +108,11 @@ func Format(app clio.Application) *cobra.Command {
 				return fmt.Errorf("too many arguments; accepts only a single argument for a go test json file")
 			}
 
-			opts.Show.File = args[0]
+			opts.Format.File = args[0]
 			return nil
 		},
 		PreRunE: func(_ *cobra.Command, _ []string) error {
-			if opts.Show.File == "-" {
+			if opts.Format.File == "-" {
 				log.Debug("reading test json from stdin")
 			}
 			var err error
@@ -172,7 +168,7 @@ func runFormat(ctx context.Context, app clio.Application, coreCfg formatCoreConf
 				TrackOtherOutput:   false,
 				TrackFailingOutput: false,
 			},
-			Reader: coreCfg.Show.reader,
+			Reader: coreCfg.Format.reader,
 		},
 	)
 

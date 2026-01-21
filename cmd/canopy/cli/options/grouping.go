@@ -3,6 +3,8 @@ package options
 import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/group"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ci"
+
+	"github.com/anchore/clio"
 )
 
 // Grouping configures collapsible output groups for CI environments like GitHub Actions,
@@ -36,6 +38,14 @@ func DefaultGrouping() Grouping {
 		AcrossTests:    true,
 		AcrossPackages: true,
 	}
+}
+
+func (o *Grouping) DescribeFields(descriptions clio.FieldDescriptionSet) {
+	descriptions.Add(&o.Style, "the CI grouping style to use: auto (detect from environment), github, gitlab, azure, off")
+	descriptions.Add(&o.Passed, "whether to group passed output (collapsed by default)")
+	descriptions.Add(&o.Failed, "whether to group failed output")
+	descriptions.Add(&o.AcrossTests, "whether to group consecutive passing/failing test conclusions within a package")
+	descriptions.Add(&o.AcrossPackages, "whether to group consecutive passing/failing packages together")
 }
 
 // ToAPIConfig converts Grouping to a group.Config for use with the grouping writer.
