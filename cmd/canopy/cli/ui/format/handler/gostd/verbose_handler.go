@@ -208,8 +208,8 @@ func (h *verboseHandler) writerForPackage(pkgRef gotest.Reference) (io.Writer, f
 // outputPackageToWriter writes all output for a package to the specified writer.
 func (h *verboseHandler) outputPackageToWriter(pkgRef gotest.Reference, writer io.Writer) {
 	for _, testRef := range h.result.Children(pkgRef) {
-		// output run/pause/continue and logs
-		h.outputTestToWriter(testRef, writer, false, func(e gotest.Event) bool {
+		// output run/pause/continue and logs (forConclusions=false, indent=false)
+		h.outputTestToWriter(testRef, writer, false, false, func(e gotest.Event) bool {
 			return !output.HasConclusionMarking(e.Output)
 		})
 	}
@@ -221,9 +221,9 @@ func (h *verboseHandler) outputPackageToWriter(pkgRef gotest.Reference, writer i
 	if h.groupConfig.AcrossTests && h.groupConfig.Formatter != nil && !isGroupWriter && !isStreamingGroupWriter {
 		h.outputConclusionsWithGrouping(pkgRef, writer)
 	} else {
-		// direct output without grouping
+		// direct output without grouping (forConclusions=true, indent=true)
 		for _, testRef := range h.result.Children(pkgRef) {
-			h.outputTestToWriter(testRef, writer, true, func(e gotest.Event) bool {
+			h.outputTestToWriter(testRef, writer, true, true, func(e gotest.Event) bool {
 				return output.HasConclusionMarking(e.Output)
 			})
 		}
@@ -253,19 +253,19 @@ func (h *verboseHandler) outputConclusionsWithGrouping(pkgRef gotest.Reference, 
 
 	flushGrouped := func() {
 		if len(groupBuffer) <= 1 {
-			// single test or empty - output without grouping
+			// single test or empty - output without grouping (forConclusions=true, indent=true)
 			for _, ref := range groupBuffer {
-				h.outputTestToWriter(ref, writer, true, func(e gotest.Event) bool {
+				h.outputTestToWriter(ref, writer, true, true, func(e gotest.Event) bool {
 					return output.HasConclusionMarking(e.Output)
 				})
 			}
 		} else {
-			// multiple consecutive groupable tests - group them
+			// multiple consecutive groupable tests - group them (forConclusions=true, indent=true)
 			statusLabel := h.groupConfig.GroupedStatusLabel()
 			title := fmt.Sprintf("%d %s tests", len(groupBuffer), statusLabel)
 			groupWriter := group.NewWriter(writer, title, h.groupConfig.Formatter)
 			for _, ref := range groupBuffer {
-				h.outputTestToWriter(ref, groupWriter, true, func(e gotest.Event) bool {
+				h.outputTestToWriter(ref, groupWriter, true, true, func(e gotest.Event) bool {
 					return output.HasConclusionMarking(e.Output)
 				})
 			}
@@ -282,8 +282,8 @@ func (h *verboseHandler) outputConclusionsWithGrouping(pkgRef gotest.Reference, 
 		} else {
 			// flush any accumulated tests
 			flushGrouped()
-			// output this test directly
-			h.outputTestToWriter(testRef, writer, true, func(e gotest.Event) bool {
+			// output this test directly (forConclusions=true, indent=true)
+			h.outputTestToWriter(testRef, writer, true, true, func(e gotest.Event) bool {
 				return output.HasConclusionMarking(e.Output)
 			})
 		}
@@ -294,26 +294,31 @@ func (h *verboseHandler) outputConclusionsWithGrouping(pkgRef gotest.Reference, 
 }
 
 // outputTestToWriter writes output for a test and its children to the specified writer.
-func (h *verboseHandler) outputTestToWriter(testRef gotest.Reference, writer io.Writer, indent bool, include func(gotest.Event) bool) {
+// Parameters:
+// - forConclusions: true when outputting conclusion events (PASS/FAIL/SKIP), false for execution events (RUN/PAUSE/CONT)
+// - indent: whether to indent output based on test hierarchy depth
+func (h *verboseHandler) outputTestToWriter(testRef gotest.Reference, writer io.Writer, forConclusions, indent bool, include func(gotest.Event) bool) {
 	children := h.result.Children(testRef)
 
 	// check if we should apply AcrossCases grouping:
 	// - AcrossCases is enabled
 	// - formatter is set
 	// - this test has children
+	// - we're outputting conclusions, not execution events (RUN/PAUSE/CONT)
 	// - not already writing to a group (avoid nesting)
 	_, isGroupWriter := writer.(*group.Writer)
 	_, isStreamingGroupWriter := writer.(*group.StreamingGroupWriter)
 	shouldApplyCaseGrouping := h.groupConfig.AcrossCases &&
 		h.groupConfig.Formatter != nil &&
 		len(children) > 0 &&
+		forConclusions &&
 		!isGroupWriter && !isStreamingGroupWriter
 
 	if shouldApplyCaseGrouping {
 		// output this test's own events (not children's)
 		h.outputOwnEvents(testRef, writer, indent, include)
 		// output children with grouping applied
-		h.outputChildrenWithCaseGrouping(testRef, writer, indent, include)
+		h.outputChildrenWithCaseGrouping(testRef, writer, forConclusions, indent, include)
 	} else {
 		// standard behavior: collect all events from test and children
 		outputEvents := h.getEvents(testRef, include)
@@ -348,7 +353,7 @@ func (h *verboseHandler) outputOwnEvents(testRef gotest.Reference, writer io.Wri
 // outputChildrenWithCaseGrouping outputs children of a test, grouping consecutive
 // children that match the grouping config (similar to outputConclusionsWithGrouping
 // but for subtests within a parent test).
-func (h *verboseHandler) outputChildrenWithCaseGrouping(testRef gotest.Reference, writer io.Writer, indent bool, include func(gotest.Event) bool) {
+func (h *verboseHandler) outputChildrenWithCaseGrouping(testRef gotest.Reference, writer io.Writer, forConclusions, indent bool, include func(gotest.Event) bool) {
 	children := h.result.Children(testRef)
 
 	var groupBuffer []gotest.Reference
@@ -362,7 +367,7 @@ func (h *verboseHandler) outputChildrenWithCaseGrouping(testRef gotest.Reference
 		title := statusLabel + " cases"
 		groupWriter := group.NewWriter(writer, title, h.groupConfig.Formatter)
 		for _, ref := range groupBuffer {
-			h.outputTestToWriter(ref, groupWriter, indent, include)
+			h.outputTestToWriter(ref, groupWriter, forConclusions, indent, include)
 		}
 		_, _ = groupWriter.Flush()
 		groupBuffer = nil
@@ -377,7 +382,7 @@ func (h *verboseHandler) outputChildrenWithCaseGrouping(testRef gotest.Reference
 			// flush any accumulated cases
 			flushGrouped()
 			// output this case directly (it may recursively apply case grouping to its children)
-			h.outputTestToWriter(childRef, writer, indent, include)
+			h.outputTestToWriter(childRef, writer, forConclusions, indent, include)
 		}
 	}
 

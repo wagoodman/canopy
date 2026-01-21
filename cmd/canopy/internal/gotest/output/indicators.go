@@ -49,44 +49,22 @@ func IsLogLine(output string) bool {
 	return logLinePattern.MatchString(output)
 }
 
-// HasTestPassMarking returns true if the output contains a test pass marker.
-func HasTestPassMarking(output string) bool {
-	return strings.HasPrefix(strings.TrimSpace(output), "--- PASS:")
-}
-
-// HasPackageCoverageMarking returns true if the output contains package coverage information.
-func HasPackageCoverageMarking(output string) bool {
-	return strings.HasPrefix(strings.TrimSpace(output), "coverage:")
-}
-
-// HasPackageOKMarking returns true if the output indicates a package passed.
-func HasPackageOKMarking(output string) bool {
-	return strings.HasPrefix(output, "ok")
-}
-
 // HasUnknownPackageMarking returns true if the output indicates an unknown or untestable package.
 func HasUnknownPackageMarking(output string) bool {
 	return strings.HasPrefix(output, "?") || strings.HasPrefix(output, "\t")
 }
 
-// HasPackagePassMarking returns true if the output contains a package-level PASS marker.
-func HasPackagePassMarking(output string) bool {
-	return strings.HasPrefix(strings.TrimSpace(output), "PASS")
+// Execution state markings...
+// These are used to indicate when there has been a lifecycle event in test execution (run/pause/continue).
+
+// HasStateMarking returns true if the output contains a test state transition marker.
+func HasStateMarking(output string) bool {
+	return strings.HasPrefix(strings.TrimSpace(output), "=== ")
 }
 
 // HasRunMarking returns true if the output indicates a test is starting.
 func HasRunMarking(output string) bool {
 	return strings.HasPrefix(strings.TrimSpace(output), "=== RUN")
-}
-
-// HasConclusionMarking returns true if the output contains a test conclusion marker.
-func HasConclusionMarking(output string) bool {
-	return strings.HasPrefix(strings.TrimSpace(output), "--- ")
-}
-
-// HasStateMarking returns true if the output contains a test state transition marker.
-func HasStateMarking(output string) bool {
-	return strings.HasPrefix(strings.TrimSpace(output), "=== ")
 }
 
 // HasContinueMarking returns true if the output indicates a test continuation after pause.
@@ -99,9 +77,30 @@ func HasPauseMarking(output string) bool {
 	return strings.HasPrefix(strings.TrimSpace(output), "=== PAUSE")
 }
 
+// Conclusion markings...
+// These are used to indicate the result of a test (pass/fail/skip).
+
+// HasConclusionMarking returns true if the output contains a test conclusion marker.
+func HasConclusionMarking(output string) bool {
+	return strings.HasPrefix(strings.TrimSpace(output), "--- ")
+}
+
 // HasFailedTestMarking returns true if the output contains a test failure marker.
 func HasFailedTestMarking(output string) bool {
 	return strings.HasPrefix(strings.TrimSpace(output), "--- FAIL:")
+}
+
+// HasTestPassMarking returns true if the output contains a test pass marker.
+func HasTestPassMarking(output string) bool {
+	return strings.HasPrefix(strings.TrimSpace(output), "--- PASS:")
+}
+
+// Package level conclusion markings...
+// These are used to indicate the result of a package's tests (pass/fail).
+
+// HasPackagePassMarking returns true if the output contains a package-level PASS marker.
+func HasPackagePassMarking(output string) bool {
+	return strings.HasPrefix(strings.TrimSpace(output), "PASS")
 }
 
 // HasFailedPackageMarking returns true if the output indicates a package failure.
@@ -113,6 +112,18 @@ func HasFailedPackageMarking(output string) bool {
 func HasFailedPackageTrailer(output string) bool {
 	return strings.HasPrefix(output, "FAIL\n")
 }
+
+// HasPackageCoverageMarking returns true if the output contains package coverage information.
+func HasPackageCoverageMarking(output string) bool {
+	return strings.HasPrefix(strings.TrimSpace(output), "coverage:")
+}
+
+// HasPackageOKMarking returns true if the output indicates a package passed.
+func HasPackageOKMarking(output string) bool {
+	return strings.HasPrefix(output, "ok")
+}
+
+// Other markings...
 
 // HasPanicMarking returns true if the output indicates a panic occurred.
 func HasPanicMarking(output string) bool {
