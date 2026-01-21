@@ -331,7 +331,8 @@ func filterEvents(events []gotest.Event, include func(gotest.Event) bool) []gote
 	return filtered
 }
 
-// String returns any remaining buffered output (none in this implementation).
+// String returns any remaining buffered output and closes any open streaming group.
 func (h *verboseHandler) String() string {
+	h.grouper.Close()
 	return ""
 }

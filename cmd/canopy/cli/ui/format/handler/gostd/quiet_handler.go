@@ -271,8 +271,9 @@ func (h *quietHandler) getEvents(testRef gotest.Reference, include func(gotest.R
 	return outputEvents
 }
 
-// String returns any remaining buffered output (none in this implementation).
+// String returns any remaining buffered output and closes any open streaming group.
 func (h *quietHandler) String() string {
+	h.grouper.Close()
 	return ""
 }
 

@@ -96,8 +96,14 @@ func (r *StreamingGroupRenderer[R]) RenderWithGrouping(refs []R, deleteFn Delete
 
 		refs = deleteFn(ref)
 	}
+	// note: we do NOT close the streaming group here because refs being empty
+	// doesn't mean all packages are done - it just means all currently known
+	// packages have been processed. More packages may arrive later (e.g., with
+	// glob patterns like ./...). Call Close() explicitly when done.
+}
 
-	// all done - close any open group
+// Close closes any open streaming group. Should be called when rendering is complete.
+func (r *StreamingGroupRenderer[R]) Close() {
 	if r.streamingGroup != nil && r.streamingGroup.Started() {
 		_ = r.streamingGroup.End()
 		r.streamingGroup = nil
