@@ -60,6 +60,10 @@ type GoSummaryConfig struct {
 	StalePackageDuration time.Duration
 
 	CombineMultipleRuns bool
+
+	// HidePackagesWithNoTests indicates whether packages with no tests are being hidden from display.
+	// When true and there are hidden packages, the summary footer will show a count of such packages.
+	HidePackagesWithNoTests bool
 }
 
 func DefaultGoTestResultSummaryConfig() GoSummaryConfig {
@@ -149,6 +153,11 @@ func (c GoSummaryConfig) WithStalePackageDuration(duration time.Duration) GoSumm
 
 func (c GoSummaryConfig) WithCombineMultipleRuns(combine bool) GoSummaryConfig {
 	c.CombineMultipleRuns = combine
+	return c
+}
+
+func (c GoSummaryConfig) WithHidePackagesWithNoTests(hide bool) GoSummaryConfig {
+	c.HidePackagesWithNoTests = hide
 	return c
 }
 
@@ -387,9 +396,18 @@ func (s GoTestResultSummary) summaryFooter() string {
 		sections = append(sections, fmt.Sprintf("%d packages", len(s.results.Packages())))
 	}
 
-	sections = append(sections, s.renderStats(s.results.TestStats(), false))
+	stats := s.results.TestStats()
+	sections = append(sections, s.renderStats(stats, false))
 
-	summary := strings.Join(sections, ", ")
+	if s.config.HidePackagesWithNoTests && stats.PackagesWithNoTests > 0 {
+		label := "package"
+		if stats.PackagesWithNoTests > 1 {
+			label = "packages"
+		}
+		sections = append(sections, s.style.Aux.Render(fmt.Sprintf("(%d %s with no tests)", stats.PackagesWithNoTests, label)))
+	}
+
+	summary := strings.Join(sections, " ")
 	wideSummary := lipgloss.NewStyle().Width(s.config.PackageNameWidth).Render(summary)
 
 	result += wideSummary
