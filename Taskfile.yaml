@@ -179,6 +179,9 @@ tasks:
     deps: [tools]
     desc: Run demo tests
     silent: true
+    env:
+      # make this a little nicer in CI to see colors
+      FORCE_COLOR: "true"
     # we don't want to fail, only run the tests and show what it looks like in CI
     cmd: '{{ .CANOPY }} test ./internal/test-fixtures/... || true'
 

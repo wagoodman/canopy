@@ -68,3 +68,73 @@ func TestGitLab_UniqueIDs(t *testing.T) {
 	assert.NotEmpty(t, name2)
 	assert.NotEqual(t, name1, name2, "section names should be unique")
 }
+
+func TestNewStreamingMarkers_GitHub(t *testing.T) {
+	markers := NewStreamingMarkers(GitHub, "Test Title")
+
+	assert.Equal(t, "::group::Test Title\n", markers.Start)
+	assert.Equal(t, "::endgroup::\n", markers.End)
+}
+
+func TestNewStreamingMarkers_Azure(t *testing.T) {
+	markers := NewStreamingMarkers(Azure, "Azure Title")
+
+	assert.Equal(t, "##[group]Azure Title\n", markers.Start)
+	assert.Equal(t, "##[endgroup]\n", markers.End)
+}
+
+func TestNewStreamingMarkers_GitLab(t *testing.T) {
+	markers := NewStreamingMarkers(GitLab, "GitLab Title")
+
+	// GitLab markers contain timestamps and section IDs
+	assert.Contains(t, markers.Start, "section_start:")
+	assert.Contains(t, markers.Start, "[collapsed=true]")
+	assert.Contains(t, markers.Start, "GitLab Title")
+	assert.Contains(t, markers.End, "section_end:")
+
+	// the section names should match between start and end
+	extractSectionName := func(s string) string {
+		prefix := "section_start:"
+		if strings.Contains(s, "section_end:") {
+			prefix = "section_end:"
+		}
+		start := strings.Index(s, prefix)
+		if start == -1 {
+			return ""
+		}
+		s = s[start+len(prefix):]
+		colonIdx := strings.Index(s, ":")
+		if colonIdx == -1 {
+			return ""
+		}
+		s = s[colonIdx+1:]
+		// find end of name (either [ or \r)
+		endIdx := strings.IndexAny(s, "[\r")
+		if endIdx == -1 {
+			return s
+		}
+		return s[:endIdx]
+	}
+
+	startName := extractSectionName(markers.Start)
+	endName := extractSectionName(markers.End)
+
+	assert.NotEmpty(t, startName)
+	assert.NotEmpty(t, endName)
+	assert.Equal(t, startName, endName, "section names should match between start and end")
+}
+
+func TestNewStreamingMarkers_NilFormatter(t *testing.T) {
+	markers := NewStreamingMarkers(nil, "Title")
+
+	assert.Empty(t, markers.Start)
+	assert.Empty(t, markers.End)
+}
+
+func TestNewStreamingMarkers_NoopFormatter(t *testing.T) {
+	markers := NewStreamingMarkers(noop, "Title")
+
+	// noop doesn't include the placeholder content, so markers are empty
+	assert.Empty(t, markers.Start)
+	assert.Empty(t, markers.End)
+}

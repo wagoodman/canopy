@@ -139,9 +139,9 @@ func TestVerboseHandler_AcrossTestsGrouping(t *testing.T) {
 				// package pass
 				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg"}, Output: "ok  \texample.com/pkg\t0.03s\n"},
 			},
-			wantGroupCount:          2, // package group + passed tests group
-			wantPassingTestsGrouped: true,
-			wantGroupTitle:          "3 passed tests",
+			// package passes → package is grouped. AcrossTests grouping is skipped to avoid nesting.
+			wantGroupCount:          1, // only package group (test grouping skipped to avoid nesting)
+			wantPassingTestsGrouped: false,
 		},
 		{
 			name: "consecutive passing tests with failure in middle - two groups",
@@ -279,7 +279,7 @@ func TestVerboseHandler_AcrossPackagesGrouping(t *testing.T) {
 			},
 			wantGroupCount:             1, // all 3 packages grouped together
 			wantPassingPackagesGrouped: true,
-			wantGroupTitle:             "3 passed packages",
+			wantGroupTitle:             "passed packages", // streaming uses count-less title
 		},
 		{
 			name: "consecutive passing packages with failure in middle",
@@ -319,10 +319,10 @@ func TestVerboseHandler_AcrossPackagesGrouping(t *testing.T) {
 			},
 			wantGroupCount:             2, // two groups of consecutive passed packages
 			wantPassingPackagesGrouped: true,
-			wantGroupTitle:             "2 passed packages",
+			wantGroupTitle:             "passed packages", // streaming uses count-less title
 		},
 		{
-			name: "single passing package not grouped as multi-package",
+			name: "single passing package uses streaming group",
 			groupConfig: group.Config{
 				Formatter:      group.GitHub,
 				GroupPassed:    true,
@@ -334,8 +334,10 @@ func TestVerboseHandler_AcrossPackagesGrouping(t *testing.T) {
 				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg1", FuncName: "Test1"}, Output: "--- PASS: Test1 (0.01s)\n"},
 				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg1"}, Output: "ok  \texample.com/pkg1\t0.01s\n"},
 			},
-			wantGroupCount:             1, // single package gets individual grouping
-			wantPassingPackagesGrouped: false,
+			// streaming groups single packages the same way as multiple - consistent format
+			wantGroupCount:             1,
+			wantPassingPackagesGrouped: true,
+			wantGroupTitle:             "passed packages",
 		},
 		{
 			name: "AcrossPackages disabled - individual package grouping",

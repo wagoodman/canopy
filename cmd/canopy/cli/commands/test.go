@@ -404,7 +404,7 @@ func getUIConfig(appearance options.Appearance, clioCfg clio.Config, format opti
 		removePrefix = module
 	}
 	return ui.TestUIConfig{
-		Color:                   !appearance.NoColor,
+		Color:                   appearance.Color != "off",
 		Verbose:                 clioCfg.Log.Verbosity,
 		ShowPackagesWithNoTests: appearance.ShowPackagesWithNoTests,
 		StripPackagePrefix:      removePrefix,
