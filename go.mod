@@ -23,7 +23,7 @@ require (
 	github.com/gookit/color v1.6.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/jedib0t/go-pretty/v6 v6.6.7
-	github.com/junegunn/fzf v0.64.0
+	github.com/junegunn/fzf v0.67.0
 	github.com/lindell/go-ordered-set v1.1.0
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/magiconair/properties v1.8.10
@@ -34,8 +34,8 @@ require (
 	github.com/spf13/pflag v1.0.9
 	github.com/stretchr/testify v1.10.0
 	github.com/wagoodman/go-partybus v0.0.0-20230516145632-8ccac152c651
-	golang.org/x/term v0.33.0
-	golang.org/x/tools v0.34.0
+	golang.org/x/term v0.34.0
+	golang.org/x/tools v0.35.0
 	gorm.io/datatypes v1.2.7
 	gorm.io/gorm v1.30.0
 )
@@ -101,8 +101,8 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.34.0 // indirect
-	golang.org/x/text v0.27.0 // indirect
+	golang.org/x/sys v0.35.0 // indirect
+	golang.org/x/text v0.28.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/mysql v1.6.0 // indirect
 	modernc.org/libc v1.66.3 // indirect
