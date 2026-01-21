@@ -1,12 +1,16 @@
 package ide
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/wagoodman/canopy/cmd/canopy/internal/env"
+)
 
 // Context represents an IDE integration that can open files at specific line numbers
 // and detect if it's the currently active IDE.
 type Context interface {
 	// isActive checks if this IDE is currently active based on environment variables.
-	isActive(env EnvironmentGetter) bool
+	isActive(e env.EnvironmentGetter) bool
 
 	// OpenFileAtLineCommand returns the shell command to open a file at a specific line.
 	OpenFileAtLineCommand(file string, line int) string

@@ -3,6 +3,8 @@ package ide
 import (
 	"fmt"
 	"os/exec"
+
+	"github.com/wagoodman/canopy/cmd/canopy/internal/env"
 )
 
 var _ Context = (*Goland)(nil)
@@ -30,12 +32,12 @@ func NewGoland(lookPathFunc func(string) (string, error)) (*Goland, error) {
 
 // isActive checks if GoLand is the active IDE by examining environment variables
 // set by GoLand's terminal.
-func (g Goland) isActive(env EnvironmentGetter) bool {
-	if env.Getenv("__CFBundleIdentifier") == "com.jetbrains.goland" {
+func (g Goland) isActive(e env.EnvironmentGetter) bool {
+	if e.Getenv("__CFBundleIdentifier") == "com.jetbrains.goland" {
 		return true
 	}
 
-	if env.Getenv("TERMINAL_EMULATOR") == "JetBrains-JediTerm" {
+	if e.Getenv("TERMINAL_EMULATOR") == "JetBrains-JediTerm" {
 		return true
 	}
 	return false

@@ -12,6 +12,7 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/bubble/syncspinner"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/model/state"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/env"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
 
 	"github.com/anchore/clio"
@@ -42,11 +43,12 @@ func newDynamicGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
 	handlerPkgConfig := gostd.PackageConfig{
 		PackageNameWidth:            maxPkgNameLength,
 		Color:                       cfg.Color,
-		IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
+		IDE:                         ide.Select(&env.OSEnvironmentGetter{}),
 		HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
 		StripPackagePrefix:          cfg.StripPackagePrefix,
 		LoosePackageOrder:           loosePackageOrder,
 		StalePackageDuration:        stalePackageDuration,
+		Grouping:                    cfg.Grouping,
 	}
 
 	if cfg.Verbose > 0 {
@@ -101,8 +103,9 @@ func newSafeGoUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 			gostd.PackageConfig{
 				PackageNameWidth:            maxPkgName,
 				Color:                       cfg.Color,
-				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
+				IDE:                         ide.Select(&env.OSEnvironmentGetter{}),
 				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
+				Grouping:                    cfg.Grouping,
 			},
 		)
 	} else {
@@ -111,8 +114,9 @@ func newSafeGoUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 			gostd.PackageConfig{
 				PackageNameWidth:            maxPkgName,
 				Color:                       cfg.Color,
-				IDE:                         ide.Select(&ide.OSEnvironmentGetter{}),
+				IDE:                         ide.Select(&env.OSEnvironmentGetter{}),
 				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
+				Grouping:                    cfg.Grouping,
 			},
 		)
 	}

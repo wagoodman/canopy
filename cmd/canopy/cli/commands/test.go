@@ -152,7 +152,7 @@ func Test(app clio.Application) *cobra.Command { //nolint:funlen
 			// get the final set of packages to use
 			testPkgs, err := golist.SelectPackages(opts.Test.Specifiers, opts.Test.ExcludePatterns)
 			if err != nil {
-				return fmt.Errorf("unble to get test paths: %w", err)
+				return fmt.Errorf("unable to get test paths: %w", err)
 			}
 			if testPkgs.Size() == 0 {
 				return fmt.Errorf("no packages selected to test (given %q)", opts.Test.Specifiers)
@@ -404,13 +404,14 @@ func getUIConfig(appearance options.Appearance, clioCfg clio.Config, format opti
 		removePrefix = module
 	}
 	return ui.TestUIConfig{
-		Color:                   !appearance.NoColor,
+		Color:                   appearance.Color != "off",
 		Verbose:                 clioCfg.Log.Verbosity,
 		ShowPackagesWithNoTests: appearance.ShowPackagesWithNoTests,
 		StripPackagePrefix:      removePrefix,
 		Writer:                  format.Writer,
 		IsTTY:                   format.IsTTY,
 		CombineMultipleRuns:     appearance.CombineMultipleRuns,
+		Grouping:                appearance.Grouping.ToAPIConfig(),
 	}
 }
 

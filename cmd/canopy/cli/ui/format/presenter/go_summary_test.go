@@ -64,8 +64,7 @@ func TestGoTestResultSummary_Present(t *testing.T) {
 			sb := strings.Builder{}
 
 			subject := tt.presenter
-			subject.runs = []gotest.Run{*fixtureRun(t, tt.fixture)}
-			subject.results = newJoinedResults(subject.runs...)
+			subject.results = newJoinedResults(*fixtureRun(t, tt.fixture))
 
 			err := subject.Present(&sb, &sb)
 			require.NoError(t, err)

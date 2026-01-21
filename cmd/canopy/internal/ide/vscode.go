@@ -3,6 +3,8 @@ package ide
 import (
 	"fmt"
 	"os/exec"
+
+	"github.com/wagoodman/canopy/cmd/canopy/internal/env"
 )
 
 // VSCode provides integration with Microsoft Visual Studio Code.
@@ -28,8 +30,8 @@ func NewVSCode(lookPathFunc func(string) (string, error)) (*VSCode, error) {
 
 // isActive checks if VS Code is the active IDE by examining the TERM_PROGRAM
 // environment variable.
-func (v VSCode) isActive(env EnvironmentGetter) bool {
-	return env.Getenv("TERM_PROGRAM") == "vscode"
+func (v VSCode) isActive(e env.EnvironmentGetter) bool {
+	return e.Getenv("TERM_PROGRAM") == "vscode"
 }
 
 // OpenFileAtLineCommand returns the shell command to open a file at a specific

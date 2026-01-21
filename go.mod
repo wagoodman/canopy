@@ -27,6 +27,7 @@ require (
 	github.com/lindell/go-ordered-set v1.0.2
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/magiconair/properties v1.8.7
+	github.com/muesli/termenv v0.16.0
 	github.com/savioxavier/termlink v1.4.3
 	github.com/scylladb/go-set v1.0.2
 	github.com/spf13/cobra v1.9.1
@@ -75,7 +76,6 @@ require (
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
-	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/pborman/indent v1.2.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect

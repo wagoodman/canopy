@@ -15,7 +15,7 @@ func TestFindDefinitions(t *testing.T) {
 	tests := []struct {
 		name    string
 		pkg     golist.Package
-		want    []Definition
+		want    Definitions
 		wantErr require.ErrorAssertionFunc
 	}{
 		{
@@ -23,7 +23,7 @@ func TestFindDefinitions(t *testing.T) {
 			pkg: golist.Package{
 				Dir: "./testdata/definition/case-1",
 			},
-			want: []Definition{
+			want: Definitions{
 				{
 					FnName: "TestIsPalindrome",
 					Start: token.Position{
@@ -53,7 +53,7 @@ func TestFindDefinitions(t *testing.T) {
 			pkg: golist.Package{
 				Dir: "./testdata/definition/case-2",
 			},
-			want: []Definition{
+			want: Definitions{
 				{
 					FnName: "TestGetCommonHobbies",
 					Start: token.Position{
@@ -82,7 +82,7 @@ func TestFindDefinitions(t *testing.T) {
 			pkg: golist.Package{
 				Dir: "./testdata/definition/case-3",
 			},
-			want: []Definition{
+			want: Definitions{
 				{
 					FnName: "TestFactorial",
 					Start: token.Position{
@@ -111,7 +111,7 @@ func TestFindDefinitions(t *testing.T) {
 			pkg: golist.Package{
 				Dir: "./testdata/definition/case-4",
 			},
-			want: []Definition{
+			want: Definitions{
 				{
 					FnName: "TestNewZip64FileManifest",
 					Start: token.Position{

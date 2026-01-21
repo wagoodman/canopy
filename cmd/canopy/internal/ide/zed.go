@@ -3,6 +3,8 @@ package ide
 import (
 	"fmt"
 	"os/exec"
+
+	"github.com/wagoodman/canopy/cmd/canopy/internal/env"
 )
 
 // Zed provides integration with the Zed editor.
@@ -28,11 +30,11 @@ func NewZed(lookPathFunc func(string) (string, error)) (*Zed, error) {
 
 // isActive checks if Zed is the active editor by examining environment variables
 // set by Zed's terminal.
-func (z Zed) isActive(env EnvironmentGetter) bool {
-	if env.Getenv("__CFBundleIdentifier") == "dev.zed.Zed" {
+func (z Zed) isActive(e env.EnvironmentGetter) bool {
+	if e.Getenv("__CFBundleIdentifier") == "dev.zed.Zed" {
 		return true
 	}
-	if env.Getenv("ZED_TERM") == "true" {
+	if e.Getenv("ZED_TERM") == "true" {
 		return true
 	}
 	return false

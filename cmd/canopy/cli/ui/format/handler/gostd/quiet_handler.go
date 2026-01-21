@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/lindell/go-ordered-set/orderedset"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/group"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
@@ -46,12 +47,18 @@ type quietHandler struct {
 
 	// formatter converts test events to formatted output.
 	formatter func(gotest.Event, bool) fmt.Stringer
+
+	// groupConfig configures collapsible output groups.
+	groupConfig group.Config
+
+	// grouper handles streaming package output with optional grouping.
+	grouper *group.StreamingGroupRenderer[gotest.Reference]
 }
 
 // NewQuietHandler creates a handler that formats output in quiet mode, showing
 // only failures and package summaries.
 func NewQuietHandler(writer io.Writer, config PackageConfig) handler.Handler {
-	return &quietHandler{
+	h := &quietHandler{
 		config:   config,
 		writer:   writer,
 		result:   gotest.NewResult(gotest.ResultConfig{TrackOtherOutput: true, TrackFailingOutput: true}),
@@ -66,7 +73,22 @@ func NewQuietHandler(writer io.Writer, config PackageConfig) handler.Handler {
 				HideExecutionTestEvents: false,
 			},
 		).NewEvent,
+		groupConfig: config.Grouping,
 	}
+	h.grouper = group.NewStreamingGroupRenderer(
+		h.writer,
+		h.groupConfig,
+		func(ref gotest.Reference) (shouldGroup bool, completed bool) {
+			action := h.result.ReferenceConclusiveAction(ref)
+			return h.groupConfig.ShouldGroup(action), action.Completed()
+		},
+		func(pkgRef gotest.Reference, writer io.Writer) {
+			h.outputPackageToWriter(pkgRef, writer, h.hasFailure, func(e gotest.Event) bool {
+				return !output.HasStateMarking(e.Output)
+			})
+		},
+	)
+	return h
 }
 
 // Handle processes partybus events, routing test events to the handler.
@@ -114,6 +136,16 @@ func (h *quietHandler) render() {
 	// this is the reason why we cannot use a package handler (since order of packages is important, independent of the order of completion)
 	pkgs := h.packages.Values()
 	sort.Sort(gotest.References(pkgs))
+
+	// check if across-packages grouping is enabled
+	if h.groupConfig.AcrossPackages && h.groupConfig.Formatter != nil {
+		h.grouper.RenderWithGrouping(pkgs, func(ref gotest.Reference) []gotest.Reference {
+			h.packages.Delete(ref)
+			return h.packages.Values()
+		})
+		return
+	}
+
 	offset := 0
 	for len(pkgs) > 0 && offset < len(pkgs) {
 		pkgRef := pkgs[offset]
@@ -137,14 +169,7 @@ func (h *quietHandler) render() {
 			return
 		}
 
-		h.outputPackage(
-			pkgRef,
-			h.hasFailure,
-			func(e gotest.Event) bool {
-				return !output.HasStateMarking(e.Output)
-			},
-		)
-
+		h.outputPackage(pkgRef)
 		h.packages.Delete(pkgRef)
 		pkgs = h.packages.Values()
 	}
@@ -163,12 +188,36 @@ func (h *quietHandler) hasFailure(testRef gotest.Reference) bool {
 	return false
 }
 
-// outputPackage writes output for a completed package, including all tests matching
-// the include filter.
-func (h *quietHandler) outputPackage(pkgRef gotest.Reference, include func(gotest.Reference) bool, render func(gotest.Event) bool) {
+// outputPackage writes all output for a completed package.
+func (h *quietHandler) outputPackage(pkgRef gotest.Reference) {
+	writer, done := h.writerForPackage(pkgRef)
+	defer done()
+
+	h.outputPackageToWriter(pkgRef, writer, h.hasFailure, func(e gotest.Event) bool {
+		return !output.HasStateMarking(e.Output)
+	})
+}
+
+// writerForPackage returns the appropriate writer for a package based on grouping config.
+// The returned done function must be called to flush any buffered group output.
+func (h *quietHandler) writerForPackage(pkgRef gotest.Reference) (io.Writer, func()) {
+	action := h.result.ReferenceConclusiveAction(pkgRef)
+
+	if !h.groupConfig.ShouldGroup(action) {
+		return h.writer, func() {}
+	}
+
+	groupWriter := group.NewWriter(h.writer, pkgRef.Package, h.groupConfig.Formatter)
+	return groupWriter, func() {
+		_, _ = groupWriter.Flush()
+	}
+}
+
+// outputPackageToWriter writes output for a completed package to the specified writer.
+func (h *quietHandler) outputPackageToWriter(pkgRef gotest.Reference, writer io.Writer, include func(gotest.Reference) bool, render func(gotest.Event) bool) {
 	for _, testRef := range h.result.Children(pkgRef) {
 		if include(testRef) {
-			h.outputTest(testRef, include, render)
+			h.outputTestToWriter(testRef, writer, include, render)
 		}
 	}
 
@@ -181,13 +230,13 @@ func (h *quietHandler) outputPackage(pkgRef gotest.Reference, include func(gotes
 		}
 		fmtr := h.formatter(e, h.panic[e.Reference])
 		if strings.TrimSpace(e.Output) != "" {
-			fmt.Fprint(h.writer, fmtr.String())
+			fmt.Fprint(writer, fmtr.String())
 		}
 	}
 }
 
-// outputTest writes output for a test and its children, applying include and render filters.
-func (h *quietHandler) outputTest(testRef gotest.Reference, include func(gotest.Reference) bool, render func(gotest.Event) bool) {
+// outputTestToWriter writes output for a test and its children to the specified writer.
+func (h *quietHandler) outputTestToWriter(testRef gotest.Reference, writer io.Writer, include func(gotest.Reference) bool, render func(gotest.Event) bool) {
 	outputEvents := h.getEvents(testRef, include)
 
 	sort.Slice(outputEvents, func(i, j int) bool {
@@ -200,7 +249,7 @@ func (h *quietHandler) outputTest(testRef gotest.Reference, include func(gotest.
 		}
 		fmtr := h.formatter(e, h.panic[e.Reference])
 		if strings.TrimSpace(e.Output) != "" {
-			fmt.Fprint(h.writer, fmtr.String())
+			fmt.Fprint(writer, fmtr.String())
 		}
 	}
 }
@@ -222,8 +271,9 @@ func (h *quietHandler) getEvents(testRef gotest.Reference, include func(gotest.R
 	return outputEvents
 }
 
-// String returns any remaining buffered output (none in this implementation).
+// String returns any remaining buffered output and closes any open streaming group.
 func (h *quietHandler) String() string {
+	h.grouper.Close()
 	return ""
 }
 

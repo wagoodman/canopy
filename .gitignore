@@ -11,6 +11,7 @@
 CLAUDE.md
 specs/
 hack/
+mise.toml
 
 # builds
 snapshot

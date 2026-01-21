@@ -118,6 +118,48 @@ func TestAddFailingSubtest(t *testing.T) {
 					if sum != tt.expected+o {
 						t.Fatalf("Expected %d but got %d", tt.expected, sum)
 					}
+					// get the first subtest to fail (allowing grouping in remaining subtests)
+					if o == 1 {
+						t.Errorf("Intentional failure for offset=1")
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestAddFailingSubtest2(t *testing.T) {
+	over := []int{
+		1,
+		2,
+		3,
+	}
+	testCases := []struct {
+		name     string
+		a, b     int
+		expected int
+	}{
+		{"Test normal numbers", 2, 3, 5},
+		{"Test weird numbers (oops)", -5, 7, 37},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			if skipOops != nil && *skipOops && strings.Contains(tt.name, "oops") {
+				t.Skip()
+			}
+			// note: there is a nested t.Run here... for no reason at all other than to be evil
+			for _, o := range over {
+				time.Sleep(200 * time.Millisecond) // simulate some processing time
+				t.Run(fmt.Sprintf("offset=%d", o), func(t *testing.T) {
+					sum := Add(tt.a+o, tt.b)
+					if sum != tt.expected+o {
+						t.Fatalf("Expected %d but got %d", tt.expected, sum)
+					}
+					// get the middle subtest to fail
+					if o == 2 {
+						t.Errorf("Intentional failure for offset=2")
+					}
 				})
 			}
 		})

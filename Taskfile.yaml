@@ -20,6 +20,7 @@ vars:
   GOLANGCILINT: "{{ .TOOL_DIR }}/golangci-lint"
   BINNY: "{{ .TOOL_DIR }}/binny"
   GORELEASER: "{{ .TOOL_DIR }}/goreleaser"
+  CANOPY: "{{ .TOOL_DIR }}/canopy"
 
   # used for snapshot builds
   OS:
@@ -38,6 +39,9 @@ vars:
   RELEASE_CMD:  "{{ .GORELEASER }} release --clean --release-notes {{ .CHANGELOG }}"
   VERSION:
     sh: git describe --dirty --always --tags
+
+env:
+  GNUMAKEFLAGS: '--no-print-directory'
 
 tasks:
 
@@ -158,12 +162,35 @@ tasks:
   ## Testing tasks #################################
 
   unit:
-    deps: [tmpdir]
+    deps: [tools]
     desc: Run unit tests
-    # TODO: switch to canopy release invocation
+    vars:
+      TEST_ARGS: ./cmd/...
+    silent: true
     cmds:
-      - "go test -coverprofile {{ .TMP_DIR }}/unit-coverage-details.txt ./cmd/..."
+      - |
+        if [ "$USE_GO_TEST" = "true" ]; then
+          go test {{ .TEST_ARGS }}
+        else
+          {{ .CANOPY }} test {{ .TEST_ARGS }}
+        fi
 
+  demo:
+    deps: [tools]
+    desc: Run demo tests
+    silent: true
+    vars:
+      TEST_ARGS: ./internal/test-fixtures/...
+    env:
+      # make this a little nicer in CI to see colors
+      FORCE_COLOR: "true"
+    # we don't want to fail, only run the tests and show what it looks like in CI
+    cmd: |
+      if [ "$VERBOSE" = "true" ]; then
+        {{ .CANOPY }} test {{ .TEST_ARGS }} -v || true
+      else
+        {{ .CANOPY }} test {{ .TEST_ARGS }} || true
+      fi
 
   ## Build-related targets #################################
 
