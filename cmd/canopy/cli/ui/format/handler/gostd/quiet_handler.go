@@ -53,6 +53,9 @@ type quietHandler struct {
 
 	// grouper handles streaming package output with optional grouping.
 	grouper *group.StreamingGroupRenderer[gotest.Reference]
+
+	// executionMarkers controls visibility of test state markers (=== RUN/PAUSE/CONT).
+	executionMarkers string
 }
 
 // NewQuietHandler creates a handler that formats output in quiet mode, showing
@@ -66,14 +69,15 @@ func NewQuietHandler(writer io.Writer, config PackageConfig) handler.Handler {
 		panic:    make(map[gotest.Reference]bool),
 		formatter: presenter.NewGoQuietEventFactory(
 			presenter.GoEventConfig{
-				Style:                   style.NewGo(config.Color),
-				IDE:                     config.IDE,
-				PackageNameWidth:        config.PackageNameWidth,
-				StripPackagePrefix:      config.StripPackagePrefix,
-				HideExecutionTestEvents: false,
+				Style:              style.NewGo(config.Color),
+				IDE:                config.IDE,
+				PackageNameWidth:   config.PackageNameWidth,
+				StripPackagePrefix: config.StripPackagePrefix,
+				ExecutionMarkers:   config.ExecutionMarkers,
 			},
 		).NewEvent,
-		groupConfig: config.Grouping,
+		groupConfig:      config.Grouping,
+		executionMarkers: config.ExecutionMarkers,
 	}
 	h.grouper = group.NewStreamingGroupRenderer(
 		h.writer,
@@ -84,7 +88,7 @@ func NewQuietHandler(writer io.Writer, config PackageConfig) handler.Handler {
 		},
 		func(pkgRef gotest.Reference, writer io.Writer) {
 			h.outputPackageToWriter(pkgRef, writer, h.hasFailure, func(e gotest.Event) bool {
-				return !output.HasStateMarking(e.Output)
+				return output.ShouldShowStateMarker(e.Output, h.executionMarkers)
 			})
 		},
 	)
@@ -199,7 +203,7 @@ func (h *quietHandler) outputPackage(pkgRef gotest.Reference) {
 	defer done()
 
 	h.outputPackageToWriter(pkgRef, writer, h.hasFailure, func(e gotest.Event) bool {
-		return !output.HasStateMarking(e.Output)
+		return output.ShouldShowStateMarker(e.Output, h.executionMarkers)
 	})
 }
 

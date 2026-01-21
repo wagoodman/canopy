@@ -38,6 +38,10 @@ type QuietPackageConfig struct {
 
 	// HidePackagesWithNoTestFiles controls visibility of packages without tests.
 	HidePackagesWithNoTestFiles bool
+
+	// ExecutionMarkers controls visibility of test state markers (=== RUN/PAUSE/CONT).
+	// Valid values: "none" (hide all), "all" (show all), "parallel-only" (show only PAUSE/CONT).
+	ExecutionMarkers string
 }
 
 // NewQuietHandler creates a handler that formats output in enhanced quiet mode,
@@ -186,8 +190,12 @@ func (h *QuietPackage) render(writer io.Writer) { //nolint:gocognit
 				// skip the package FAIL line, this is redundant
 				continue
 			}
-			if output.HasAny(output.HasStateMarking, output.HasPackagePassMarking)(e.Output) {
-				// skip the run/continue/pause line
+			if output.HasPackagePassMarking(e.Output) {
+				// skip the package PASS line
+				continue
+			}
+			if !output.ShouldShowStateMarker(e.Output, h.config.ExecutionMarkers) {
+				// skip state markers based on config
 				continue
 			}
 			if output.HasPackageCoverageMarking(e.Output) {

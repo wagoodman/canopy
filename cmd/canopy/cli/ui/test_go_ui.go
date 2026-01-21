@@ -48,6 +48,7 @@ func newDynamicGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
 		StripPackagePrefix:          cfg.StripPackagePrefix,
 		LoosePackageOrder:           loosePackageOrder,
 		StalePackageDuration:        stalePackageDuration,
+		ExecutionMarkers:            cfg.ExecutionMarkers,
 		Grouping:                    cfg.Grouping,
 	}
 
@@ -106,6 +107,7 @@ func newSafeGoUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 				Color:                       cfg.Color,
 				IDE:                         ide.Select(&env.OSEnvironmentGetter{}),
 				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
+				ExecutionMarkers:            cfg.ExecutionMarkers,
 				Grouping:                    cfg.Grouping,
 			},
 		)
@@ -117,6 +119,7 @@ func newSafeGoUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 				Color:                       cfg.Color,
 				IDE:                         ide.Select(&env.OSEnvironmentGetter{}),
 				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
+				ExecutionMarkers:            cfg.ExecutionMarkers,
 				Grouping:                    cfg.Grouping,
 			},
 		)

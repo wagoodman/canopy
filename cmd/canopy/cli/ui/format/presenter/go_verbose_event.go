@@ -17,11 +17,14 @@ import (
 var _ Presenter = (*goVerboseEvent)(nil)
 
 type GoEventConfig struct {
-	Style                   style.Go
-	IDE                     ide.Context
-	PackageNameWidth        int
-	StripPackagePrefix      string
-	HideExecutionTestEvents bool // note: this is a verbose-only option
+	Style              style.Go
+	IDE                ide.Context
+	PackageNameWidth   int
+	StripPackagePrefix string
+	// ExecutionMarkers controls visibility of test state markers (=== RUN/PAUSE/CONT).
+	// Valid values: "none" (hide all), "all" (show all), "parallel-only" (show only PAUSE/CONT).
+	// This is a verbose-only option.
+	ExecutionMarkers string
 }
 
 type GoVerboseEventFactory struct {
@@ -87,7 +90,7 @@ func (p goVerboseEvent) format() string {
 		return formatPassedTest(e.Output, p.Style)
 	}
 	if output.HasAny(output.HasRunMarking, output.HasContinueMarking, output.HasPauseMarking)(e.Output) {
-		if p.HideExecutionTestEvents {
+		if !output.ShouldShowStateMarker(e.Output, p.ExecutionMarkers) {
 			return ""
 		}
 		return formatTestExecutionMark(e.Output, p.Style)
