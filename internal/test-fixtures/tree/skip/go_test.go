@@ -1,4 +1,4 @@
-package tree
+package skip
 
 import "testing"
 
@@ -10,4 +10,6 @@ func Test2(t *testing.T) {
 	t.Skip()
 }
 
-func Test3(t *testing.T) {}
+func Test3(t *testing.T) {
+	t.Skip()
+}

@@ -120,13 +120,10 @@ func (h *jestHandler) render() {
 			return
 		}
 
-		// determine if package passed for grouping decision
-		passed := action == gotest.PassAction
-
-		// select the writer - use a group writer if grouping is enabled for this package status
+		// select the writer - use a group writer if grouping is enabled for this action
 		writer := h.writer
 		var groupWriter *group.Writer
-		if h.groupConfig.ShouldGroup(passed) {
+		if h.groupConfig.ShouldGroup(action) {
 			groupWriter = group.NewWriter(h.writer, pkgRef.Package, h.groupConfig.Formatter)
 			writer = groupWriter
 		}
@@ -143,23 +140,23 @@ func (h *jestHandler) render() {
 	}
 }
 
-// renderWithPackageGrouping renders packages, grouping consecutive passing packages together.
-// This helps reduce noise when there are many passing packages before a failure by collapsing
-// consecutive passing packages into a single collapsible group.
+// renderWithPackageGrouping renders packages, grouping consecutive packages together when their
+// status matches an enabled grouping option. This helps reduce noise when there are many
+// passing/skipped packages before a failure by collapsing them into a single collapsible group.
 func (h *jestHandler) renderWithPackageGrouping(pkgs []gotest.Reference) {
-	var passingBuffer []gotest.Reference
+	var groupBuffer []gotest.Reference
 
-	flushPassing := func() {
-		if len(passingBuffer) == 0 {
+	flushGrouped := func() {
+		if len(groupBuffer) == 0 {
 			return
 		}
-		if len(passingBuffer) == 1 {
-			// single passing package - output with individual grouping
-			pkgRef := passingBuffer[0]
+		if len(groupBuffer) == 1 {
+			// single package - output with individual grouping
+			pkgRef := groupBuffer[0]
 			action := h.result.ReferenceConclusiveAction(pkgRef)
 			writer := h.writer
 			var groupWriter *group.Writer
-			if h.groupConfig.ShouldGroup(true) {
+			if h.groupConfig.ShouldGroup(action) {
 				groupWriter = group.NewWriter(h.writer, pkgRef.Package, h.groupConfig.Formatter)
 				writer = groupWriter
 			}
@@ -168,16 +165,17 @@ func (h *jestHandler) renderWithPackageGrouping(pkgs []gotest.Reference) {
 				_, _ = groupWriter.Flush()
 			}
 		} else {
-			// multiple consecutive passing packages - group them together
-			title := fmt.Sprintf("%d passing packages", len(passingBuffer))
+			// multiple consecutive groupable packages - group them together
+			statusLabel := h.groupConfig.GroupedStatusLabel()
+			title := fmt.Sprintf("%d %s packages", len(groupBuffer), statusLabel)
 			groupWriter := group.NewWriter(h.writer, title, h.groupConfig.Formatter)
-			for _, pkgRef := range passingBuffer {
+			for _, pkgRef := range groupBuffer {
 				action := h.result.ReferenceConclusiveAction(pkgRef)
 				h.outputPackage(pkgRef, groupWriter, action)
 			}
 			_, _ = groupWriter.Flush()
 		}
-		passingBuffer = nil
+		groupBuffer = nil
 	}
 
 	for len(pkgs) > 0 {
@@ -185,19 +183,17 @@ func (h *jestHandler) renderWithPackageGrouping(pkgs []gotest.Reference) {
 		action := h.result.ReferenceConclusiveAction(pkgRef)
 
 		if !action.Completed() {
-			// flush accumulated passing packages before blocking
-			flushPassing()
+			// flush accumulated packages before blocking
+			flushGrouped()
 			return
 		}
 
-		passed := action == gotest.PassAction
-
-		if passed && h.groupConfig.GroupPassed {
-			passingBuffer = append(passingBuffer, pkgRef)
+		if h.groupConfig.ShouldGroup(action) {
+			groupBuffer = append(groupBuffer, pkgRef)
 		} else {
-			// flush any accumulated passing packages
-			flushPassing()
-			// output this non-passing package directly (not grouped at package level)
+			// flush any accumulated packages
+			flushGrouped()
+			// output this package directly (not grouped at package level)
 			h.outputPackage(pkgRef, h.writer, action)
 		}
 
@@ -205,8 +201,8 @@ func (h *jestHandler) renderWithPackageGrouping(pkgs []gotest.Reference) {
 		pkgs = h.packages.Values()
 	}
 
-	// flush remaining passing packages
-	flushPassing()
+	// flush remaining packages
+	flushGrouped()
 }
 
 // outputPackage writes jest-style output for a completed package.

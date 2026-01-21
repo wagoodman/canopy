@@ -18,23 +18,28 @@ type Grouping struct {
 	Passed bool `yaml:"passed" json:"passed" mapstructure:"passed"`
 	// Failed controls whether failed output is grouped.
 	Failed bool `yaml:"failed" json:"failed" mapstructure:"failed"`
-	// AcrossTests groups consecutive passing/failing test conclusions within a package,
-	// even when the package itself isn't grouped. This helps reduce noise when a package
-	// has many passing tests and a few failures.
+	// Skipped controls whether skipped output is grouped (collapsed by default).
+	// This includes packages with no test files.
+	Skipped bool `yaml:"skipped" json:"skipped" mapstructure:"skipped"`
+	// AcrossTests groups consecutive test conclusions within a package when their
+	// status matches an enabled grouping option (passed, failed, or skipped).
+	// This helps reduce noise when a package has many passing/skipped tests and a few failures.
 	AcrossTests bool `yaml:"across-tests" json:"across-tests" mapstructure:"across-tests"`
-	// AcrossPackages groups consecutive passing packages together, reducing noise when
-	// there are many passing packages before a failure.
+	// AcrossPackages groups consecutive packages together when their status matches
+	// an enabled grouping option (passed, failed, or skipped). This reduces noise when
+	// there are many passing/skipped packages before a failure.
 	AcrossPackages bool `yaml:"across-packages" json:"across-packages" mapstructure:"across-packages"`
 }
 
 // DefaultGrouping returns the default grouping configuration.
-// By default, grouping is auto-detected from the CI environment, passed output is grouped,
-// and failed output is not grouped (so failures are immediately visible).
+// By default, grouping is auto-detected from the CI environment, passed and skipped output
+// is grouped, and failed output is not grouped (so failures are immediately visible).
 func DefaultGrouping() Grouping {
 	return Grouping{
 		Style:          "auto", // resolved in PostLoad
 		Passed:         true,
 		Failed:         false,
+		Skipped:        true,
 		AcrossTests:    true,
 		AcrossPackages: true,
 	}
@@ -44,8 +49,9 @@ func (o *Grouping) DescribeFields(descriptions clio.FieldDescriptionSet) {
 	descriptions.Add(&o.Style, "the CI grouping style to use: auto (detect from environment), github, gitlab, azure, off")
 	descriptions.Add(&o.Passed, "whether to group passed output (collapsed by default)")
 	descriptions.Add(&o.Failed, "whether to group failed output")
-	descriptions.Add(&o.AcrossTests, "whether to group consecutive passing/failing test conclusions within a package")
-	descriptions.Add(&o.AcrossPackages, "whether to group consecutive passing/failing packages together")
+	descriptions.Add(&o.Skipped, "whether to group skipped output (collapsed by default)")
+	descriptions.Add(&o.AcrossTests, "whether to group consecutive test conclusions within a package based on enabled status types")
+	descriptions.Add(&o.AcrossPackages, "whether to group consecutive packages together based on enabled status types")
 }
 
 // ToAPIConfig converts Grouping to a group.Config for use with the grouping writer.
@@ -54,6 +60,7 @@ func (o Grouping) ToAPIConfig() group.Config {
 		Formatter:      styleToFormatter(o.Style),
 		GroupPassed:    o.Passed,
 		GroupFailed:    o.Failed,
+		GroupSkipped:   o.Skipped,
 		AcrossTests:    o.AcrossTests,
 		AcrossPackages: o.AcrossPackages,
 	}

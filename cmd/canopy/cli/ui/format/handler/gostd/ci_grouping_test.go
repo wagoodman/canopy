@@ -139,9 +139,9 @@ func TestVerboseHandler_AcrossTestsGrouping(t *testing.T) {
 				// package pass
 				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg"}, Output: "ok  \texample.com/pkg\t0.03s\n"},
 			},
-			wantGroupCount:          2, // package group + passing tests group
+			wantGroupCount:          2, // package group + passed tests group
 			wantPassingTestsGrouped: true,
-			wantGroupTitle:          "3 passing tests",
+			wantGroupTitle:          "3 passed tests",
 		},
 		{
 			name: "consecutive passing tests with failure in middle - two groups",
@@ -167,9 +167,9 @@ func TestVerboseHandler_AcrossTestsGrouping(t *testing.T) {
 				// package fail
 				{Action: gotest.FailAction, Reference: gotest.Reference{Package: "example.com/pkg"}, Output: "FAIL\texample.com/pkg\t0.05s\n"},
 			},
-			wantGroupCount:          2, // two groups of consecutive passing tests (no package group since failed)
+			wantGroupCount:          2, // two groups of consecutive passed tests (no package group since failed)
 			wantPassingTestsGrouped: true,
-			wantGroupTitle:          "2 passing tests",
+			wantGroupTitle:          "2 passed tests",
 		},
 		{
 			name: "single passing test not grouped",
@@ -231,7 +231,7 @@ func TestVerboseHandler_AcrossTestsGrouping(t *testing.T) {
 			if tt.wantPassingTestsGrouped {
 				assert.Contains(t, output, tt.wantGroupTitle, "expected group title %q in output:\n%s", tt.wantGroupTitle, output)
 			} else {
-				assert.NotContains(t, output, "passing tests", "did not expect 'passing tests' group in output:\n%s", output)
+				assert.NotContains(t, output, "passed tests", "did not expect 'passed tests' group in output:\n%s", output)
 			}
 		})
 	}
@@ -279,7 +279,7 @@ func TestVerboseHandler_AcrossPackagesGrouping(t *testing.T) {
 			},
 			wantGroupCount:             1, // all 3 packages grouped together
 			wantPassingPackagesGrouped: true,
-			wantGroupTitle:             "3 passing packages",
+			wantGroupTitle:             "3 passed packages",
 		},
 		{
 			name: "consecutive passing packages with failure in middle",
@@ -317,9 +317,9 @@ func TestVerboseHandler_AcrossPackagesGrouping(t *testing.T) {
 				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg5"}, Output: "ok  \texample.com/pkg5\t0.01s\n"},
 				{Action: gotest.PassAction, Reference: gotest.Reference{Package: "example.com/pkg4"}, Output: "ok  \texample.com/pkg4\t0.01s\n"},
 			},
-			wantGroupCount:             2, // two groups of consecutive passing packages
+			wantGroupCount:             2, // two groups of consecutive passed packages
 			wantPassingPackagesGrouped: true,
-			wantGroupTitle:             "2 passing packages",
+			wantGroupTitle:             "2 passed packages",
 		},
 		{
 			name: "single passing package not grouped as multi-package",
@@ -386,7 +386,7 @@ func TestVerboseHandler_AcrossPackagesGrouping(t *testing.T) {
 			if tt.wantPassingPackagesGrouped {
 				assert.Contains(t, output, tt.wantGroupTitle, "expected group title %q in output:\n%s", tt.wantGroupTitle, output)
 			} else {
-				assert.NotContains(t, output, "passing packages", "did not expect 'passing packages' group in output:\n%s", output)
+				assert.NotContains(t, output, "passed packages", "did not expect 'passed packages' group in output:\n%s", output)
 			}
 		})
 	}
