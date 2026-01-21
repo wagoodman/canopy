@@ -190,6 +190,39 @@ func TestResult_TestStats(t *testing.T) {
 	assert.Equal(t, 1, stats.Failed)
 	assert.Equal(t, 0, stats.Skipped)
 	assert.Equal(t, 1, stats.Running)
+	assert.Equal(t, 0, stats.PackagesWithNoTests)
+}
+
+func TestResult_TestStats_WithNoTestPackages(t *testing.T) {
+	result := NewResult(ResultConfig{})
+
+	// add regular test references
+	result.testReferencesByAction[PassAction].Add(mockReference1)
+
+	// add a package with no test files
+	pkgWithNoTestFiles := Reference{Package: "pkg/empty1"}
+	result.packages.Add(pkgWithNoTestFiles)
+	result.testEventsByReference[pkgWithNoTestFiles] = []Event{
+		{Action: PassAction, Reference: pkgWithNoTestFiles, Annotations: []Annotation{NoTestFiles}},
+	}
+
+	// add a package with no tests to run
+	pkgWithNoTestsToRun := Reference{Package: "pkg/empty2"}
+	result.packages.Add(pkgWithNoTestsToRun)
+	result.testEventsByReference[pkgWithNoTestsToRun] = []Event{
+		{Action: PassAction, Reference: pkgWithNoTestsToRun, Annotations: []Annotation{NoTestsToRun}},
+	}
+
+	// add a normal package (no annotation)
+	normalPkg := Reference{Package: "pkg/normal"}
+	result.packages.Add(normalPkg)
+	result.testEventsByReference[normalPkg] = []Event{
+		{Action: PassAction, Reference: normalPkg},
+	}
+
+	stats := result.TestStats()
+	assert.Equal(t, 1, stats.Passed)
+	assert.Equal(t, 2, stats.PackagesWithNoTests)
 }
 
 func TestResult_ReferenceConclusiveAction(t *testing.T) {

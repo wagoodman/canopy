@@ -40,10 +40,11 @@ type Result struct {
 
 // ResultStats provides counts of tests in each execution state for quick status reporting.
 type ResultStats struct {
-	Passed  int
-	Failed  int
-	Skipped int
-	Running int
+	Passed              int
+	Failed              int
+	Skipped             int
+	Running             int
+	PackagesWithNoTests int
 }
 
 func (s ResultStats) Total() int {
@@ -56,6 +57,7 @@ func (s *ResultStats) Merge(others ...ResultStats) {
 		s.Failed += other.Failed
 		s.Skipped += other.Skipped
 		s.Running += other.Running
+		s.PackagesWithNoTests += other.PackagesWithNoTests
 	}
 }
 
@@ -322,11 +324,24 @@ func (r Result) TestStats() ResultStats {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
+	// count packages with no tests
+	packagesWithNoTests := 0
+	for _, pkg := range r.packages.Values() {
+		events := r.testEventsByReference[pkg]
+		for _, e := range events {
+			if e.HasAnnotation(NoTestFiles, NoTestsToRun) {
+				packagesWithNoTests++
+				break
+			}
+		}
+	}
+
 	return ResultStats{
-		Passed:  r.testReferencesByAction[PassAction].Size(),
-		Failed:  r.testReferencesByAction[FailAction].Size(),
-		Skipped: r.testReferencesByAction[SkipAction].Size(),
-		Running: r.testReferencesByAction[RunAction].Size(),
+		Passed:              r.testReferencesByAction[PassAction].Size(),
+		Failed:              r.testReferencesByAction[FailAction].Size(),
+		Skipped:             r.testReferencesByAction[SkipAction].Size(),
+		Running:             r.testReferencesByAction[RunAction].Size(),
+		PackagesWithNoTests: packagesWithNoTests,
 	}
 }
 

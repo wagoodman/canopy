@@ -77,6 +77,9 @@ type verboseHandler struct {
 
 	// grouper handles streaming package output with optional grouping.
 	grouper *group.StreamingGroupRenderer[gotest.Reference]
+
+	// hidePackagesWithNoTestFiles controls visibility of packages without tests.
+	hidePackagesWithNoTestFiles bool
 }
 
 // NewVerboseHandler creates a handler that formats output in verbose mode,
@@ -96,7 +99,8 @@ func NewVerboseHandler(writer io.Writer, config PackageConfig) handler.Handler {
 				HideExecutionTestEvents: false,
 			},
 		).NewEvent,
-		groupConfig: config.Grouping,
+		groupConfig:                 config.Grouping,
+		hidePackagesWithNoTestFiles: config.HidePackagesWithNoTestFiles,
 	}
 	h.grouper = group.NewStreamingGroupRenderer(
 		h.writer,
@@ -128,6 +132,11 @@ func (h *verboseHandler) Handle(e partybus.Event) error {
 // OnGoTestEvent processes test events, updating result state and rendering
 // completed packages.
 func (h *verboseHandler) OnGoTestEvent(e gotest.Event) error {
+	// skip packages with no tests if configured to hide them
+	if e.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) && h.hidePackagesWithNoTestFiles {
+		return nil
+	}
+
 	h.result.Update(e)
 	if e.Reference.IsPackage() {
 		h.packages.Add(e.Reference)
