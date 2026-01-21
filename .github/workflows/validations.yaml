@@ -48,3 +48,17 @@ jobs:
         run: "make unit"
         env:
           USE_GO_TEST: ${{ matrix.use-go-test }}
+
+  demo:
+    name: "Demo Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: Bootstrap environment
+        uses: ./.github/actions/bootstrap
+
+      - name: Run
+        run: make demo

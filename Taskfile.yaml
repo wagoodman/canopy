@@ -175,6 +175,12 @@ tasks:
           {{ .CANOPY }} test {{ .TEST_ARGS }}
         fi
 
+  demo:
+    deps: [tools]
+    desc: Run demo tests
+    silent: true
+    # we don't want to fail, only run the tests and show what it looks like in CI
+    cmd: '{{ .CANOPY }} test ./internal/test-fixtures/... || true'
 
   ## Build-related targets #################################
 
