@@ -295,8 +295,44 @@ func (h *verboseHandler) outputConclusionsWithGrouping(pkgRef gotest.Reference, 
 
 // outputTestToWriter writes output for a test and its children to the specified writer.
 func (h *verboseHandler) outputTestToWriter(testRef gotest.Reference, writer io.Writer, indent bool, include func(gotest.Event) bool) {
-	outputEvents := h.getEvents(testRef, include)
+	children := h.result.Children(testRef)
 
+	// check if we should apply AcrossCases grouping:
+	// - AcrossCases is enabled
+	// - formatter is set
+	// - this test has children
+	// - not already writing to a group (avoid nesting)
+	_, isGroupWriter := writer.(*group.Writer)
+	_, isStreamingGroupWriter := writer.(*group.StreamingGroupWriter)
+	shouldApplyCaseGrouping := h.groupConfig.AcrossCases &&
+		h.groupConfig.Formatter != nil &&
+		len(children) > 0 &&
+		!isGroupWriter && !isStreamingGroupWriter
+
+	if shouldApplyCaseGrouping {
+		// output this test's own events (not children's)
+		h.outputOwnEvents(testRef, writer, indent, include)
+		// output children with grouping applied
+		h.outputChildrenWithCaseGrouping(testRef, writer, indent, include)
+	} else {
+		// standard behavior: collect all events from test and children
+		outputEvents := h.getEvents(testRef, include)
+		for _, e := range outputEvents {
+			w := writer
+			if indent {
+				w = internal.NewIndentWriterForReference(writer, e.Reference)
+			}
+			fmtr := h.formatter(e, h.panic[e.Reference])
+			if strings.TrimSpace(e.Output) != "" {
+				fmt.Fprint(w, fmtr.String())
+			}
+		}
+	}
+}
+
+// outputOwnEvents outputs only the test's own events (not its children's events).
+func (h *verboseHandler) outputOwnEvents(testRef gotest.Reference, writer io.Writer, indent bool, include func(gotest.Event) bool) {
+	outputEvents := filterEvents(h.result.ReferenceEvents(testRef), include)
 	for _, e := range outputEvents {
 		w := writer
 		if indent {
@@ -307,6 +343,46 @@ func (h *verboseHandler) outputTestToWriter(testRef gotest.Reference, writer io.
 			fmt.Fprint(w, fmtr.String())
 		}
 	}
+}
+
+// outputChildrenWithCaseGrouping outputs children of a test, grouping consecutive
+// children that match the grouping config (similar to outputConclusionsWithGrouping
+// but for subtests within a parent test).
+func (h *verboseHandler) outputChildrenWithCaseGrouping(testRef gotest.Reference, writer io.Writer, indent bool, include func(gotest.Event) bool) {
+	children := h.result.Children(testRef)
+
+	var groupBuffer []gotest.Reference
+
+	flushGrouped := func() {
+		if len(groupBuffer) == 0 {
+			return
+		}
+		// group consecutive groupable cases (even single items to highlight failures)
+		statusLabel := h.groupConfig.GroupedStatusLabel()
+		title := statusLabel + " cases"
+		groupWriter := group.NewWriter(writer, title, h.groupConfig.Formatter)
+		for _, ref := range groupBuffer {
+			h.outputTestToWriter(ref, groupWriter, indent, include)
+		}
+		_, _ = groupWriter.Flush()
+		groupBuffer = nil
+	}
+
+	for _, childRef := range children {
+		action := h.result.ReferenceConclusiveAction(childRef)
+
+		if h.groupConfig.ShouldGroup(action) {
+			groupBuffer = append(groupBuffer, childRef)
+		} else {
+			// flush any accumulated cases
+			flushGrouped()
+			// output this case directly (it may recursively apply case grouping to its children)
+			h.outputTestToWriter(childRef, writer, indent, include)
+		}
+	}
+
+	// flush remaining cases
+	flushGrouped()
 }
 
 // getEvents collects events for a test and its children, filtered by the include function.

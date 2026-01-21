@@ -29,6 +29,10 @@ type Grouping struct {
 	// an enabled grouping option (passed, failed, or skipped). This reduces noise when
 	// there are many passing/skipped packages before a failure.
 	AcrossPackages bool `yaml:"across-packages" json:"across-packages" mapstructure:"across-packages"`
+	// AcrossCases groups consecutive subtests/cases within a parent test when the parent
+	// has at least one child that should NOT be grouped (e.g., a failure). This keeps
+	// failures visible while collapsing passing subtests around them.
+	AcrossCases bool `yaml:"across-cases" json:"across-cases" mapstructure:"across-cases"`
 }
 
 // DefaultGrouping returns the default grouping configuration.
@@ -42,6 +46,7 @@ func DefaultGrouping() Grouping {
 		Skipped:        true,
 		AcrossTests:    true,
 		AcrossPackages: true,
+		AcrossCases:    true,
 	}
 }
 
@@ -52,6 +57,7 @@ func (o *Grouping) DescribeFields(descriptions clio.FieldDescriptionSet) {
 	descriptions.Add(&o.Skipped, "whether to group skipped output (collapsed by default)")
 	descriptions.Add(&o.AcrossTests, "whether to group consecutive test conclusions within a package based on enabled status types")
 	descriptions.Add(&o.AcrossPackages, "whether to group consecutive packages together based on enabled status types")
+	descriptions.Add(&o.AcrossCases, "whether to group consecutive subtests/cases within a failing parent test based on enabled status types")
 }
 
 // ToAPIConfig converts Grouping to a group.Config for use with the grouping writer.
@@ -63,6 +69,7 @@ func (o Grouping) ToAPIConfig() group.Config {
 		GroupSkipped:   o.Skipped,
 		AcrossTests:    o.AcrossTests,
 		AcrossPackages: o.AcrossPackages,
+		AcrossCases:    o.AcrossCases,
 	}
 }
 

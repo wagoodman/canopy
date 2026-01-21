@@ -32,6 +32,11 @@ type Config struct {
 	// an enabled grouping option (passed, failed, or skipped). This reduces noise when
 	// there are many passing/skipped packages before a failure.
 	AcrossPackages bool
+
+	// AcrossCases groups consecutive subtests/cases within a parent test when the parent
+	// has at least one child that should NOT be grouped (e.g., a failure). This keeps
+	// failures visible while collapsing passing subtests around them.
+	AcrossCases bool
 }
 
 // ShouldGroup returns whether output should be grouped based on the action status.

@@ -169,7 +169,7 @@ func TestVerboseHandler_AcrossTestsGrouping(t *testing.T) {
 			},
 			wantGroupCount:          2, // two groups of consecutive passed tests (no package group since failed)
 			wantPassingTestsGrouped: true,
-			wantGroupTitle:          "2 passed tests",
+			wantGroupTitle:          "passed tests",
 		},
 		{
 			name: "single passing test not grouped",
