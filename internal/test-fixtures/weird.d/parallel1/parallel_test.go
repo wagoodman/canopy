@@ -29,7 +29,7 @@ func TestParallel1(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			t.Logf("1: Running test %s with sleep duration %v", tt.name, tt.amt)
-			time.Sleep(tt.amt * time.Millisecond * 150)
+			time.Sleep(tt.amt * time.Millisecond * 100)
 		})
 	}
 }
@@ -54,7 +54,7 @@ func TestParallel2(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			t.Logf("2: Running test %s with sleep duration %v", tt.name, tt.amt)
-			time.Sleep(tt.amt * time.Millisecond * 250)
+			time.Sleep(tt.amt * time.Millisecond * 125)
 		})
 	}
 }

@@ -23,7 +23,7 @@ func TestMoreParallel1(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			t.Logf("n4-more-p1: Running test %s with sleep duration %v", tt.name, tt.amt)
-			time.Sleep(tt.amt * time.Millisecond * 350)
+			time.Sleep(tt.amt * time.Millisecond * 175)
 		})
 	}
 }
@@ -48,7 +48,7 @@ func TestMoreParallel2(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("n4-more-p2: Running test %s with sleep duration %v", tt.name, tt.amt)
 			t.Parallel()
-			time.Sleep(tt.amt * time.Millisecond * 450)
+			time.Sleep(tt.amt * time.Millisecond * 225)
 			if tt.amt == 2 {
 				t.Error("This test is intentionally failing for testing purposes")
 			}
