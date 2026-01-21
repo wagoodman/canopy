@@ -36,6 +36,8 @@ type Config struct {
 	ExistingSession uuid.UUID
 	// LoadLastSession indicates whether to resume the most recent session.
 	LoadLastSession bool
+	// NoStore uses a no-op store (no persistence) for format-only operations.
+	NoStore bool
 }
 
 // RunConfig configures a single test run execution.
@@ -59,27 +61,39 @@ func NewManager(cfg Config) (*Manager, error) {
 		return nil, errors.New("cannot specify both an existing session and to load the last session")
 	}
 
-	s, err := newDBStore(cfg)
-	if err != nil {
-		return nil, err
+	var st store
+	var sm sessionManager
+
+	if cfg.NoStore {
+		ns := newNoopStore()
+		st = ns
+		sm = ns
+	} else {
+		dbs, err := newDBStore(cfg)
+		if err != nil {
+			return nil, err
+		}
+		if dbs == nil {
+			return nil, fmt.Errorf("no store created")
+		}
+		st = dbs
+		sm = dbs
 	}
-	if s == nil {
-		return nil, fmt.Errorf("no store created")
-	}
+
 	m := &Manager{
 		config:         cfg,
-		store:          s,
-		sessionManager: s,
+		store:          st,
+		sessionManager: sm,
 	}
 
 	if cfg.ExistingSession != uuid.Nil {
-		ts, err := s.getSession(cfg.ExistingSession)
+		ts, err := sm.getSession(cfg.ExistingSession)
 		if err != nil {
 			return nil, err
 		}
 		m.session = ts
 	} else if cfg.LoadLastSession {
-		sessions, err := s.ListSessions()
+		sessions, err := st.ListSessions()
 		if err != nil {
 			return nil, fmt.Errorf("unable to list test sessions: %w", err)
 		}
@@ -92,7 +106,7 @@ func NewManager(cfg Config) (*Manager, error) {
 			return sessions[i].Started.After(sessions[j].Started)
 		})
 
-		ts, err := s.getSession(sessions[0].UUID)
+		ts, err := sm.getSession(sessions[0].UUID)
 		if err != nil {
 			return nil, err
 		}

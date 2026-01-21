@@ -144,10 +144,14 @@ func isPipedInput() (bool, error) {
 func runFormat(ctx context.Context, app clio.Application, coreCfg formatCoreConfig, logTestFailuresAsErrors bool) error {
 	cfg := coreCfg.Test
 
+	// only use a DB store when persistence is needed
+	needsStorage := coreCfg.Enabled || cfg.OpenSessionOnFailure
+
 	s, err := test.NewManager(
 		test.Config{
 			DBRoot:    coreCfg.Root,
 			Ephemeral: coreCfg.Ephemeral,
+			NoStore:   !needsStorage,
 		},
 	)
 	if err != nil {
