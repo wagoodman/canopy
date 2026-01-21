@@ -3,13 +3,15 @@ package gotest
 import "strings"
 
 const (
-	UnknownAction Action = "unknown-action"
-	StartAction   Action = "start" // first JSONL event for a package
-	RunAction     Action = "run"   // first JSONL event for a test/subtest
-	PassAction    Action = "pass"  // last JSONL event for a test/subtest or package
-	FailAction    Action = "fail"  // last JSONL event for a test/subtest or package
-	SkipAction    Action = "skip"  // last JSONL event for a test/subtest or package
-	OutputAction  Action = "output"
+	UnknownAction     Action = "unknown-action"
+	StartAction       Action = "start" // first JSONL event for a package
+	RunAction         Action = "run"   // first JSONL event for a test/subtest
+	PassAction        Action = "pass"  // last JSONL event for a test/subtest or package
+	FailAction        Action = "fail"  // last JSONL event for a test/subtest or package
+	SkipAction        Action = "skip"  // last JSONL event for a test/subtest or package
+	OutputAction      Action = "output"
+	BuildOutputAction Action = "build-output" // compiler output during build failure (Go 1.24+)
+	BuildFailAction   Action = "build-fail"   // build failure event (Go 1.24+)
 )
 
 // Action represents the state transitions that tests go through during execution.
@@ -32,6 +34,10 @@ func ParseAction(s string) Action {
 		return StartAction
 	case "output":
 		return OutputAction
+	case "build-output":
+		return BuildOutputAction
+	case "build-fail":
+		return BuildFailAction
 	}
 	return UnknownAction
 }

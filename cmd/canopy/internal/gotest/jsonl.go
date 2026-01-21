@@ -23,6 +23,14 @@ type JSONL struct {
 	Elapsed float64 `json:"Elapsed,omitempty"`
 	Output  string  `json:"Output,omitempty"`
 	Error   error
+
+	// ImportPath is used in build-output and build-fail events (Go 1.24+) to identify
+	// the package that failed to build. These events don't have a Time or Package field.
+	ImportPath string `json:"ImportPath,omitempty"`
+
+	// FailedBuild identifies the package that caused a build failure, present in
+	// fail events when the failure was due to a build error in a dependency.
+	FailedBuild string `json:"FailedBuild,omitempty"`
 }
 
 // String formats the JSONL for human-readable display, showing the key information
