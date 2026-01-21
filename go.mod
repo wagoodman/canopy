@@ -1,6 +1,6 @@
 module github.com/wagoodman/canopy
 
-go 1.23.1
+go 1.24.0
 
 require (
 	github.com/anchore/bubbly v0.0.0-20250224053248-59af9264786e
@@ -11,9 +11,9 @@ require (
 	github.com/anchore/go-sync v0.0.0-20250714163430-add63db73ad1
 	github.com/bmatcuk/doublestar/v4 v4.8.1
 	github.com/charmbracelet/bubbles v0.21.0
-	github.com/charmbracelet/bubbletea v1.3.6
+	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/charmbracelet/x/ansi v0.9.3
+	github.com/charmbracelet/x/ansi v0.10.1
 	github.com/deckarep/golang-set/v2 v2.8.0
 	github.com/gkampitakis/go-snaps v0.5.7
 	github.com/glebarez/sqlite v1.11.0
@@ -101,7 +101,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.35.0 // indirect
+	golang.org/x/sys v0.36.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/mysql v1.6.0 // indirect
