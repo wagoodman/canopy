@@ -30,14 +30,14 @@ var _ interface {
 } = (*UI)(nil)
 
 type frameWithFooter struct {
-	body   frame.Frame
-	footer frame.Frame
+	body   *frame.Frame
+	footer *frame.Frame
 }
 
 func newFrameWithFooter() frameWithFooter {
 	return frameWithFooter{
-		body:   *frame.New(),
-		footer: *frame.New(),
+		body:   frame.New(),
+		footer: frame.New(),
 	}
 }
 
@@ -54,8 +54,8 @@ func (f frameWithFooter) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	footerModel, footerCmd := f.footer.Update(msg)
 	cmds = append(cmds, footerCmd)
 
-	f.body = bodyModel.(frame.Frame)
-	f.footer = footerModel.(frame.Frame)
+	f.body = bodyModel.(*frame.Frame)
+	f.footer = footerModel.(*frame.Frame)
 
 	return f, tea.Batch(cmds...)
 }

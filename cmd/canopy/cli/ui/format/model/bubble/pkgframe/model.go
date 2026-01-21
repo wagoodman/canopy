@@ -20,7 +20,7 @@ var (
 type Model struct {
 	pkgRef     gotest.Reference
 	action     gotest.Action
-	frame      frame.Frame
+	frame      *frame.Frame
 	testsSeen  map[gotest.Reference]struct{}
 	rowFactory ModelFactory
 	common     state.Common
@@ -29,7 +29,7 @@ type Model struct {
 func NewPackageModel(ref gotest.Reference, common state.Common, rowFactory ModelFactory) *Model {
 	return &Model{
 		pkgRef:     ref.PackageRef(),
-		frame:      *frame.New(),
+		frame:      frame.New(),
 		testsSeen:  make(map[gotest.Reference]struct{}),
 		rowFactory: rowFactory,
 		common:     common,
@@ -54,7 +54,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.update(msg)
 
 	newFrame, cmd := m.frame.Update(msg)
-	m.frame = newFrame.(frame.Frame)
+	m.frame = newFrame.(*frame.Frame)
 
 	return m, cmd
 }

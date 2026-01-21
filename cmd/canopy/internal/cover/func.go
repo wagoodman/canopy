@@ -23,7 +23,6 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"golang.org/x/tools/cover"
@@ -207,9 +206,10 @@ func findPkgs(profiles []*cover.Profile) (map[string]*Pkg, error) {
 		return pkgs, nil
 	}
 
-	// Note: usually run as "go tool cover" in which case $GOROOT is set,
-	// in which case runtime.GOROOT() does exactly what we want.
-	goTool := filepath.Join(runtime.GOROOT(), "bin/go")
+	goTool, err := exec.LookPath("go")
+	if err != nil {
+		return nil, fmt.Errorf("cannot find go tool: %w", err)
+	}
 	cmd := exec.Command(goTool, append([]string{"list", "-e", "-json"}, list...)...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
