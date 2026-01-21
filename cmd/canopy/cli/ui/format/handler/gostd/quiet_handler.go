@@ -109,6 +109,11 @@ func (h *quietHandler) Handle(e partybus.Event) error {
 // OnGoTestEvent processes test events, updating result state and rendering
 // completed packages.
 func (h *quietHandler) OnGoTestEvent(e gotest.Event) error {
+	// skip packages with no tests if configured to hide them
+	if e.HasAnnotation(gotest.NoTestFiles, gotest.NoTestsToRun) && h.config.HidePackagesWithNoTestFiles {
+		return nil
+	}
+
 	h.result.Update(e)
 	if e.Reference.IsPackage() {
 		h.packages.Add(e.Reference)
