@@ -51,15 +51,14 @@ type quietHandler struct {
 	// groupConfig configures collapsible output groups.
 	groupConfig group.Config
 
-	// streamingGroup is the currently open streaming group (persists across render calls).
-	// used for across-packages grouping to enable incremental output.
-	streamingGroup *group.StreamingGroupWriter
+	// grouper handles streaming package output with optional grouping.
+	grouper *group.StreamingGroupRenderer[gotest.Reference]
 }
 
 // NewQuietHandler creates a handler that formats output in quiet mode, showing
 // only failures and package summaries.
 func NewQuietHandler(writer io.Writer, config PackageConfig) handler.Handler {
-	return &quietHandler{
+	h := &quietHandler{
 		config:   config,
 		writer:   writer,
 		result:   gotest.NewResult(gotest.ResultConfig{TrackOtherOutput: true, TrackFailingOutput: true}),
@@ -76,6 +75,20 @@ func NewQuietHandler(writer io.Writer, config PackageConfig) handler.Handler {
 		).NewEvent,
 		groupConfig: config.Grouping,
 	}
+	h.grouper = group.NewStreamingGroupRenderer(
+		h.writer,
+		h.groupConfig,
+		func(ref gotest.Reference) (shouldGroup bool, completed bool) {
+			action := h.result.ReferenceConclusiveAction(ref)
+			return h.groupConfig.ShouldGroup(action), action.Completed()
+		},
+		func(pkgRef gotest.Reference, writer io.Writer) {
+			h.outputPackageToWriter(pkgRef, writer, h.hasFailure, func(e gotest.Event) bool {
+				return !output.HasStateMarking(e.Output)
+			})
+		},
+	)
+	return h
 }
 
 // Handle processes partybus events, routing test events to the handler.
@@ -126,7 +139,10 @@ func (h *quietHandler) render() {
 
 	// check if across-packages grouping is enabled
 	if h.groupConfig.AcrossPackages && h.groupConfig.Formatter != nil {
-		h.renderWithPackageGrouping(pkgs)
+		h.grouper.RenderWithGrouping(pkgs, func(ref gotest.Reference) []gotest.Reference {
+			h.packages.Delete(ref)
+			return h.packages.Values()
+		})
 		return
 	}
 
@@ -153,87 +169,9 @@ func (h *quietHandler) render() {
 			return
 		}
 
-		// select the writer - use a group writer if grouping is enabled for this action
-		writer := h.writer
-		var groupWriter *group.Writer
-		if h.groupConfig.ShouldGroup(action) {
-			groupWriter = group.NewWriter(h.writer, pkgRef.Package, h.groupConfig.Formatter)
-			writer = groupWriter
-		}
-
-		h.outputPackageToWriter(
-			pkgRef,
-			writer,
-			h.hasFailure,
-			func(e gotest.Event) bool {
-				return !output.HasStateMarking(e.Output)
-			},
-		)
-
-		// flush the group writer to emit group markers
-		if groupWriter != nil {
-			_, _ = groupWriter.Flush()
-		}
-
+		h.outputPackage(pkgRef)
 		h.packages.Delete(pkgRef)
 		pkgs = h.packages.Values()
-	}
-}
-
-// renderWithPackageGrouping renders packages with streaming output, grouping consecutive packages
-// together when their status matches an enabled grouping option. This helps reduce noise when
-// there are many passing/skipped packages before a failure by collapsing them into a single
-// collapsible group.
-// Note: This disables LoosePackageOrder behavior since cross-package grouping requires strict ordering.
-//
-// Unlike the buffered approach, this streams output incrementally:
-// - Group header is written when first groupable package is ready
-// - Package output streams as each package completes
-// - Group footer is written when the group ends (non-groupable package or all done)
-func (h *quietHandler) renderWithPackageGrouping(pkgs []gotest.Reference) {
-	for len(pkgs) > 0 {
-		pkgRef := pkgs[0]
-		action := h.result.ReferenceConclusiveAction(pkgRef)
-
-		if !action.Completed() {
-			// package not done yet - return (streaming group stays open)
-			return
-		}
-
-		if h.groupConfig.ShouldGroup(action) {
-			// ensure streaming group is started
-			if h.streamingGroup == nil {
-				title := h.groupConfig.GroupedStatusLabel() + " packages"
-				h.streamingGroup = group.NewStreamingGroupWriter(
-					h.writer, title, h.groupConfig.Formatter)
-			}
-			if !h.streamingGroup.Started() {
-				_ = h.streamingGroup.Start()
-			}
-			// output directly to streaming writer (incremental)
-			h.outputPackageToWriter(pkgRef, h.streamingGroup, h.hasFailure, func(e gotest.Event) bool {
-				return !output.HasStateMarking(e.Output)
-			})
-		} else {
-			// non-groupable: close any open group first
-			if h.streamingGroup != nil && h.streamingGroup.Started() {
-				_ = h.streamingGroup.End()
-				h.streamingGroup = nil
-			}
-			// output directly to main writer
-			h.outputPackageToWriter(pkgRef, h.writer, h.hasFailure, func(e gotest.Event) bool {
-				return !output.HasStateMarking(e.Output)
-			})
-		}
-
-		h.packages.Delete(pkgRef)
-		pkgs = h.packages.Values()
-	}
-
-	// all done - close any open group
-	if h.streamingGroup != nil && h.streamingGroup.Started() {
-		_ = h.streamingGroup.End()
-		h.streamingGroup = nil
 	}
 }
 
@@ -248,6 +186,31 @@ func (h *quietHandler) hasFailure(testRef gotest.Reference) bool {
 		}
 	}
 	return false
+}
+
+// outputPackage writes all output for a completed package.
+func (h *quietHandler) outputPackage(pkgRef gotest.Reference) {
+	writer, done := h.writerForPackage(pkgRef)
+	defer done()
+
+	h.outputPackageToWriter(pkgRef, writer, h.hasFailure, func(e gotest.Event) bool {
+		return !output.HasStateMarking(e.Output)
+	})
+}
+
+// writerForPackage returns the appropriate writer for a package based on grouping config.
+// The returned done function must be called to flush any buffered group output.
+func (h *quietHandler) writerForPackage(pkgRef gotest.Reference) (io.Writer, func()) {
+	action := h.result.ReferenceConclusiveAction(pkgRef)
+
+	if !h.groupConfig.ShouldGroup(action) {
+		return h.writer, func() {}
+	}
+
+	groupWriter := group.NewWriter(h.writer, pkgRef.Package, h.groupConfig.Formatter)
+	return groupWriter, func() {
+		_, _ = groupWriter.Flush()
+	}
 }
 
 // outputPackageToWriter writes output for a completed package to the specified writer.
