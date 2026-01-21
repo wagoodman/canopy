@@ -30,8 +30,8 @@ require (
 	github.com/muesli/termenv v0.16.0
 	github.com/savioxavier/termlink v1.4.3
 	github.com/scylladb/go-set v1.0.2
-	github.com/spf13/cobra v1.9.1
-	github.com/spf13/pflag v1.0.6
+	github.com/spf13/cobra v1.10.2
+	github.com/spf13/pflag v1.0.9
 	github.com/stretchr/testify v1.10.0
 	github.com/wagoodman/go-partybus v0.0.0-20230516145632-8ccac152c651
 	golang.org/x/term v0.33.0
