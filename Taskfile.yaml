@@ -179,11 +179,18 @@ tasks:
     deps: [tools]
     desc: Run demo tests
     silent: true
+    vars:
+      TEST_ARGS: ./internal/test-fixtures/...
     env:
       # make this a little nicer in CI to see colors
       FORCE_COLOR: "true"
     # we don't want to fail, only run the tests and show what it looks like in CI
-    cmd: '{{ .CANOPY }} test ./internal/test-fixtures/... || true'
+    cmd: |
+      if [ "$VERBOSE" = "true" ]; then
+        {{ .CANOPY }} test {{ .TEST_ARGS }} -v || true
+      else
+        {{ .CANOPY }} test {{ .TEST_ARGS }} || true
+      fi
 
   ## Build-related targets #################################
 

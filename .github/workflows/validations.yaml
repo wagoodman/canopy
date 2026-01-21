@@ -50,8 +50,11 @@ jobs:
           USE_GO_TEST: ${{ matrix.use-go-test }}
 
   demo:
-    name: "Demo Tests"
+    name: "Demo Tests (verbose: ${{ matrix.verbose }})"
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        verbose: [true, false]
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -62,3 +65,5 @@ jobs:
 
       - name: Run
         run: make demo
+        env:
+          VERBOSE: ${{ matrix.verbose }}
