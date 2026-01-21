@@ -6,6 +6,13 @@ import (
 	"strings"
 )
 
+// execution marker visibility modes
+const (
+	ExecutionMarkersNone         = "none"          // hide all state markers (=== RUN, === PAUSE, === CONT)
+	ExecutionMarkersAll          = "all"           // show all state markers
+	ExecutionMarkersParallelOnly = "parallel-only" // show only PAUSE/CONT markers (indicates t.Parallel())
+)
+
 var (
 	logLinePattern        = regexp.MustCompile(`^\s*\S+.go:\d+:`)
 	timePattern           = regexp.MustCompile(`^\d+\.?\d*\S+$`)
@@ -75,6 +82,25 @@ func HasContinueMarking(output string) bool {
 // HasPauseMarking returns true if the output indicates a test pause (for t.Parallel).
 func HasPauseMarking(output string) bool {
 	return strings.HasPrefix(strings.TrimSpace(output), "=== PAUSE")
+}
+
+// ShouldShowStateMarker determines if a state marker line should be shown based on the mode.
+// Modes: ExecutionMarkersNone (hide all), ExecutionMarkersAll (show all), ExecutionMarkersParallelOnly (show only PAUSE/CONT).
+// Returns true if the line is not a state marker or should be shown based on the mode.
+func ShouldShowStateMarker(line, mode string) bool {
+	if !HasStateMarking(line) {
+		return true // not a state marker, always show
+	}
+	switch mode {
+	case ExecutionMarkersNone:
+		return false
+	case ExecutionMarkersAll:
+		return true
+	case ExecutionMarkersParallelOnly:
+		return HasPauseMarking(line) || HasContinueMarking(line)
+	default:
+		return false // default to hiding state markers
+	}
 }
 
 // Conclusion markings...

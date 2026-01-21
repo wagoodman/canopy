@@ -52,7 +52,7 @@ func newVerboseDynamicGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 			Color:                       cfg.Color,
 			IDE:                         ide.Select(&env.OSEnvironmentGetter{}),
 			HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
-			HideExecutionTestEvents:     true,
+			ExecutionMarkers:            cfg.ExecutionMarkers,
 		},
 	)
 
@@ -94,6 +94,7 @@ func newDefaultDynamicGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 		Color:                       cfg.Color,
 		IDE:                         ide.Select(&env.OSEnvironmentGetter{}),
 		HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
+		ExecutionMarkers:            cfg.ExecutionMarkers,
 	}
 
 	sty := style.NewGo(cfg.Color)
@@ -175,7 +176,7 @@ func newSafeGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 				Color:                       cfg.Color,
 				IDE:                         ide.Select(&env.OSEnvironmentGetter{}),
 				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
-				HideExecutionTestEvents:     true,
+				ExecutionMarkers:            cfg.ExecutionMarkers,
 			},
 		)
 	default:
@@ -186,6 +187,7 @@ func newSafeGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 				Color:                       cfg.Color,
 				IDE:                         ide.Select(&env.OSEnvironmentGetter{}),
 				HidePackagesWithNoTestFiles: !cfg.ShowPackagesWithNoTests,
+				ExecutionMarkers:            cfg.ExecutionMarkers,
 			},
 		)
 	}

@@ -184,3 +184,103 @@ func TestIsLogLine(t *testing.T) {
 		})
 	}
 }
+
+func TestShouldShowStateMarker(t *testing.T) {
+	tests := []struct {
+		name     string
+		line     string
+		mode     string
+		expected bool
+	}{
+		// non-state markers should always be shown
+		{
+			name:     "non-state marker with none mode",
+			line:     "some regular output",
+			mode:     ExecutionMarkersNone,
+			expected: true,
+		},
+		{
+			name:     "non-state marker with all mode",
+			line:     "some regular output",
+			mode:     ExecutionMarkersAll,
+			expected: true,
+		},
+		// mode: none - hide all state markers
+		{
+			name:     "RUN marker with none mode",
+			line:     "=== RUN   TestExample",
+			mode:     ExecutionMarkersNone,
+			expected: false,
+		},
+		{
+			name:     "PAUSE marker with none mode",
+			line:     "=== PAUSE TestExample",
+			mode:     ExecutionMarkersNone,
+			expected: false,
+		},
+		{
+			name:     "CONT marker with none mode",
+			line:     "=== CONT  TestExample",
+			mode:     ExecutionMarkersNone,
+			expected: false,
+		},
+		// mode: all - show all state markers
+		{
+			name:     "RUN marker with all mode",
+			line:     "=== RUN   TestExample",
+			mode:     ExecutionMarkersAll,
+			expected: true,
+		},
+		{
+			name:     "PAUSE marker with all mode",
+			line:     "=== PAUSE TestExample",
+			mode:     ExecutionMarkersAll,
+			expected: true,
+		},
+		{
+			name:     "CONT marker with all mode",
+			line:     "=== CONT  TestExample",
+			mode:     ExecutionMarkersAll,
+			expected: true,
+		},
+		// mode: parallel-only - show only PAUSE/CONT markers
+		{
+			name:     "RUN marker with parallel-only mode",
+			line:     "=== RUN   TestExample",
+			mode:     ExecutionMarkersParallelOnly,
+			expected: false,
+		},
+		{
+			name:     "PAUSE marker with parallel-only mode",
+			line:     "=== PAUSE TestExample",
+			mode:     ExecutionMarkersParallelOnly,
+			expected: true,
+		},
+		{
+			name:     "CONT marker with parallel-only mode",
+			line:     "=== CONT  TestExample",
+			mode:     ExecutionMarkersParallelOnly,
+			expected: true,
+		},
+		// unknown mode defaults to hiding
+		{
+			name:     "RUN marker with unknown mode",
+			line:     "=== RUN   TestExample",
+			mode:     "invalid",
+			expected: false,
+		},
+		{
+			name:     "empty mode defaults to hiding",
+			line:     "=== RUN   TestExample",
+			mode:     "",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ShouldShowStateMarker(tt.line, tt.mode)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

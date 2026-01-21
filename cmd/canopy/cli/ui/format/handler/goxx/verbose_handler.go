@@ -37,8 +37,9 @@ type VerbosePackageConfig struct {
 	// HidePackagesWithNoTestFiles controls visibility of packages without tests.
 	HidePackagesWithNoTestFiles bool
 
-	// HideExecutionTestEvents controls visibility of RUN/PAUSE/CONTINUE markers.
-	HideExecutionTestEvents bool
+	// ExecutionMarkers controls visibility of test state markers (=== RUN/PAUSE/CONT).
+	// Valid values: "none" (hide all), "all" (show all), "parallel-only" (show only PAUSE/CONT).
+	ExecutionMarkers string
 }
 
 // NewVerboseHandler creates a handler that formats output in enhanced verbose mode,
@@ -97,11 +98,11 @@ func NewVerbosePackage(writer io.Writer, config VerbosePackageConfig, ref gotest
 		panic:         make(map[gotest.Reference]bool),
 		formatter: presenter.NewGoVerboseEventFactory(
 			presenter.GoEventConfig{
-				Style:                   st,
-				IDE:                     config.IDE,
-				PackageNameWidth:        config.PackageNameWidth,
-				StripPackagePrefix:      "", // TODO: not wired up
-				HideExecutionTestEvents: false,
+				Style:              st,
+				IDE:                config.IDE,
+				PackageNameWidth:   config.PackageNameWidth,
+				StripPackagePrefix: "", // TODO: not wired up
+				ExecutionMarkers:   config.ExecutionMarkers,
 			},
 		).NewEvent,
 	}

@@ -50,6 +50,10 @@ type PackageConfig struct {
 	// StalePackageDuration is the threshold for considering a package stale.
 	StalePackageDuration time.Duration
 
+	// ExecutionMarkers controls visibility of test state markers (=== RUN/PAUSE/CONT).
+	// Valid values: "none" (hide all), "all" (show all), "parallel-only" (show only PAUSE/CONT).
+	ExecutionMarkers string
+
 	// Grouping configures collapsible output groups for CI environments.
 	Grouping group.Config
 }
@@ -80,6 +84,9 @@ type verboseHandler struct {
 
 	// hidePackagesWithNoTestFiles controls visibility of packages without tests.
 	hidePackagesWithNoTestFiles bool
+
+	// executionMarkers controls visibility of test state markers (=== RUN/PAUSE/CONT).
+	executionMarkers string
 }
 
 // NewVerboseHandler creates a handler that formats output in verbose mode,
@@ -92,15 +99,16 @@ func NewVerboseHandler(writer io.Writer, config PackageConfig) handler.Handler {
 		panic:    make(map[gotest.Reference]bool),
 		formatter: presenter.NewGoVerboseEventFactory(
 			presenter.GoEventConfig{
-				Style:                   style.NewGo(config.Color),
-				IDE:                     config.IDE,
-				PackageNameWidth:        config.PackageNameWidth,
-				StripPackagePrefix:      config.StripPackagePrefix,
-				HideExecutionTestEvents: false,
+				Style:              style.NewGo(config.Color),
+				IDE:                config.IDE,
+				PackageNameWidth:   config.PackageNameWidth,
+				StripPackagePrefix: config.StripPackagePrefix,
+				ExecutionMarkers:   config.ExecutionMarkers,
 			},
 		).NewEvent,
 		groupConfig:                 config.Grouping,
 		hidePackagesWithNoTestFiles: config.HidePackagesWithNoTestFiles,
+		executionMarkers:            config.ExecutionMarkers,
 	}
 	h.grouper = group.NewStreamingGroupRenderer(
 		h.writer,

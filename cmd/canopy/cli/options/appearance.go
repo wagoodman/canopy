@@ -8,6 +8,7 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ci"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/env"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 
 	"github.com/anchore/fangs"
@@ -33,6 +34,9 @@ type Appearance struct {
 	ShowPackagesWithNoTests bool `yaml:"show-packages-with-no-tests" json:"show-packages-with-no-tests" mapstructure:"show-packages-with-no-tests"`
 	// UseShortNames strips the module prefix from package names in output for brevity.
 	UseShortNames bool `yaml:"use-short-names" json:"use-short-names" mapstructure:"use-short-names"`
+	// ExecutionMarkers controls visibility of test execution state markers (=== RUN, === PAUSE, === CONT).
+	// Valid values: "none" (hide all), "all" (show all), "parallel-only" (show only PAUSE/CONT).
+	ExecutionMarkers string `yaml:"execution-markers" json:"execution-markers" mapstructure:"execution-markers"`
 	// Grouping configures collapsible output groups for CI environments.
 	Grouping Grouping `yaml:"grouping" json:"grouping" mapstructure:"grouping"`
 
@@ -46,8 +50,17 @@ func DefaultAppearance() Appearance {
 		Color:                   "auto",
 		ShowPackagesWithNoTests: false,
 		UseShortNames:           true,
+		ExecutionMarkers:        output.ExecutionMarkersParallelOnly,
 		Grouping:                DefaultGrouping(),
 	}
+}
+
+func (o *Appearance) DescribeFields(descriptions fangs.FieldDescriptionSet) {
+	descriptions.Add(&o.CombineMultipleRuns, "whether to combine multiple test runs into a single summary")
+	descriptions.Add(&o.ExecutionMarkers, "visibility of test execution markers (=== RUN/PAUSE/CONT): none, all, parallel-only")
+	descriptions.Add(&o.Color, "color output mode: auto, on, off (respects NO_COLOR and FORCE_COLOR env vars)")
+	descriptions.Add(&o.ShowPackagesWithNoTests, "whether to show packages that have no test files")
+	descriptions.Add(&o.UseShortNames, "whether to strip module path prefixes from package names in output")
 }
 
 // AddFlags registers the appearance flags with the flag set.

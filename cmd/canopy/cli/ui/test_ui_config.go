@@ -22,6 +22,9 @@ type TestUIConfig struct {
 	IsTTY bool
 	// CombineMultipleRuns controls whether to show a single summary for multiple test run sessions.
 	CombineMultipleRuns bool
+	// ExecutionMarkers controls visibility of test state markers (=== RUN/PAUSE/CONT).
+	// Valid values: "none" (hide all), "all" (show all), "parallel-only" (show only PAUSE/CONT).
+	ExecutionMarkers string
 	// Grouping configures collapsible output groups (usually for CI environments).
 	Grouping group.Config
 }
@@ -33,6 +36,7 @@ func DefaultTestUIConfig() TestUIConfig {
 		Verbose:                 0,
 		ShowPackagesWithNoTests: false,
 		StripPackagePrefix:      "",
+		ExecutionMarkers:        "none",         // hide all state markers by default
 		Grouping:                group.Config{}, // default to grouping disabled
 	}
 }

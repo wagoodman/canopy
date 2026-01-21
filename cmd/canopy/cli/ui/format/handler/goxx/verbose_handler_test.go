@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 )
 
 func TestVerboseHandler(t *testing.T) {
@@ -32,6 +33,7 @@ func TestVerboseHandler(t *testing.T) {
 			cfg := VerbosePackageConfig{
 				Color:            false,
 				PackageNameWidth: 150,
+				ExecutionMarkers: output.ExecutionMarkersAll, // show all state markers for test consistency
 			}
 
 			for _, b := range []bool{true, false} {
@@ -96,6 +98,7 @@ func TestVerbosePackage(t *testing.T) {
 			cfg := VerbosePackageConfig{
 				Color:            false,
 				PackageNameWidth: 150,
+				ExecutionMarkers: output.ExecutionMarkersAll, // show all state markers for test consistency
 			}
 			subject := NewVerbosePackage(&sb, cfg, tt.ref)
 			events := fixtureEvents(t, tt.fixture)
