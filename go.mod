@@ -26,7 +26,7 @@ require (
 	github.com/junegunn/fzf v0.64.0
 	github.com/lindell/go-ordered-set v1.0.2
 	github.com/lrstanley/bubblezone v1.0.0
-	github.com/magiconair/properties v1.8.7
+	github.com/magiconair/properties v1.8.10
 	github.com/muesli/termenv v0.16.0
 	github.com/savioxavier/termlink v1.4.3
 	github.com/scylladb/go-set v1.0.2
