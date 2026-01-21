@@ -24,7 +24,7 @@ func TestAddNested(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Log("sleep is for the wicked!")
-			time.Sleep(1 * time.Second)
+			time.Sleep(500 * time.Millisecond)
 			// note: there is a nested t.Run here... for no reason at all other than to be evil
 			// also note that there is simply one case, so this is a bit silly (but different than the loop test below)
 			t.Logf("this is an exciting log message for %q", tt.name)
@@ -112,7 +112,7 @@ func TestAddFailingSubtest(t *testing.T) {
 			}
 			// note: there is a nested t.Run here... for no reason at all other than to be evil
 			for _, o := range over {
-				time.Sleep(200 * time.Millisecond) // simulate some processing time
+				time.Sleep(100 * time.Millisecond) // simulate some processing time
 				t.Run(fmt.Sprintf("offset=%d", o), func(t *testing.T) {
 					sum := Add(tt.a+o, tt.b)
 					if sum != tt.expected+o {
@@ -150,7 +150,7 @@ func TestAddFailingSubtest2(t *testing.T) {
 			}
 			// note: there is a nested t.Run here... for no reason at all other than to be evil
 			for _, o := range over {
-				time.Sleep(200 * time.Millisecond) // simulate some processing time
+				time.Sleep(100 * time.Millisecond) // simulate some processing time
 				t.Run(fmt.Sprintf("offset=%d", o), func(t *testing.T) {
 					sum := Add(tt.a+o, tt.b)
 					if sum != tt.expected+o {
@@ -183,7 +183,7 @@ func TestParallel1(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			time.Sleep(tt.amt * time.Millisecond * 450)
+			time.Sleep(tt.amt * time.Millisecond * 225)
 		})
 	}
 }
@@ -205,7 +205,7 @@ func TestParallel2(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			time.Sleep(tt.amt * time.Millisecond * 250)
+			time.Sleep(tt.amt * time.Millisecond * 125)
 		})
 	}
 }

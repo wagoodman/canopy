@@ -7,7 +7,7 @@ import (
 
 func TestNestedParallel1(t *testing.T) {
 	t.Parallel()
-	time.Sleep(1 * time.Second)
+	time.Sleep(500 * time.Millisecond)
 
 	testCases := []struct {
 		name string
@@ -24,14 +24,14 @@ func TestNestedParallel1(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			time.Sleep(tt.amt * time.Millisecond * 350)
+			time.Sleep(tt.amt * time.Millisecond * 175)
 		})
 	}
 }
 
 func TestNestedParallel2(t *testing.T) {
 	t.Parallel()
-	time.Sleep(1 * time.Second)
+	time.Sleep(500 * time.Millisecond)
 	testCases := []struct {
 		name string
 		amt  time.Duration
@@ -47,7 +47,7 @@ func TestNestedParallel2(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			time.Sleep(tt.amt * time.Millisecond * 250)
+			time.Sleep(tt.amt * time.Millisecond * 125)
 		})
 	}
 }

@@ -22,7 +22,7 @@ func TestMoreParallel1(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			time.Sleep(tt.amt * time.Millisecond * 350)
+			time.Sleep(tt.amt * time.Millisecond * 175)
 		})
 	}
 }
@@ -44,14 +44,14 @@ func TestMoreParallel2(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			time.Sleep(tt.amt * time.Millisecond * 450)
+			time.Sleep(tt.amt * time.Millisecond * 225)
 		})
 	}
 }
 
 func TestMoreParallel3Slow(t *testing.T) {
 	t.Parallel()
-	time.Sleep(7 * time.Second) // simulate a really slow test
+	time.Sleep(3500 * time.Millisecond) // simulate a really slow test
 
 	testCases := []struct {
 		name string
@@ -68,7 +68,7 @@ func TestMoreParallel3Slow(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			time.Sleep(tt.amt * time.Millisecond * 350)
+			time.Sleep(tt.amt * time.Millisecond * 175)
 		})
 	}
 }
