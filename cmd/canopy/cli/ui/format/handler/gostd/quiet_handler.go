@@ -61,6 +61,9 @@ type quietHandler struct {
 // NewQuietHandler creates a handler that formats output in quiet mode, showing
 // only failures and package summaries.
 func NewQuietHandler(writer io.Writer, config PackageConfig) handler.Handler {
+	// quiet mode should never show state markers (=== RUN, === PAUSE, === CONT)
+	executionMarkers := output.ExecutionMarkersNone
+
 	h := &quietHandler{
 		config:   config,
 		writer:   writer,
@@ -73,11 +76,11 @@ func NewQuietHandler(writer io.Writer, config PackageConfig) handler.Handler {
 				IDE:                config.IDE,
 				PackageNameWidth:   config.PackageNameWidth,
 				StripPackagePrefix: config.StripPackagePrefix,
-				ExecutionMarkers:   config.ExecutionMarkers,
+				ExecutionMarkers:   executionMarkers,
 			},
 		).NewEvent,
 		groupConfig:      config.Grouping,
-		executionMarkers: config.ExecutionMarkers,
+		executionMarkers: executionMarkers,
 	}
 	h.grouper = group.NewStreamingGroupRenderer(
 		h.writer,
@@ -235,6 +238,9 @@ func (h *quietHandler) outputPackageToWriter(pkgRef gotest.Reference, writer io.
 	for _, e := range outputEvents {
 		if output.HasAny(output.HasPackagePassMarking, output.HasPackageCoverageMarking)(e.Output) {
 			// if the package passed or there is a final coverage line, we don't need to output anything
+			continue
+		}
+		if !render(e) {
 			continue
 		}
 		fmtr := h.formatter(e, h.panic[e.Reference])

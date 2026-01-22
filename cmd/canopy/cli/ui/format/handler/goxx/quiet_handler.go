@@ -86,6 +86,9 @@ type QuietPackage struct {
 
 // NewQuietPackage creates a handler for a single package in quiet mode.
 func NewQuietPackage(writer io.Writer, config QuietPackageConfig, ref gotest.Reference) *QuietPackage {
+	// quiet mode should never show state markers (=== RUN, === PAUSE, === CONT)
+	config.ExecutionMarkers = output.ExecutionMarkersNone
+
 	return &QuietPackage{
 		writer:          writer,
 		config:          config,
