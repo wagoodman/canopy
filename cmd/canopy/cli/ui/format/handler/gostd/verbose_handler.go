@@ -27,6 +27,34 @@ var (
 	_ partybus.Handler = (*verboseHandler)(nil)
 )
 
+// eventPhase represents which part of test output we're rendering.
+// Tests output in two phases matching go test's output order:
+//   - execution: RUN/PAUSE/CONT markers and log lines (no indentation)
+//   - conclusion: PASS/FAIL/SKIP markers (with hierarchy indentation)
+type eventPhase int
+
+const (
+	executionPhase  eventPhase = iota // RUN/PAUSE/CONT + logs, no indent
+	conclusionPhase                   // PASS/FAIL/SKIP, with indent
+)
+
+func (p eventPhase) shouldInclude(e gotest.Event) bool {
+	hasConclusion := output.HasConclusionMarking(e.Output)
+	return (p == conclusionPhase) == hasConclusion
+}
+
+func (p eventPhase) shouldIndent() bool {
+	return p == conclusionPhase
+}
+
+// isNestedInGroup returns true if we're already writing inside a group writer.
+// Used to avoid nesting groups within groups.
+func isNestedInGroup(w io.Writer) bool {
+	_, isGroup := w.(*group.Writer)
+	_, isStreaming := w.(*group.StreamingGroupWriter)
+	return isGroup || isStreaming
+}
+
 // PackageConfig holds configuration for gostd package handlers.
 type PackageConfig struct {
 	// Color enables colored output.
@@ -222,47 +250,48 @@ func (h *verboseHandler) writerForPackage(pkgRef gotest.Reference) (io.Writer, f
 	}
 }
 
+// writeEvent formats and writes a single event to the writer.
+func (h *verboseHandler) writeEvent(e gotest.Event, w io.Writer) {
+	if strings.TrimSpace(e.Output) == "" {
+		return
+	}
+	fmt.Fprint(w, h.formatter(e, h.panic[e.Reference]).String())
+}
+
+// outputTestEvents outputs all events for a single test in go-test order:
+// execution events (RUN, logs) followed by conclusion events (PASS/FAIL).
+// This is the fundamental output primitive that maintains correct event ordering.
+func (h *verboseHandler) outputTestEvents(testRef gotest.Reference, writer io.Writer) {
+	h.outputTestPhase(testRef, writer, executionPhase)
+	h.outputTestPhase(testRef, writer, conclusionPhase)
+}
+
 // outputPackageToWriter writes all output for a package to the specified writer.
 func (h *verboseHandler) outputPackageToWriter(pkgRef gotest.Reference, writer io.Writer) {
-	// check if we need AcrossTests grouping, which requires separating non-conclusions from conclusions
-	_, isGroupWriter := writer.(*group.Writer)
-	_, isStreamingGroupWriter := writer.(*group.StreamingGroupWriter)
-	useAcrossTestsGrouping := h.groupConfig.AcrossTests && h.groupConfig.Formatter != nil && !isGroupWriter && !isStreamingGroupWriter
+	// AcrossTests grouping requires separating execution from conclusions across all tests
+	useAcrossTestsGrouping := h.groupConfig.AcrossTests &&
+		h.groupConfig.Formatter != nil &&
+		!isNestedInGroup(writer)
 
 	if useAcrossTestsGrouping {
-		// AcrossTests grouping: first output all non-conclusions, then group conclusions together
+		// output all execution events first, then group conclusions together
 		for _, testRef := range h.result.Children(pkgRef) {
-			h.outputTestToWriter(testRef, writer, false, false, func(e gotest.Event) bool {
-				return !output.HasConclusionMarking(e.Output)
-			})
+			h.outputTestPhase(testRef, writer, executionPhase)
 		}
 		h.outputConclusionsWithGrouping(pkgRef, writer)
 	} else {
-		// standard verbose output: output each test's events together before moving to the next test.
-		// This matches go test's output order where each test's RUN, logs, and PASS/FAIL appear together.
+		// standard verbose output: each test's events together in go-test order
 		for _, testRef := range h.result.Children(pkgRef) {
-			// output run/pause/continue and logs (forConclusions=false, indent=false)
-			h.outputTestToWriter(testRef, writer, false, false, func(e gotest.Event) bool {
-				return !output.HasConclusionMarking(e.Output)
-			})
-			// output conclusion (forConclusions=true, indent=true)
-			h.outputTestToWriter(testRef, writer, true, true, func(e gotest.Event) bool {
-				return output.HasConclusionMarking(e.Output)
-			})
+			h.outputTestEvents(testRef, writer)
 		}
 	}
 
-	// output package conclusions
-	outputEvents := h.result.ReferenceEvents(pkgRef)
-	for _, e := range outputEvents {
+	// output package-level conclusions (FAIL line, etc.)
+	for _, e := range h.result.ReferenceEvents(pkgRef) {
 		if output.HasAny(output.HasPackagePassMarking, output.HasPackageCoverageMarking)(e.Output) {
-			// if the package passed or there is a final coverage line, we don't need to output anything
 			continue
 		}
-		fmtr := h.formatter(e, h.panic[e.Reference])
-		if strings.TrimSpace(e.Output) != "" {
-			fmt.Fprint(writer, fmtr.String())
-		}
+		h.writeEvent(e, writer)
 	}
 }
 
@@ -276,21 +305,17 @@ func (h *verboseHandler) outputConclusionsWithGrouping(pkgRef gotest.Reference, 
 
 	flushGrouped := func() {
 		if len(groupBuffer) <= 1 {
-			// single test or empty - output without grouping (forConclusions=true, indent=true)
+			// single test or empty - output without grouping
 			for _, ref := range groupBuffer {
-				h.outputTestToWriter(ref, writer, true, true, func(e gotest.Event) bool {
-					return output.HasConclusionMarking(e.Output)
-				})
+				h.outputTestPhase(ref, writer, conclusionPhase)
 			}
 		} else {
-			// multiple consecutive groupable tests - group them (forConclusions=true, indent=true)
+			// multiple consecutive groupable tests - wrap in a collapsible group
 			statusLabel := h.groupConfig.GroupedStatusLabel()
 			title := fmt.Sprintf("%d %s tests", len(groupBuffer), statusLabel)
 			groupWriter := group.NewWriter(writer, title, h.groupConfig.Formatter)
 			for _, ref := range groupBuffer {
-				h.outputTestToWriter(ref, groupWriter, true, true, func(e gotest.Event) bool {
-					return output.HasConclusionMarking(e.Output)
-				})
+				h.outputTestPhase(ref, groupWriter, conclusionPhase)
 			}
 			_, _ = groupWriter.Flush()
 		}
@@ -303,80 +328,69 @@ func (h *verboseHandler) outputConclusionsWithGrouping(pkgRef gotest.Reference, 
 		if h.groupConfig.ShouldGroup(action) {
 			groupBuffer = append(groupBuffer, testRef)
 		} else {
-			// flush any accumulated tests
 			flushGrouped()
-			// output this test directly (forConclusions=true, indent=true)
-			h.outputTestToWriter(testRef, writer, true, true, func(e gotest.Event) bool {
-				return output.HasConclusionMarking(e.Output)
-			})
+			h.outputTestPhase(testRef, writer, conclusionPhase)
 		}
 	}
 
-	// flush remaining tests
 	flushGrouped()
 }
 
-// outputTestToWriter writes output for a test and its children to the specified writer.
-// Parameters:
-// - forConclusions: true when outputting conclusion events (PASS/FAIL/SKIP), false for execution events (RUN/PAUSE/CONT)
-// - indent: whether to indent output based on test hierarchy depth
-func (h *verboseHandler) outputTestToWriter(testRef gotest.Reference, writer io.Writer, forConclusions, indent bool, include func(gotest.Event) bool) {
+// outputTestPhase writes events for a test and its children for the specified phase.
+// The phase determines which events are included and whether indentation is applied.
+func (h *verboseHandler) outputTestPhase(testRef gotest.Reference, writer io.Writer, phase eventPhase) {
 	children := h.result.Children(testRef)
 
-	// check if we should apply AcrossCases grouping:
-	// - AcrossCases is enabled
-	// - formatter is set
-	// - this test has children
-	// - we're outputting conclusions, not execution events (RUN/PAUSE/CONT)
-	// - not already writing to a group (avoid nesting)
-	_, isGroupWriter := writer.(*group.Writer)
-	_, isStreamingGroupWriter := writer.(*group.StreamingGroupWriter)
+	// AcrossCases grouping only applies to conclusion phase with children
 	shouldApplyCaseGrouping := h.groupConfig.AcrossCases &&
 		h.groupConfig.Formatter != nil &&
 		len(children) > 0 &&
-		forConclusions &&
-		!isGroupWriter && !isStreamingGroupWriter
+		phase == conclusionPhase &&
+		!isNestedInGroup(writer)
 
 	if shouldApplyCaseGrouping {
-		// output this test's own events (not children's)
-		h.outputOwnEvents(testRef, writer, indent, include)
-		// output children with grouping applied
-		h.outputChildrenWithCaseGrouping(testRef, writer, forConclusions, indent, include)
+		h.outputOwnEventsForPhase(testRef, writer, phase)
+		h.outputChildrenWithCaseGrouping(testRef, writer, phase)
 	} else {
-		// standard behavior: collect all events from test and children
-		outputEvents := h.getEvents(testRef, include)
-		for _, e := range outputEvents {
-			w := writer
-			if indent {
-				w = internal.NewIndentWriterForReference(writer, e.Reference)
-			}
-			fmtr := h.formatter(e, h.panic[e.Reference])
-			if strings.TrimSpace(e.Output) != "" {
-				fmt.Fprint(w, fmtr.String())
-			}
-		}
+		h.outputEventsRecursive(testRef, writer, phase)
 	}
 }
 
-// outputOwnEvents outputs only the test's own events (not its children's events).
-func (h *verboseHandler) outputOwnEvents(testRef gotest.Reference, writer io.Writer, indent bool, include func(gotest.Event) bool) {
-	outputEvents := filterEvents(h.result.ReferenceEvents(testRef), include)
-	for _, e := range outputEvents {
+// outputOwnEventsForPhase outputs only the test's own events (not children) for the given phase.
+func (h *verboseHandler) outputOwnEventsForPhase(testRef gotest.Reference, writer io.Writer, phase eventPhase) {
+	for _, e := range h.result.ReferenceEvents(testRef) {
+		if !phase.shouldInclude(e) {
+			continue
+		}
 		w := writer
-		if indent {
+		if phase.shouldIndent() {
 			w = internal.NewIndentWriterForReference(writer, e.Reference)
 		}
-		fmtr := h.formatter(e, h.panic[e.Reference])
-		if strings.TrimSpace(e.Output) != "" {
-			fmt.Fprint(w, fmtr.String())
+		h.writeEvent(e, w)
+	}
+}
+
+// outputEventsRecursive outputs events for a test and all its children for the given phase.
+func (h *verboseHandler) outputEventsRecursive(testRef gotest.Reference, writer io.Writer, phase eventPhase) {
+	for _, e := range h.result.ReferenceEvents(testRef) {
+		if !phase.shouldInclude(e) {
+			continue
 		}
+		w := writer
+		if phase.shouldIndent() {
+			w = internal.NewIndentWriterForReference(writer, e.Reference)
+		}
+		h.writeEvent(e, w)
+	}
+
+	for _, childRef := range h.result.Children(testRef) {
+		h.outputEventsRecursive(childRef, writer, phase)
 	}
 }
 
 // outputChildrenWithCaseGrouping outputs children of a test, grouping consecutive
-// children that match the grouping config (similar to outputConclusionsWithGrouping
-// but for subtests within a parent test).
-func (h *verboseHandler) outputChildrenWithCaseGrouping(testRef gotest.Reference, writer io.Writer, forConclusions, indent bool, include func(gotest.Event) bool) {
+// children that match the grouping config (for subtests within a parent test).
+func (h *verboseHandler) outputChildrenWithCaseGrouping(testRef gotest.Reference, writer io.Writer, phase eventPhase) {
 	children := h.result.Children(testRef)
 
 	var groupBuffer []gotest.Reference
@@ -385,12 +399,11 @@ func (h *verboseHandler) outputChildrenWithCaseGrouping(testRef gotest.Reference
 		if len(groupBuffer) == 0 {
 			return
 		}
-		// group consecutive groupable cases (even single items to highlight failures)
 		statusLabel := h.groupConfig.GroupedStatusLabel()
 		title := statusLabel + " cases"
 		groupWriter := group.NewWriter(writer, title, h.groupConfig.Formatter)
 		for _, ref := range groupBuffer {
-			h.outputTestToWriter(ref, groupWriter, forConclusions, indent, include)
+			h.outputTestPhase(ref, groupWriter, phase)
 		}
 		_, _ = groupWriter.Flush()
 		groupBuffer = nil
@@ -402,37 +415,12 @@ func (h *verboseHandler) outputChildrenWithCaseGrouping(testRef gotest.Reference
 		if h.groupConfig.ShouldGroup(action) {
 			groupBuffer = append(groupBuffer, childRef)
 		} else {
-			// flush any accumulated cases
 			flushGrouped()
-			// output this case directly (it may recursively apply case grouping to its children)
-			h.outputTestToWriter(childRef, writer, forConclusions, indent, include)
+			h.outputTestPhase(childRef, writer, phase)
 		}
 	}
 
-	// flush remaining cases
 	flushGrouped()
-}
-
-// getEvents collects events for a test and its children, filtered by the include function.
-func (h *verboseHandler) getEvents(testRef gotest.Reference, include func(gotest.Event) bool) []gotest.Event {
-	outputEvents := filterEvents(h.result.ReferenceEvents(testRef), include)
-
-	for _, childRef := range h.result.Children(testRef) {
-		outputEvents = append(outputEvents, h.getEvents(childRef, include)...)
-	}
-
-	return outputEvents
-}
-
-// filterEvents returns only events that pass the include filter.
-func filterEvents(events []gotest.Event, include func(gotest.Event) bool) []gotest.Event {
-	var filtered []gotest.Event
-	for _, e := range events {
-		if include(e) {
-			filtered = append(filtered, e)
-		}
-	}
-	return filtered
 }
 
 // String returns any remaining buffered output and closes any open streaming group.
