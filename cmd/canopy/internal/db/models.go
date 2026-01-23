@@ -17,6 +17,7 @@ func models() []any {
 		TestEvent{},
 		Reference{},
 		Annotation{},
+		FailedTestDetails{},
 	}
 }
 
@@ -97,6 +98,9 @@ type TestEvent struct {
 
 	// Error is the error message if this event represents a test failure.
 	Error string `gorm:"column:error" json:"error"`
+
+	// Failure contains structured failure data if this event is a failure event.
+	Failure *FailedTestDetails `gorm:"foreignKey:EventID" json:"failure,omitempty"`
 }
 
 // Reference identifies a specific test or subtest by its package, function, and t.Run name.
@@ -123,4 +127,33 @@ type Annotation struct {
 
 	// Value is the annotation string (e.g., "flaky", "slow", "integration").
 	Value string `gorm:"column:value;uniqueIndex" json:"value"`
+}
+
+// FailedTestDetails stores structured failure information parsed from test output.
+// This enables rich queries, better visualization, and flaky test detection.
+type FailedTestDetails struct {
+	// ID is the primary key for database relationships.
+	ID int64 `gorm:"primaryKey" json:"-"`
+
+	// EventID links this failure to its parent test event.
+	EventID int64 `gorm:"column:event_id;uniqueIndex" json:"-"`
+
+	// RunID is denormalized from TestEvent for query efficiency.
+	RunID int64 `gorm:"column:run_id;index" json:"-"`
+
+	// Type is the failure category (assertion, panic, diff, timeout, unknown).
+	Type string `gorm:"column:type;index" json:"type"`
+
+	// Details contains the type-specific failure information as JSON.
+	// The structure depends on Type: AssertionInfo, PanicInfo, or DiffInfo.
+	Details datatypes.JSON `gorm:"column:details" json:"details,omitempty"`
+
+	// LocationFile is the source file where the failure occurred.
+	LocationFile string `gorm:"column:location_file" json:"location_file,omitempty"`
+
+	// LocationLine is the line number where the failure occurred.
+	LocationLine int `gorm:"column:location_line" json:"location_line,omitempty"`
+
+	// Fingerprint is a semantic hash for identifying distinct failure modes.
+	Fingerprint string `gorm:"column:fingerprint;index" json:"fingerprint"`
 }
