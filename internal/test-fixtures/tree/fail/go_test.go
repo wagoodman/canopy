@@ -5,7 +5,12 @@ import "testing"
 func Test1(t *testing.T) {}
 
 func Test2(t *testing.T) {
-	t.Fail()
+	t.Error("message!")
 }
 
-func Test3(t *testing.T) {}
+func Test3(t *testing.T) {
+	t.Fatal("message!")
+}
+
+func Test4(t *testing.T) {
+}

@@ -224,22 +224,28 @@ func (h *verboseHandler) writerForPackage(pkgRef gotest.Reference) (io.Writer, f
 
 // outputPackageToWriter writes all output for a package to the specified writer.
 func (h *verboseHandler) outputPackageToWriter(pkgRef gotest.Reference, writer io.Writer) {
-	for _, testRef := range h.result.Children(pkgRef) {
-		// output run/pause/continue and logs (forConclusions=false, indent=false)
-		h.outputTestToWriter(testRef, writer, false, false, func(e gotest.Event) bool {
-			return !output.HasConclusionMarking(e.Output)
-		})
-	}
-
-	// output pass/failed conclusions with optional consecutive grouping
-	// skip AcrossTests grouping if we're already writing to a group (avoid nesting)
+	// check if we need AcrossTests grouping, which requires separating non-conclusions from conclusions
 	_, isGroupWriter := writer.(*group.Writer)
 	_, isStreamingGroupWriter := writer.(*group.StreamingGroupWriter)
-	if h.groupConfig.AcrossTests && h.groupConfig.Formatter != nil && !isGroupWriter && !isStreamingGroupWriter {
+	useAcrossTestsGrouping := h.groupConfig.AcrossTests && h.groupConfig.Formatter != nil && !isGroupWriter && !isStreamingGroupWriter
+
+	if useAcrossTestsGrouping {
+		// AcrossTests grouping: first output all non-conclusions, then group conclusions together
+		for _, testRef := range h.result.Children(pkgRef) {
+			h.outputTestToWriter(testRef, writer, false, false, func(e gotest.Event) bool {
+				return !output.HasConclusionMarking(e.Output)
+			})
+		}
 		h.outputConclusionsWithGrouping(pkgRef, writer)
 	} else {
-		// direct output without grouping (forConclusions=true, indent=true)
+		// standard verbose output: output each test's events together before moving to the next test.
+		// This matches go test's output order where each test's RUN, logs, and PASS/FAIL appear together.
 		for _, testRef := range h.result.Children(pkgRef) {
+			// output run/pause/continue and logs (forConclusions=false, indent=false)
+			h.outputTestToWriter(testRef, writer, false, false, func(e gotest.Event) bool {
+				return !output.HasConclusionMarking(e.Output)
+			})
+			// output conclusion (forConclusions=true, indent=true)
 			h.outputTestToWriter(testRef, writer, true, true, func(e gotest.Event) bool {
 				return output.HasConclusionMarking(e.Output)
 			})
