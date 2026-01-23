@@ -122,5 +122,5 @@ type Annotation struct {
 	ID int64 `gorm:"primaryKey" json:"-"`
 
 	// Value is the annotation string (e.g., "flaky", "slow", "integration").
-	Value string `gorm:"column:value" json:"value"`
+	Value string `gorm:"column:value;uniqueIndex" json:"value"`
 }

@@ -188,6 +188,15 @@ func (s Store) GetOrCreateReference(ref *Reference) error {
 	return nil
 }
 
+// GetOrCreateAnnotation finds an existing annotation or creates a new one if it doesn't exist.
+// This ensures annotations are deduplicated across test events.
+func (s Store) GetOrCreateAnnotation(annotation *Annotation) error {
+	if err := s.db.Where("value = ?", annotation.Value).FirstOrCreate(annotation).Error; err != nil {
+		return fmt.Errorf("unable to get or create annotation: %w", err)
+	}
+	return nil
+}
+
 // AddTestEvent creates a new test event record from a gotest.Event.
 // It automatically creates or reuses references and converts annotations.
 func (s Store) AddTestEvent(runID uuid.UUID, event gotest.Event) error {
@@ -207,7 +216,11 @@ func (s Store) AddTestEvent(runID uuid.UUID, event gotest.Event) error {
 
 	var annotations []Annotation
 	for _, a := range event.Annotations {
-		annotations = append(annotations, Annotation{Value: string(a)})
+		annotation := Annotation{Value: string(a)}
+		if err := s.GetOrCreateAnnotation(&annotation); err != nil {
+			return err
+		}
+		annotations = append(annotations, annotation)
 	}
 
 	var errStr string
