@@ -52,6 +52,8 @@ type runStore interface {
 	AddTestEvent(runID uuid.UUID, event gotest.Event) error
 	// EndTestRun marks a run as complete with optional coverage data.
 	EndTestRun(runID uuid.UUID, coverage *float64) error
+	// GetFailuresByRun retrieves all failure data for a specific test run.
+	GetFailuresByRun(runID uuid.UUID) ([]db.FailedTestDetails, error)
 }
 
 // dbStore implements the store interface using SQLite via GORM.
@@ -169,6 +171,11 @@ func (s dbStore) GetRunInfo(runID uuid.UUID) (RunInfo, error) {
 		return RunInfo{}, err
 	}
 	return newRunInfo(tr), nil
+}
+
+// GetFailuresByRun retrieves all failure data for a specific test run.
+func (s dbStore) GetFailuresByRun(runID uuid.UUID) ([]db.FailedTestDetails, error) {
+	return s.Store.GetFailuresByRun(runID)
 }
 
 // GetTestEvents retrieves all events for a test run, converting from database format.
