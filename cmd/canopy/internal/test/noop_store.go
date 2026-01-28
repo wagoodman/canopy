@@ -2,6 +2,7 @@ package test
 
 import (
 	"github.com/google/uuid"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/db"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
 
@@ -66,4 +67,8 @@ func (s *noopStore) AddTestEvent(_ uuid.UUID, _ gotest.Event) error {
 
 func (s *noopStore) EndTestRun(_ uuid.UUID, _ *float64) error {
 	return nil
+}
+
+func (s *noopStore) GetFailuresByRun(_ uuid.UUID) ([]db.FailedTestDetails, error) {
+	return nil, nil
 }
