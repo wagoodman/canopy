@@ -1,5 +1,5 @@
 // Package json provides a handler that writes raw JSON test events in
-// JSONL (JSON Lines) format without additional formatting or transformation.
+// JSONL (JSON Chunks) format without additional formatting or transformation.
 package json //nolint:revive
 
 import (
@@ -12,7 +12,7 @@ import (
 	"github.com/wagoodman/go-partybus"
 )
 
-// handler writes JSON Lines (JSONL) test events directly to output without formatting.
+// handler writes JSON Chunks (JSONL) test events directly to output without formatting.
 type handler struct {
 	// writer is where JSON events are written.
 	writer io.Writer

@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/failure"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -18,7 +20,8 @@ import (
 
 // Store provides database operations for test session persistence using SQLite and GORM.
 type Store struct {
-	db *gorm.DB
+	db              *gorm.DB
+	failureRegistry *failure.Registry
 }
 
 // New creates a new database store instance at the specified file path.
@@ -50,7 +53,8 @@ func New(dbFilePath string) (*Store, error) {
 	// db.Exec("PRAGMA auto_vacuum = NONE")
 
 	return &Store{
-		db: db,
+		db:              db,
+		failureRegistry: failure.NewRegistry(),
 	}, nil
 }
 
@@ -243,7 +247,105 @@ func (s Store) AddTestEvent(runID uuid.UUID, event gotest.Event) error {
 		return fmt.Errorf("unable to create test event: %w", err)
 	}
 
+	// parse and store failure data for fail events
+	if event.Action == gotest.FailAction {
+		// aggregate output from all output events for this test reference in this run
+		aggregatedOutput := s.aggregateTestOutput(run.ID, ref.ID)
+		if aggregatedOutput != "" {
+			if err := s.addFailureData(testEvent.ID, run.ID, aggregatedOutput); err != nil {
+				// log but don't fail the event creation
+				log.WithFields("error", err).Debug("failed to parse failure data")
+			}
+		}
+	}
+
 	return nil
+}
+
+// aggregateTestOutput collects all output from output events for a specific test reference within a run.
+func (s Store) aggregateTestOutput(runID, refID int64) string {
+	var events []TestEvent
+	if err := s.db.Where("run_id = ? AND reference_id = ? AND action = ?", runID, refID, "output").
+		Order("id ASC").Find(&events).Error; err != nil {
+		return ""
+	}
+
+	var output strings.Builder
+	for _, e := range events {
+		output.WriteString(e.Output)
+	}
+	return output.String()
+}
+
+// addFailureData parses failure output and stores structured failure data.
+func (s Store) addFailureData(eventID, runID int64, output string) error {
+	sf := s.failureRegistry.Parse(output)
+	if sf == nil {
+		return nil
+	}
+
+	// marshal the type-specific details
+	var detailsJSON []byte
+	var err error
+
+	switch sf.FailureType {
+	case failure.AssertionFailure:
+		if sf.Assertion != nil {
+			detailsJSON, err = json.Marshal(sf.Assertion)
+		}
+	case failure.PanicFailure:
+		if sf.Panic != nil {
+			detailsJSON, err = json.Marshal(sf.Panic)
+		}
+	case failure.DiffFailure:
+		if sf.Diff != nil {
+			detailsJSON, err = json.Marshal(sf.Diff)
+		}
+	}
+
+	if err != nil {
+		return fmt.Errorf("unable to marshal failure details: %w", err)
+	}
+
+	failureData := FailedTestDetails{
+		EventID:      eventID,
+		RunID:        runID,
+		Type:         string(sf.FailureType),
+		Details:      detailsJSON,
+		LocationFile: sf.Location.File,
+		LocationLine: sf.Location.Line,
+		Fingerprint:  sf.Fingerprint,
+	}
+
+	if err := s.db.Create(&failureData).Error; err != nil {
+		return fmt.Errorf("unable to create failure data: %w", err)
+	}
+
+	return nil
+}
+
+// GetFailuresByRun retrieves all failure data for a specific test run.
+func (s Store) GetFailuresByRun(runID uuid.UUID) ([]FailedTestDetails, error) {
+	run, err := s.GetTestRun(runID)
+	if err != nil {
+		return nil, err
+	}
+
+	var failures []FailedTestDetails
+	if err := s.db.Where("run_id = ?", run.ID).Find(&failures).Error; err != nil {
+		return nil, fmt.Errorf("unable to get failures by run: %w", err)
+	}
+	return failures, nil
+}
+
+// GetFailuresByFingerprint retrieves all failure data with a specific fingerprint.
+// This is useful for finding similar failures across runs for flaky test detection.
+func (s Store) GetFailuresByFingerprint(fingerprint string) ([]FailedTestDetails, error) {
+	var failures []FailedTestDetails
+	if err := s.db.Where("fingerprint = ?", fingerprint).Find(&failures).Error; err != nil {
+		return nil, fmt.Errorf("unable to get failures by fingerprint: %w", err)
+	}
+	return failures, nil
 }
 
 // open creates a new connection to a SQLite database file.
