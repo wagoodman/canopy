@@ -40,6 +40,7 @@ func New(id clio.Identification) *cobra.Command {
 		commands.List(app),
 		commands.Session(app),
 		commands.Format(app),
+		commands.Show(app),
 		commands.Trend(app),
 	)
 

@@ -167,6 +167,47 @@ func (s Store) GetTestEvents(runID uuid.UUID) ([]TestEvent, error) {
 	return *run.Events, nil
 }
 
+// GetTestEventsBatch retrieves a batch of test events for a run with pagination support.
+// Events are ordered by index for consistent streaming. Returns events, whether there are more, and any error.
+func (s Store) GetTestEventsBatch(runID uuid.UUID, offset, limit int) ([]TestEvent, bool, error) {
+	run, err := s.GetTestRun(runID)
+	if err != nil {
+		return nil, false, err
+	}
+
+	var events []TestEvent
+	if err := s.db.Preload("Reference").Preload("Annotations").
+		Where("run_id = ?", run.ID).
+		Order("\"index\" ASC").
+		Offset(offset).
+		Limit(limit + 1). // fetch one extra to check if there are more
+		Find(&events).Error; err != nil {
+		return nil, false, fmt.Errorf("unable to get test events batch: %w", err)
+	}
+
+	hasMore := len(events) > limit
+	if hasMore {
+		events = events[:limit] // trim the extra
+	}
+
+	return events, hasMore, nil
+}
+
+// GetTestEventCount returns the total number of events for a run.
+func (s Store) GetTestEventCount(runID uuid.UUID) (int64, error) {
+	run, err := s.GetTestRun(runID)
+	if err != nil {
+		return 0, err
+	}
+
+	var count int64
+	if err := s.db.Model(&TestEvent{}).Where("run_id = ?", run.ID).Count(&count).Error; err != nil {
+		return 0, fmt.Errorf("unable to count test events: %w", err)
+	}
+
+	return count, nil
+}
+
 // GetSessionTestRuns retrieves all test runs for a session.
 // If infoOnly is true, events and other associations are omitted for faster queries.
 func (s Store) GetSessionTestRuns(sessionID uuid.UUID, infoOnly bool) ([]TestRun, error) {
@@ -239,6 +280,8 @@ func (s Store) AddTestEvent(runID uuid.UUID, event gotest.Event) error {
 		Time:        event.Time,
 		Action:      string(event.Action),
 		Output:      event.Output,
+		Elapsed:     event.Elapsed,
+		FailedBuild: event.FailedBuild,
 		Annotations: annotations,
 		Error:       errStr,
 	}

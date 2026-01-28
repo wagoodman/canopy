@@ -61,6 +61,14 @@ func (s *noopStore) GetTestEvents(_ uuid.UUID) ([]gotest.Event, error) {
 	return nil, nil
 }
 
+func (s *noopStore) GetTestEventsBatch(_ uuid.UUID, _, _ int) ([]gotest.Event, bool, error) {
+	return nil, false, nil
+}
+
+func (s *noopStore) GetTestEventCount(_ uuid.UUID) (int64, error) {
+	return 0, nil
+}
+
 func (s *noopStore) AddTestEvent(_ uuid.UUID, _ gotest.Event) error {
 	return nil // the key optimization: do nothing
 }

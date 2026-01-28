@@ -20,7 +20,9 @@ type Event struct {
 	Reference      Reference
 	Action         Action
 	Output         string
-	Annotations    []Annotation // TODO: maybe make this a map?
+	Elapsed        *float64 // duration in seconds for terminal events (pass/fail/skip)
+	FailedBuild    string   // package that caused a build failure (if any)
+	Annotations    []Annotation
 	Error          error
 }
 
@@ -58,6 +60,11 @@ func NewEvent(runID uuid.UUID, jsonl JSONL, pkgs *golist.PackageCollection) *Eve
 		dir = pkgs.GetDir(jsonl.Package)
 	}
 
+	var elapsed *float64
+	if jsonl.Elapsed > 0 {
+		elapsed = &jsonl.Elapsed
+	}
+
 	return &Event{
 		Index:          jsonl.Index,
 		RunID:          runID,
@@ -68,6 +75,8 @@ func NewEvent(runID uuid.UUID, jsonl JSONL, pkgs *golist.PackageCollection) *Eve
 		Action:         ParseAction(jsonl.Action),
 		Annotations:    ExtractAnnotations(jsonl.Output),
 		Output:         jsonl.Output,
+		Elapsed:        elapsed,
+		FailedBuild:    jsonl.FailedBuild,
 		Error:          err,
 	}
 }

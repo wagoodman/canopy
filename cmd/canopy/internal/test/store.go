@@ -48,6 +48,10 @@ type runStore interface {
 	GetRunInfo(runID uuid.UUID) (RunInfo, error)
 	// GetTestEvents retrieves all events for a test run.
 	GetTestEvents(runID uuid.UUID) ([]gotest.Event, error)
+	// GetTestEventsBatch retrieves a batch of events with pagination.
+	GetTestEventsBatch(runID uuid.UUID, offset, limit int) ([]gotest.Event, bool, error)
+	// GetTestEventCount returns the total number of events for a run.
+	GetTestEventCount(runID uuid.UUID) (int64, error)
 	// AddTestEvent records a test event to a run.
 	AddTestEvent(runID uuid.UUID, event gotest.Event) error
 	// EndTestRun marks a run as complete with optional coverage data.
@@ -186,6 +190,26 @@ func (s dbStore) GetTestEvents(runID uuid.UUID) ([]gotest.Event, error) {
 		return nil, err
 	}
 
+	return s.convertDBEvents(runID, eventInfos), nil
+}
+
+// GetTestEventsBatch retrieves a batch of events with pagination support.
+func (s dbStore) GetTestEventsBatch(runID uuid.UUID, offset, limit int) ([]gotest.Event, bool, error) {
+	eventInfos, hasMore, err := s.Store.GetTestEventsBatch(runID, offset, limit)
+	if err != nil {
+		return nil, false, err
+	}
+
+	return s.convertDBEvents(runID, eventInfos), hasMore, nil
+}
+
+// GetTestEventCount returns the total number of events for a run.
+func (s dbStore) GetTestEventCount(runID uuid.UUID) (int64, error) {
+	return s.Store.GetTestEventCount(runID)
+}
+
+// convertDBEvents converts database event models to gotest.Event objects.
+func (s dbStore) convertDBEvents(runID uuid.UUID, eventInfos []db.TestEvent) []gotest.Event {
 	var events []gotest.Event
 	for _, e := range eventInfos {
 		var annotations []gotest.Annotation
@@ -201,7 +225,7 @@ func (s dbStore) GetTestEvents(runID uuid.UUID) ([]gotest.Event, error) {
 
 		events = append(events, gotest.Event{
 			RunID: runID,
-			JSONL: "", // TODO: is this a problem?
+			JSONL: "",
 			Index: e.Index,
 			Time:  e.Time,
 			Reference: gotest.Reference{
@@ -211,10 +235,12 @@ func (s dbStore) GetTestEvents(runID uuid.UUID) ([]gotest.Event, error) {
 			},
 			Action:      gotest.Action(e.Action),
 			Output:      e.Output,
+			Elapsed:     e.Elapsed,
+			FailedBuild: e.FailedBuild,
 			Annotations: annotations,
 			Error:       eventErr,
 		})
 	}
 
-	return events, nil
+	return events
 }
