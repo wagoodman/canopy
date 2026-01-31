@@ -8,6 +8,7 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/test"
 
@@ -38,6 +39,9 @@ func SessionList(app clio.Application) *cobra.Command {
 			return runSessionList(*opts)
 		},
 	}
+
+	// facilitates grouping of flags into sections in help text
+	xflagset.BindCobraHelpFromOpts(cmd, opts)
 
 	return app.SetupCommand(cmd, opts)
 }

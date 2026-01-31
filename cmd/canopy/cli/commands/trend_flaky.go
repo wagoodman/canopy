@@ -13,6 +13,7 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/flaky"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/failure"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
@@ -85,6 +86,9 @@ Examples:
 			return runFlaky(*opts)
 		},
 	}
+
+	// facilitates grouping of flags into sections in help text
+	xflagset.BindCobraHelpFromOpts(cmd, opts)
 
 	return app.SetupCommand(cmd, opts)
 }

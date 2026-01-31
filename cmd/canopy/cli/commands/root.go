@@ -1,3 +1,4 @@
+// Package commands implements the CLI commands for canopy.
 package commands
 
 import (
@@ -8,6 +9,7 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/spf13/cobra"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector"
 	"github.com/wagoodman/canopy/cmd/canopy/internal"
@@ -58,7 +60,7 @@ func Root(app clio.Application) *cobra.Command {
 	opts := defaultRootOptions()
 
 	var runErr error
-	return app.SetupRootCommand(&cobra.Command{
+	cmd := &cobra.Command{
 		Use:   fmt.Sprintf("%s GO-PKG-SPECIFIER...", app.ID().Name),
 		Short: "select and run go tests",
 		Long:  "This is a wrapper around the 'go test' command that provides additional value. See 'go help test' and 'go help build' for detailed flag information." + "\n" + prettyTitle,
@@ -100,7 +102,12 @@ func Root(app clio.Application) *cobra.Command {
 			}
 			return runErr
 		},
-	}, opts)
+	}
+
+	// facilitates grouping of flags into sections in help text
+	xflagset.BindCobraHelpFromOpts(cmd, opts)
+
+	return app.SetupRootCommand(cmd, opts)
 }
 
 func runRoot(ctx context.Context, app clio.Application, rootCfg rootConfig) error {

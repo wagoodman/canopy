@@ -10,6 +10,7 @@ import (
 	"github.com/scylladb/go-set/strset"
 	"github.com/spf13/cobra"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
@@ -58,7 +59,7 @@ func List(app clio.Application) *cobra.Command {
 		},
 	}
 
-	return app.SetupCommand(&cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "list GO-PKG-SPECIFIER...",
 		Short: "list all tests found in the package path (use ... for recursive search)",
 		Args: func(_ *cobra.Command, args []string) error {
@@ -72,7 +73,12 @@ func List(app clio.Application) *cobra.Command {
 
 			return runList(opts.List)
 		},
-	}, opts)
+	}
+
+	// facilitates grouping of flags into sections in help text
+	xflagset.BindCobraHelpFromOpts(cmd, opts)
+
+	return app.SetupCommand(cmd, opts)
 }
 
 func runList(cfg listConfig) error {
