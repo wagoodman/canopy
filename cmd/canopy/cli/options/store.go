@@ -55,6 +55,11 @@ func (o *Store) AddFlags(flags fangs.FlagSet) {
 
 // PostLoad configures ephemeral storage and expands the root path, creating temp directories if needed.
 func (o *Store) PostLoad() error {
+	// when the enabled flag is hidden, force it to be enabled (prevents env var overrides)
+	if o.HideEnabledFlag {
+		o.Enabled = true
+	}
+
 	if !o.Enabled {
 		o.Ephemeral = true
 		o.Root = ""
