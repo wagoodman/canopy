@@ -18,6 +18,10 @@ var (
 
 // Store configures persistent storage of test results in a SQLite database.
 type Store struct {
+	// HideEnabledFlag prevents the --store flag from being added to the command.
+	// Use this for commands where the store is always enabled.
+	HideEnabledFlag bool `yaml:"-" json:"-" mapstructure:"-"`
+
 	// Enabled controls whether test results should be stored in the database.
 	Enabled bool `yaml:"enabled" mapstructure:"enabled"`
 	// Root is the directory path where the SQLite database will be stored.
@@ -43,7 +47,9 @@ func (o *Store) AddFlags(flags fangs.FlagSet) {
 	o.tracker = xflagset.NewDecorator(flags, o.NamedFlagSet.FlagSet("State"))
 	flags = o.tracker
 
-	flags.BoolVarP(&o.Enabled, "store", "", "store test output to a sqlite DB")
+	if !o.HideEnabledFlag {
+		flags.BoolVarP(&o.Enabled, "store", "", "store test output to a sqlite DB")
+	}
 	flags.StringVarP(&o.Root, "store-dir", "", "directory to store test output to a sqlite DB (enabled by --store)")
 }
 

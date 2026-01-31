@@ -57,6 +57,7 @@ func (o *showFilter) AddFlags(flags fangs.FlagSet) {
 func defaultShowOptions() *showConfig {
 	store := options.DefaultStore()
 	store.Enabled = true
+	store.HideEnabledFlag = true
 
 	return &showConfig{
 		Experiment: options.DefaultExperiment(),
