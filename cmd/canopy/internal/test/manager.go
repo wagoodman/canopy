@@ -278,6 +278,17 @@ func (s *Manager) Close() error {
 	return nil
 }
 
+// GetTestEventsBatch retrieves a batch of test events with pagination support.
+// This enables streaming large test runs without loading all events into memory.
+func (s *Manager) GetTestEventsBatch(runID uuid.UUID, offset, limit int) ([]gotest.Event, bool, error) {
+	return s.store.GetTestEventsBatch(runID, offset, limit)
+}
+
+// GetTestEventCount returns the total number of events for a run.
+func (s *Manager) GetTestEventCount(runID uuid.UUID) (int64, error) {
+	return s.store.GetTestEventCount(runID)
+}
+
 // publishTestRun publishes a go test run event to the bus.
 // This represents the overall status of a test run execution.
 func publishTestRun(r gotest.Run) {

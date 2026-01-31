@@ -93,6 +93,14 @@ type TestEvent struct {
 	// Output is the test output text associated with this event.
 	Output string `gorm:"column:output" json:"output"`
 
+	// Elapsed is the duration in seconds for terminal events (pass/fail/skip).
+	// Only populated for events that mark test completion.
+	Elapsed *float64 `gorm:"column:elapsed" json:"elapsed,omitempty"`
+
+	// FailedBuild identifies the package that caused a build failure.
+	// Present in fail events when the failure was due to a build error in a dependency.
+	FailedBuild string `gorm:"column:failed_build" json:"failed_build,omitempty"`
+
 	// Annotations contains metadata tags extracted from test output (e.g., "flaky", "slow").
 	Annotations []Annotation `gorm:"many2many:test_event_annotations" json:"annotations"`
 

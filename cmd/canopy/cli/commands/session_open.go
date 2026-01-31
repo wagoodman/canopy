@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
@@ -44,6 +45,9 @@ func SessionOpen(app clio.Application) *cobra.Command {
 			return runSessionOpen(ux)
 		},
 	}
+
+	// facilitates grouping of flags into sections in help text
+	xflagset.BindCobraHelpFromOpts(cmd, opts)
 
 	return app.SetupCommand(cmd, opts)
 }

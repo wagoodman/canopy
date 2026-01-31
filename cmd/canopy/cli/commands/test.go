@@ -131,7 +131,7 @@ func defaultTestOptions(opts ...func(*TestCoreConfig)) *TestCoreConfig {
 	return t
 }
 
-func Test(app clio.Application) *cobra.Command { //nolint:funlen
+func Test(app clio.Application) *cobra.Command {
 	opts := defaultTestOptions()
 
 	var logTestFailuresAsErrors bool
@@ -191,22 +191,8 @@ func Test(app clio.Application) *cobra.Command { //nolint:funlen
 		},
 	}
 
-	ogHelp := cmd.Help
-	cmd.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
-		nfs := xflagset.NewNamed()
-		// TODO: enumerating these manually is annoying, we should do some reflect properties to get all the named flag sets (or a better interface)
-		nfs.Merge(opts.Test.GoTest.NamedFlagSet)
-		nfs.Merge(opts.Test.Coverage.NamedFlagSet)
-		nfs.Merge(opts.Test.GoBuild.NamedFlagSet)
-		nfs.Merge(opts.Test.Packages.NamedFlagSet)
-		nfs.Merge(opts.Test.Format.NamedFlagSet)
-		nfs.Merge(opts.Test.Appearance.NamedFlagSet)
-		nfs.Merge(opts.Test.Open.NamedFlagSet)
-		nfs.Merge(opts.Store.NamedFlagSet)
-		nfs.Merge(opts.NamedFlagSet)
-		nfs.BindUsageAndHelpFunc(cmd, -1)
-		_ = ogHelp()
-	})
+	// facilitates grouping of flags into sections in help text
+	xflagset.BindCobraHelpFromOpts(cmd, opts)
 
 	return app.SetupCommand(cmd, opts)
 }
