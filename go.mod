@@ -11,7 +11,7 @@ require (
 	github.com/anchore/go-homedir v0.0.0-20250319154043-c29668562e4d
 	github.com/anchore/go-logger v0.0.0-20260121204825-e2a682192337
 	github.com/anchore/go-sync v0.0.0-20251016141314-9644b03ca06e
-	github.com/bmatcuk/doublestar/v4 v4.9.2
+	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
