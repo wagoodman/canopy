@@ -286,8 +286,8 @@ func executeTests(ctx context.Context, coreCfg *TestCoreConfig, plan *executionP
 			DBRoot:    coreCfg.Root,
 			Ephemeral: coreCfg.Ephemeral,
 			Retention: test.RetentionConfig{
-				MaxRuns: coreCfg.Store.MaxRuns,
-				MaxAge:  coreCfg.Store.ParsedMaxAge(),
+				MaxRuns: coreCfg.MaxRuns,
+				MaxAge:  coreCfg.ParsedMaxAge(),
 			},
 		},
 	)

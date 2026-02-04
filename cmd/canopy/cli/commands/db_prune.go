@@ -150,8 +150,8 @@ func pruneByPolicy(store *db.Store, cfg dbPruneConfig) error {
 
 	if olderThan == "" && keepLast == 0 {
 		// fall back to config values
-		olderThan = cfg.Store.MaxAge
-		keepLast = cfg.Store.MaxRuns
+		olderThan = cfg.MaxAge
+		keepLast = cfg.MaxRuns
 	}
 
 	if olderThan == "" && keepLast == 0 {
@@ -162,52 +162,25 @@ func pruneByPolicy(store *db.Store, cfg dbPruneConfig) error {
 	var totalDeleted int
 
 	if olderThan != "" {
-		maxAge, err := options.ParseDuration(olderThan)
+		deleted, cancelled, err := pruneByAge(store, olderThan, cfg.Yes)
 		if err != nil {
-			return fmt.Errorf("invalid duration %q: %w", olderThan, err)
+			return err
 		}
-
-		count, err := store.CountRunsByAge(maxAge)
-		if err != nil {
-			return fmt.Errorf("unable to count runs by age: %w", err)
+		if cancelled {
+			return nil
 		}
-
-		if count > 0 {
-			if !cfg.Yes {
-				if !confirmAction(fmt.Sprintf("Delete %d run(s) older than %s?", count, olderThan)) {
-					fmt.Println("cancelled")
-					return nil
-				}
-			}
-
-			deleted, err := store.DeleteRunsByAge(maxAge)
-			if err != nil {
-				return fmt.Errorf("unable to delete runs by age: %w", err)
-			}
-			totalDeleted += deleted
-		}
+		totalDeleted += deleted
 	}
 
 	if keepLast > 0 {
-		count, err := store.CountRunsBeyondKeep(keepLast)
+		deleted, cancelled, err := pruneByCount(store, keepLast, cfg.Yes)
 		if err != nil {
-			return fmt.Errorf("unable to count excess runs: %w", err)
+			return err
 		}
-
-		if count > 0 {
-			if !cfg.Yes {
-				if !confirmAction(fmt.Sprintf("Delete %d run(s) to keep only the last %d?", count, keepLast)) {
-					fmt.Println("cancelled")
-					return nil
-				}
-			}
-
-			deleted, err := store.DeleteRunsKeepingLast(keepLast)
-			if err != nil {
-				return fmt.Errorf("unable to prune excess runs: %w", err)
-			}
-			totalDeleted += deleted
+		if cancelled {
+			return nil
 		}
+		totalDeleted += deleted
 	}
 
 	if totalDeleted == 0 {
@@ -223,6 +196,59 @@ func pruneByPolicy(store *db.Store, cfg dbPruneConfig) error {
 	fmt.Printf("deleted %d run(s) and %d session(s)\n", totalDeleted, sessions)
 
 	return maybeVacuum(store, cfg.NoVacuum)
+}
+
+// pruneByAge deletes runs older than the given duration string. Returns (deleted, cancelled, error).
+func pruneByAge(store *db.Store, olderThan string, skipPrompt bool) (int, bool, error) {
+	maxAge, err := options.ParseDuration(olderThan)
+	if err != nil {
+		return 0, false, fmt.Errorf("invalid duration %q: %w", olderThan, err)
+	}
+
+	count, err := store.CountRunsByAge(maxAge)
+	if err != nil {
+		return 0, false, fmt.Errorf("unable to count runs by age: %w", err)
+	}
+
+	if count == 0 {
+		return 0, false, nil
+	}
+
+	if !skipPrompt && !confirmAction(fmt.Sprintf("Delete %d run(s) older than %s?", count, olderThan)) {
+		fmt.Println("cancelled")
+		return 0, true, nil
+	}
+
+	deleted, err := store.DeleteRunsByAge(maxAge)
+	if err != nil {
+		return 0, false, fmt.Errorf("unable to delete runs by age: %w", err)
+	}
+
+	return deleted, false, nil
+}
+
+// pruneByCount deletes runs beyond the keep limit. Returns (deleted, cancelled, error).
+func pruneByCount(store *db.Store, keepLast int, skipPrompt bool) (int, bool, error) {
+	count, err := store.CountRunsBeyondKeep(keepLast)
+	if err != nil {
+		return 0, false, fmt.Errorf("unable to count excess runs: %w", err)
+	}
+
+	if count == 0 {
+		return 0, false, nil
+	}
+
+	if !skipPrompt && !confirmAction(fmt.Sprintf("Delete %d run(s) to keep only the last %d?", count, keepLast)) {
+		fmt.Println("cancelled")
+		return 0, true, nil
+	}
+
+	deleted, err := store.DeleteRunsKeepingLast(keepLast)
+	if err != nil {
+		return 0, false, fmt.Errorf("unable to prune excess runs: %w", err)
+	}
+
+	return deleted, false, nil
 }
 
 func maybeVacuum(store *db.Store, noVacuum bool) error {
