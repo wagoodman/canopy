@@ -285,6 +285,10 @@ func executeTests(ctx context.Context, coreCfg *TestCoreConfig, plan *executionP
 		test.Config{
 			DBRoot:    coreCfg.Root,
 			Ephemeral: coreCfg.Ephemeral,
+			Retention: test.RetentionConfig{
+				MaxRuns: coreCfg.Store.MaxRuns,
+				MaxAge:  coreCfg.Store.ParsedMaxAge(),
+			},
 		},
 	)
 	if err != nil {

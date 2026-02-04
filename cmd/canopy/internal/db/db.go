@@ -505,6 +505,197 @@ func open(path string) (*gorm.DB, error) {
 	return dbObj, nil
 }
 
+// deleteRun removes a single test run and all its associated data within an existing transaction.
+// The caller is responsible for managing the transaction boundary.
+// When adding new run-related tables, add a corresponding DELETE here.
+func (s Store) deleteRun(tx *gorm.DB, runID int64) error {
+	// 1. coverage blocks (deepest child — requires nested subqueries to reach run_id)
+	covDataIDs := tx.Model(&CoverageData{}).Select("id").Where("run_id = ?", runID)
+	fileCovIDs := tx.Model(&FileCoverage{}).Select("id").Where("coverage_data_id IN (?)", covDataIDs)
+	if err := tx.Where("file_coverage_id IN (?)", fileCovIDs).Delete(&CoverageBlock{}).Error; err != nil {
+		return fmt.Errorf("unable to delete coverage blocks for run %d: %w", runID, err)
+	}
+
+	// 2. file coverages
+	if err := tx.Where("coverage_data_id IN (?)", tx.Model(&CoverageData{}).Select("id").Where("run_id = ?", runID)).Delete(&FileCoverage{}).Error; err != nil {
+		return fmt.Errorf("unable to delete file coverages for run %d: %w", runID, err)
+	}
+
+	// 3. coverage data
+	if err := tx.Where("run_id = ?", runID).Delete(&CoverageData{}).Error; err != nil {
+		return fmt.Errorf("unable to delete coverage data for run %d: %w", runID, err)
+	}
+
+	// 4. failed test details
+	if err := tx.Where("run_id = ?", runID).Delete(&FailedTestDetails{}).Error; err != nil {
+		return fmt.Errorf("unable to delete failed test details for run %d: %w", runID, err)
+	}
+
+	// 5. test_event_annotations join table (many2many between TestEvent and Annotation).
+	// This is an implicit GORM join table with no model, so we reference the table name directly
+	// but still use a GORM subquery for the IN clause.
+	eventIDs := tx.Model(&TestEvent{}).Select("id").Where("run_id = ?", runID)
+	if err := tx.Exec("DELETE FROM test_event_annotations WHERE test_event_id IN (?)", eventIDs).Error; err != nil {
+		return fmt.Errorf("unable to delete test event annotations for run %d: %w", runID, err)
+	}
+
+	// 6. test events
+	if err := tx.Where("run_id = ?", runID).Delete(&TestEvent{}).Error; err != nil {
+		return fmt.Errorf("unable to delete test events for run %d: %w", runID, err)
+	}
+
+	// 7. the test run itself
+	if err := tx.Where("id = ?", runID).Delete(&TestRun{}).Error; err != nil {
+		return fmt.Errorf("unable to delete test run %d: %w", runID, err)
+	}
+
+	return nil
+}
+
+// DeleteRuns removes test runs by internal IDs and cascades to all child data.
+func (s Store) DeleteRuns(runIDs []int64) (int, error) {
+	if len(runIDs) == 0 {
+		return 0, nil
+	}
+
+	deleted := 0
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		for _, id := range runIDs {
+			if err := s.deleteRun(tx, id); err != nil {
+				return err
+			}
+			deleted++
+		}
+		return nil
+	})
+	if err != nil {
+		return deleted, err
+	}
+
+	if _, err := s.DeleteOrphanedSessions(); err != nil {
+		log.WithFields("error", err).Warn("failed to clean up orphaned sessions")
+	}
+
+	return deleted, nil
+}
+
+// DeleteRunsByAge removes test runs older than the given duration.
+// Returns the number of runs deleted.
+func (s Store) DeleteRunsByAge(maxAge time.Duration) (int, error) {
+	cutoff := time.Now().Add(-maxAge)
+
+	var runs []TestRun
+	if err := s.db.Where("started < ?", cutoff).Find(&runs).Error; err != nil {
+		return 0, fmt.Errorf("unable to find runs older than %s: %w", maxAge, err)
+	}
+
+	if len(runs) == 0 {
+		return 0, nil
+	}
+
+	ids := make([]int64, len(runs))
+	for i, r := range runs {
+		ids[i] = r.ID
+	}
+
+	return s.DeleteRuns(ids)
+}
+
+// DeleteRunsKeepingLast removes all but the N most recent test runs (by start time).
+// Returns the number of runs deleted.
+func (s Store) DeleteRunsKeepingLast(keep int) (int, error) {
+	if keep < 0 {
+		keep = 0
+	}
+
+	var runs []TestRun
+	if err := s.db.Order("started DESC").Find(&runs).Error; err != nil {
+		return 0, fmt.Errorf("unable to list runs for pruning: %w", err)
+	}
+
+	if len(runs) <= keep {
+		return 0, nil
+	}
+
+	toDelete := runs[keep:]
+	ids := make([]int64, len(toDelete))
+	for i, r := range toDelete {
+		ids[i] = r.ID
+	}
+
+	return s.DeleteRuns(ids)
+}
+
+// DeleteAllRuns removes all test runs and associated data.
+// Returns the number of runs deleted.
+func (s Store) DeleteAllRuns() (int, error) {
+	var runs []TestRun
+	if err := s.db.Find(&runs).Error; err != nil {
+		return 0, fmt.Errorf("unable to list all runs: %w", err)
+	}
+
+	if len(runs) == 0 {
+		return 0, nil
+	}
+
+	ids := make([]int64, len(runs))
+	for i, r := range runs {
+		ids[i] = r.ID
+	}
+
+	return s.DeleteRuns(ids)
+}
+
+// DeleteOrphanedSessions removes sessions that have no remaining test runs.
+func (s Store) DeleteOrphanedSessions() (int, error) {
+	activeSessionIDs := s.db.Model(&TestRun{}).Select("DISTINCT session_id")
+	result := s.db.Where("id NOT IN (?)", activeSessionIDs).Delete(&TestSession{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("unable to delete orphaned sessions: %w", result.Error)
+	}
+	return int(result.RowsAffected), nil
+}
+
+// CountRuns returns the total number of test runs in the database.
+func (s Store) CountRuns() (int64, error) {
+	var count int64
+	if err := s.db.Model(&TestRun{}).Count(&count).Error; err != nil {
+		return 0, fmt.Errorf("unable to count runs: %w", err)
+	}
+	return count, nil
+}
+
+// CountRunsByAge returns the number of test runs older than the given duration.
+func (s Store) CountRunsByAge(maxAge time.Duration) (int64, error) {
+	cutoff := time.Now().Add(-maxAge)
+	var count int64
+	if err := s.db.Model(&TestRun{}).Where("started < ?", cutoff).Count(&count).Error; err != nil {
+		return 0, fmt.Errorf("unable to count runs by age: %w", err)
+	}
+	return count, nil
+}
+
+// CountRunsBeyondKeep returns the number of test runs that would be removed to keep only N most recent.
+func (s Store) CountRunsBeyondKeep(keep int) (int64, error) {
+	var total int64
+	if err := s.db.Model(&TestRun{}).Count(&total).Error; err != nil {
+		return 0, fmt.Errorf("unable to count runs: %w", err)
+	}
+	excess := total - int64(keep)
+	if excess < 0 {
+		return 0, nil
+	}
+	return excess, nil
+}
+
+// Vacuum reclaims disk space after deletions.
+func (s Store) Vacuum() error {
+	if err := s.db.Exec("VACUUM").Error; err != nil {
+		return fmt.Errorf("unable to vacuum database: %w", err)
+	}
+	return nil
+}
+
 // connectionString creates a SQLite connection string from a file path.
 // It supports ":memory:" for in-memory databases and file paths with shared cache mode.
 func connectionString(path string) (string, error) {

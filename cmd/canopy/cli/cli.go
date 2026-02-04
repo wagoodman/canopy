@@ -42,6 +42,7 @@ func New(id clio.Identification) *cobra.Command {
 		commands.Format(app),
 		commands.Show(app),
 		commands.Trend(app),
+		commands.DB(app),
 	)
 
 	return root

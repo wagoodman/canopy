@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus"
@@ -25,6 +26,10 @@ type Manager struct {
 	store
 	sessionManager
 	*session
+
+	// dbStore holds a reference to the underlying db.Store for direct access (e.g., prune operations).
+	// This is nil when using noopStore.
+	dbStore *db.Store
 }
 
 // Config configures the test manager's behavior and persistence.
@@ -39,6 +44,16 @@ type Config struct {
 	LoadLastSession bool
 	// NoStore uses a no-op store (no persistence) for format-only operations.
 	NoStore bool
+	// Retention configures automatic cleanup of old test runs on startup.
+	Retention RetentionConfig
+}
+
+// RetentionConfig controls automatic pruning of old test data.
+type RetentionConfig struct {
+	// MaxRuns is the maximum number of test runs to retain (0 = unlimited).
+	MaxRuns int
+	// MaxAge is the maximum age of test runs to keep (0 = unlimited).
+	MaxAge time.Duration
 }
 
 // RunConfig configures a single test run execution.
@@ -64,6 +79,7 @@ func NewManager(cfg Config) (*Manager, error) {
 
 	var st store
 	var sm sessionManager
+	var underlyingStore *db.Store
 
 	if cfg.NoStore {
 		ns := newNoopStore()
@@ -77,14 +93,20 @@ func NewManager(cfg Config) (*Manager, error) {
 		if dbs == nil {
 			return nil, fmt.Errorf("no store created")
 		}
+
+		// apply retention policy before starting a new session
+		applyRetentionPolicy(dbs.Store, cfg.Retention)
+
 		st = dbs
 		sm = dbs
+		underlyingStore = dbs.Store
 	}
 
 	m := &Manager{
 		config:         cfg,
 		store:          st,
 		sessionManager: sm,
+		dbStore:        underlyingStore,
 	}
 
 	if cfg.ExistingSession != uuid.Nil {
@@ -115,6 +137,12 @@ func NewManager(cfg Config) (*Manager, error) {
 	}
 
 	return m, nil
+}
+
+// DBStore returns the underlying database store for direct operations (e.g., pruning).
+// Returns nil when using a no-op store.
+func (s *Manager) DBStore() *db.Store {
+	return s.dbStore
 }
 
 // CurrentSession returns information about the active session, or nil if no session exists.
@@ -291,6 +319,30 @@ func (s *Manager) GetTestEventsBatch(runID uuid.UUID, offset, limit int) ([]gote
 // GetTestEventCount returns the total number of events for a run.
 func (s *Manager) GetTestEventCount(runID uuid.UUID) (int64, error) {
 	return s.store.GetTestEventCount(runID)
+}
+
+// applyRetentionPolicy prunes old test runs based on the retention configuration.
+// This is called on startup for test execution commands only (not read-only commands).
+func applyRetentionPolicy(store *db.Store, retention RetentionConfig) {
+	if retention.MaxAge > 0 {
+		if n, err := store.DeleteRunsByAge(retention.MaxAge); err != nil {
+			log.WithFields("error", err).Warn("failed to prune old test runs")
+		} else if n > 0 {
+			log.WithFields("deleted", n).Info("pruned old test runs")
+		}
+	}
+
+	if retention.MaxRuns > 0 {
+		if n, err := store.DeleteRunsKeepingLast(retention.MaxRuns); err != nil {
+			log.WithFields("error", err).Warn("failed to prune excess test runs")
+		} else if n > 0 {
+			log.WithFields("deleted", n).Info("pruned excess test runs")
+		}
+	}
+
+	if _, err := store.DeleteOrphanedSessions(); err != nil {
+		log.WithFields("error", err).Warn("failed to clean up orphaned sessions")
+	}
 }
 
 // publishTestRun publishes a go test run event to the bus.
