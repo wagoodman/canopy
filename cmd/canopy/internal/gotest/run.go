@@ -2,6 +2,7 @@ package gotest
 
 import (
 	"github.com/google/uuid"
+	"golang.org/x/tools/cover"
 )
 
 // Run represents a single `go test` execution session with its configuration and accumulated results.
@@ -9,8 +10,9 @@ import (
 type Run struct {
 	ID uuid.UUID
 
-	Config RunnerConfig
-	Result Result
+	Config           RunnerConfig
+	Result           Result
+	CoverageProfiles []*cover.Profile // raw profiles for structured storage
 }
 
 // NewRun creates a new test execution session with a unique identifier.

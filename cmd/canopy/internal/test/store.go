@@ -55,7 +55,7 @@ type runStore interface {
 	// AddTestEvent records a test event to a run.
 	AddTestEvent(runID uuid.UUID, event gotest.Event) error
 	// EndTestRun marks a run as complete with optional coverage data.
-	EndTestRun(runID uuid.UUID, coverage *float64) error
+	EndTestRun(runID uuid.UUID, coverage *db.CoverageInput) error
 	// GetFailuresByRun retrieves all failure data for a specific test run.
 	GetFailuresByRun(runID uuid.UUID) ([]db.FailedTestDetails, error)
 }
