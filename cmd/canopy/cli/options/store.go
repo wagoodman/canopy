@@ -3,6 +3,9 @@ package options
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"
 	"github.com/wagoodman/canopy/cmd/canopy/internal"
@@ -29,8 +32,21 @@ type Store struct {
 	// Ephemeral indicates whether the database should be temporary and discarded after use.
 	Ephemeral bool `yaml:"yaml" mapstructure:"-"`
 
+	// MaxRuns is the maximum number of test runs to retain (0 = unlimited).
+	MaxRuns int `yaml:"max-runs" mapstructure:"max-runs"`
+	// MaxAge is the maximum age of test runs to keep (e.g., "30d", "720h"; "" = unlimited).
+	MaxAge string `yaml:"max-age" mapstructure:"max-age"`
+
+	// parsedMaxAge is MaxAge parsed into a time.Duration (set in PostLoad).
+	parsedMaxAge time.Duration
+
 	tracker      *xflagset.Decorator
 	NamedFlagSet *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
+}
+
+// ParsedMaxAge returns the parsed duration from MaxAge.
+func (o *Store) ParsedMaxAge() time.Duration {
+	return o.parsedMaxAge
 }
 
 // DefaultStore returns store options with persistence disabled by default and using the .canopy directory.
@@ -53,7 +69,7 @@ func (o *Store) AddFlags(flags fangs.FlagSet) {
 	flags.StringVarP(&o.Root, "store-dir", "", "directory to store test output to a sqlite DB (enabled by --store)")
 }
 
-// PostLoad configures ephemeral storage and expands the root path, creating temp directories if needed.
+// PostLoad configures ephemeral storage, expands the root path, and parses retention settings.
 func (o *Store) PostLoad() error {
 	// when the enabled flag is hidden, force it to be enabled (prevents env var overrides)
 	if o.HideEnabledFlag {
@@ -80,5 +96,40 @@ func (o *Store) PostLoad() error {
 
 	o.Root = cleanRoot
 
+	if o.MaxAge != "" {
+		d, err := ParseDuration(o.MaxAge)
+		if err != nil {
+			return fmt.Errorf("invalid store.max-age %q: %w", o.MaxAge, err)
+		}
+		o.parsedMaxAge = d
+	}
+
 	return nil
+}
+
+// ParseDuration parses a duration string supporting both Go-style ("720h", "1h30m") and
+// day-style ("30d") formats.
+func ParseDuration(s string) (time.Duration, error) {
+	if s == "" {
+		return 0, nil
+	}
+
+	// try standard Go duration parsing first
+	if d, err := time.ParseDuration(s); err == nil {
+		return d, nil
+	}
+
+	// handle day suffix: "30d" → 30 * 24h
+	if strings.HasSuffix(s, "d") {
+		days, err := strconv.Atoi(strings.TrimSuffix(s, "d"))
+		if err != nil {
+			return 0, fmt.Errorf("invalid duration %q: %w", s, err)
+		}
+		if days < 0 {
+			return 0, fmt.Errorf("invalid duration %q: days must be non-negative", s)
+		}
+		return time.Duration(days) * 24 * time.Hour, nil
+	}
+
+	return 0, fmt.Errorf("invalid duration %q", s)
 }

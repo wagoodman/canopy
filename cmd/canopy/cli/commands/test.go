@@ -221,6 +221,10 @@ func runTest(ctx context.Context, app clio.Application, coreCfg TestCoreConfig, 
 		test.Config{
 			DBRoot:    coreCfg.Root,
 			Ephemeral: coreCfg.Ephemeral,
+			Retention: test.RetentionConfig{
+				MaxRuns: coreCfg.MaxRuns,
+				MaxAge:  coreCfg.ParsedMaxAge(),
+			},
 		},
 	)
 	if err != nil {
