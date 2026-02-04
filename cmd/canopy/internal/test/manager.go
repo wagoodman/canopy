@@ -181,7 +181,7 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 	}
 
 	if cfg.SourceState != nil {
-		if err := s.store.AddSourceState(runModel.uuid, cfg.SourceState); err != nil {
+		if err := s.AddSourceState(runModel.uuid, cfg.SourceState); err != nil {
 			log.WithFields("error", err).Warn("failed to store source state")
 		}
 	}

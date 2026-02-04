@@ -234,7 +234,7 @@ func runTest(ctx context.Context, app clio.Application, coreCfg TestCoreConfig, 
 
 	// capture source state only when store is enabled (persistent)
 	var sourceState *db.SourceStateInput
-	if coreCfg.Store.Enabled {
+	if coreCfg.Enabled {
 		if ss := source.CaptureState("."); ss != nil {
 			sourceState = toSourceStateInput(ss)
 			log.WithFields("commit", ss.Commit, "branch", ss.Branch, "dirty", ss.Dirty).Debug("captured source state")
