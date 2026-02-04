@@ -332,13 +332,13 @@ func TestDeleteRun_CascadesAllData_StructComparison(t *testing.T) {
 	require.NoError(t, err)
 
 	type tableCounts struct {
-		Runs            int64
-		Events          int64
-		Failures        int64
-		CoverageData    int64
-		FileCoverages   int64
-		CoverageBlocks  int64
-		JoinTableRows   int64
+		Runs           int64
+		Events         int64
+		Failures       int64
+		CoverageData   int64
+		FileCoverages  int64
+		CoverageBlocks int64
+		JoinTableRows  int64
 	}
 
 	got := tableCounts{
