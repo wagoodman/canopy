@@ -25,6 +25,21 @@ type CoverageInput struct {
 	Profiles []*cover.Profile
 }
 
+// SourceStateInput bundles source state data for storage.
+type SourceStateInput struct {
+	Commit     string
+	Branch     string
+	Dirty      bool
+	DirtyFiles []DirtyFileInput
+}
+
+// DirtyFileInput represents a single dirty file to be stored.
+type DirtyFileInput struct {
+	Path        string
+	ContentHash string
+	ModTime     *time.Time
+}
+
 // Store provides database operations for test session persistence using SQLite and GORM.
 type Store struct {
 	db              *gorm.DB
@@ -477,6 +492,61 @@ func (s Store) GetCoverageData(runID uuid.UUID) (*CoverageData, error) {
 		return nil, fmt.Errorf("unable to get coverage data: %w", err)
 	}
 	return &covData, nil
+}
+
+// AddSourceState stores source state data for a test run.
+func (s Store) AddSourceState(runID uuid.UUID, state *SourceStateInput) error {
+	run, err := s.GetTestRun(runID)
+	if err != nil {
+		return err
+	}
+
+	ss := SourceState{
+		RunID:  run.ID,
+		Commit: state.Commit,
+		Branch: state.Branch,
+		Dirty:  state.Dirty,
+	}
+
+	if err := s.db.Create(&ss).Error; err != nil {
+		return fmt.Errorf("unable to create source state: %w", err)
+	}
+
+	if len(state.DirtyFiles) > 0 {
+		files := make([]FileState, len(state.DirtyFiles))
+		for i, f := range state.DirtyFiles {
+			files[i] = FileState{
+				SourceStateID: ss.ID,
+				Path:          f.Path,
+				ContentHash:   f.ContentHash,
+				ModTime:       f.ModTime,
+			}
+		}
+
+		if err := s.db.CreateInBatches(files, 500).Error; err != nil {
+			return fmt.Errorf("unable to create file states: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// GetSourceState retrieves source state data for a test run, including dirty files.
+// Returns nil if no source state exists for the run.
+func (s Store) GetSourceState(runID uuid.UUID) (*SourceState, error) {
+	run, err := s.GetTestRun(runID)
+	if err != nil {
+		return nil, err
+	}
+
+	var ss SourceState
+	if err := s.db.Preload("DirtyFiles").Where("run_id = ?", run.ID).First(&ss).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("unable to get source state: %w", err)
+	}
+	return &ss, nil
 }
 
 // open creates a new connection to a SQLite database file.

@@ -58,6 +58,8 @@ type runStore interface {
 	EndTestRun(runID uuid.UUID, coverage *db.CoverageInput) error
 	// GetFailuresByRun retrieves all failure data for a specific test run.
 	GetFailuresByRun(runID uuid.UUID) ([]db.FailedTestDetails, error)
+	// AddSourceState stores source state data for a test run.
+	AddSourceState(runID uuid.UUID, state *db.SourceStateInput) error
 }
 
 // dbStore implements the store interface using SQLite via GORM.
@@ -180,6 +182,11 @@ func (s dbStore) GetRunInfo(runID uuid.UUID) (RunInfo, error) {
 // GetFailuresByRun retrieves all failure data for a specific test run.
 func (s dbStore) GetFailuresByRun(runID uuid.UUID) ([]db.FailedTestDetails, error) {
 	return s.Store.GetFailuresByRun(runID)
+}
+
+// AddSourceState stores source state data for a test run.
+func (s dbStore) AddSourceState(runID uuid.UUID, state *db.SourceStateInput) error {
+	return s.Store.AddSourceState(runID, state)
 }
 
 // GetTestEvents retrieves all events for a test run, converting from database format.

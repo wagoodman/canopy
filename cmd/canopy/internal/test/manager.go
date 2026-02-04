@@ -51,6 +51,9 @@ type RunConfig struct {
 	Result gotest.ResultConfig
 	// Reader provides pre-recorded test events for replay (prevents actual test execution).
 	Reader io.ReadCloser // prevent from running the test, get events from here instead
+	// SourceState is the optional git source state captured before test execution.
+	// Nil when the store is disabled or the directory is not a git repo.
+	SourceState *db.SourceStateInput
 }
 
 // NewManager creates a new test session manager with the given configuration.
@@ -175,6 +178,12 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 			close(done)
 		}()
 		return nil, done
+	}
+
+	if cfg.SourceState != nil {
+		if err := s.store.AddSourceState(runModel.uuid, cfg.SourceState); err != nil {
+			log.WithFields("error", err).Warn("failed to store source state")
+		}
 	}
 
 	onEvent := func(event *gotest.Event) {

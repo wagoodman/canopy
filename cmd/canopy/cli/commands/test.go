@@ -14,9 +14,11 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/db"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/source"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/test"
 
 	"github.com/anchore/clio"
@@ -230,6 +232,15 @@ func runTest(ctx context.Context, app clio.Application, coreCfg TestCoreConfig, 
 		}
 	}()
 
+	// capture source state only when store is enabled (persistent)
+	var sourceState *db.SourceStateInput
+	if coreCfg.Store.Enabled {
+		if ss := source.CaptureState("."); ss != nil {
+			sourceState = toSourceStateInput(ss)
+			log.WithFields("commit", ss.Commit, "branch", ss.Branch, "dirty", ss.Dirty).Debug("captured source state")
+		}
+	}
+
 	run, err := s.RunTests(
 		ctx,
 		test.RunConfig{
@@ -239,6 +250,7 @@ func runTest(ctx context.Context, app clio.Application, coreCfg TestCoreConfig, 
 				TrackOtherOutput:   false,
 				TrackFailingOutput: false,
 			},
+			SourceState: sourceState,
 		},
 	)
 
@@ -460,6 +472,23 @@ func renderTestSuiteFailure(err ErrTestSuiteFailed) string {
 		render += fmt.Sprintf("\n  • %s", reason)
 	}
 	return fmt.Sprintf("Test suite failed: %s", render)
+}
+
+func toSourceStateInput(s *source.State) *db.SourceStateInput {
+	var files []db.DirtyFileInput
+	for _, f := range s.DirtyFiles {
+		files = append(files, db.DirtyFileInput{
+			Path:        f.Path,
+			ContentHash: f.ContentHash,
+			ModTime:     f.ModTime,
+		})
+	}
+	return &db.SourceStateInput{
+		Commit:     s.Commit,
+		Branch:     s.Branch,
+		Dirty:      s.Dirty,
+		DirtyFiles: files,
+	}
 }
 
 func maxPkgNameLength(testPkgs []string, removePrefix string) int {
