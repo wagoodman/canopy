@@ -129,7 +129,8 @@ func runListRuns(cfg listRunsConfig) error {
 	case "json":
 		return writeRunsJSON(os.Stdout, entries)
 	case "table", "":
-		return writeRunsTable(os.Stdout, os.Stderr, entries)
+		writeRunsTable(os.Stdout, os.Stderr, entries)
+		return nil
 	default:
 		return fmt.Errorf("unknown output format: %s", cfg.Output)
 	}
@@ -155,7 +156,7 @@ func collectRunEntries(sessions []test.SessionInfo) []runListEntry {
 }
 
 // writeRunsTable writes run IDs to stdout (one per line) and a metadata table to stderr.
-func writeRunsTable(stdout, stderr io.Writer, entries []runListEntry) error {
+func writeRunsTable(stdout, stderr io.Writer, entries []runListEntry) {
 	// write IDs to stdout for scriptability
 	for _, entry := range entries {
 		fmt.Fprintln(stdout, entry.RunID)
@@ -180,8 +181,6 @@ func writeRunsTable(stdout, stderr io.Writer, entries []runListEntry) error {
 	}
 
 	t.Render()
-
-	return nil
 }
 
 // writeRunsJSON writes all run entries as JSON to stdout.

@@ -187,8 +187,7 @@ func TestWriteRunsTable(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	err := writeRunsTable(&stdout, &stderr, entries)
-	require.NoError(t, err)
+	writeRunsTable(&stdout, &stderr, entries)
 
 	// stdout should contain only run IDs, one per line
 	stdoutLines := stdout.String()

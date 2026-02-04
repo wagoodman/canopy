@@ -103,7 +103,7 @@ func runList(cfg listConfig) error {
 		report = listTestPkgs(tests)
 	case "function", "functions", "fn", "fns", "f":
 		report = listTestFunctions(tests, cfg.Cases)
-	case "json":
+	case "json": //nolint:goconst
 		report, err = listTestJSON(tests)
 	default:
 		err = fmt.Errorf("unknown format: %s", cfg.Outputs)
