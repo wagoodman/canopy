@@ -12,19 +12,19 @@ import (
 
 func TestResolveRunID(t *testing.T) {
 	tests := []struct {
-		name         string
-		runIDArg     string
-		setupSessions int  // number of sessions to create
-		runsPerSession int  // number of runs per session
+		name             string
+		runIDArg         string
+		setupSessions    int  // number of sessions to create
+		runsPerSession   int  // number of runs per session
 		expectMostRecent bool // whether to expect the most recent run
-		wantErr      require.ErrorAssertionFunc
+		wantErr          require.ErrorAssertionFunc
 	}{
 		{
-			name:         "explicit valid run ID",
-			runIDArg:     "", // will be set during test
-			setupSessions: 1,
+			name:           "explicit valid run ID",
+			runIDArg:       "", // will be set during test
+			setupSessions:  1,
 			runsPerSession: 1,
-			wantErr:      require.NoError,
+			wantErr:        require.NoError,
 		},
 		{
 			name:     "explicit invalid run ID format",
@@ -32,30 +32,30 @@ func TestResolveRunID(t *testing.T) {
 			wantErr:  require.Error,
 		},
 		{
-			name:         "no sessions in database",
-			runIDArg:     "",
+			name:          "no sessions in database",
+			runIDArg:      "",
 			setupSessions: 0,
-			wantErr:      require.Error,
+			wantErr:       require.Error,
 		},
 		{
-			name:         "single session with one run",
-			runIDArg:     "",
-			setupSessions: 1,
-			runsPerSession: 1,
+			name:             "single session with one run",
+			runIDArg:         "",
+			setupSessions:    1,
+			runsPerSession:   1,
 			expectMostRecent: true,
 		},
 		{
-			name:         "multiple runs - returns most recent",
-			runIDArg:     "",
-			setupSessions: 1,
-			runsPerSession: 3,
+			name:             "multiple runs - returns most recent",
+			runIDArg:         "",
+			setupSessions:    1,
+			runsPerSession:   3,
 			expectMostRecent: true,
 		},
 		{
-			name:         "multiple sessions - returns most recent run",
-			runIDArg:     "",
-			setupSessions: 3,
-			runsPerSession: 2,
+			name:             "multiple sessions - returns most recent run",
+			runIDArg:         "",
+			setupSessions:    3,
+			runsPerSession:   2,
 			expectMostRecent: true,
 		},
 	}
