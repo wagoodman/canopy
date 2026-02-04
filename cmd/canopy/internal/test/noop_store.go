@@ -80,3 +80,7 @@ func (s *noopStore) EndTestRun(_ uuid.UUID, _ *db.CoverageInput) error {
 func (s *noopStore) GetFailuresByRun(_ uuid.UUID) ([]db.FailedTestDetails, error) {
 	return nil, nil
 }
+
+func (s *noopStore) AddSourceState(_ uuid.UUID, _ *db.SourceStateInput) error {
+	return nil
+}

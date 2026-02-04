@@ -21,6 +21,8 @@ func models() []any {
 		CoverageData{},
 		FileCoverage{},
 		CoverageBlock{},
+		SourceState{},
+		FileState{},
 	}
 }
 
@@ -224,4 +226,43 @@ type CoverageBlock struct {
 
 	// Count is the number of times the block was executed.
 	Count int `gorm:"column:count" json:"count"`
+}
+
+// SourceState captures git repository state at test run time.
+type SourceState struct {
+	// ID is the primary key for database relationships.
+	ID int64 `gorm:"primaryKey" json:"-"`
+
+	// RunID links this source state to its parent test run (one source state per run).
+	RunID int64 `gorm:"column:run_id;uniqueIndex" json:"-"`
+
+	// Commit is the HEAD commit hash (full SHA).
+	Commit string `gorm:"column:commit;index" json:"commit"`
+
+	// Branch is the current branch name, "HEAD" if detached.
+	Branch string `gorm:"column:branch" json:"branch"`
+
+	// Dirty indicates whether there are uncommitted .go file changes.
+	Dirty bool `gorm:"column:dirty" json:"dirty"`
+
+	// DirtyFiles contains state for each dirty .go file.
+	DirtyFiles []FileState `gorm:"foreignKey:SourceStateID" json:"dirty_files,omitempty"`
+}
+
+// FileState represents a single dirty .go file's state at test run time.
+type FileState struct {
+	// ID is the primary key for database relationships.
+	ID int64 `gorm:"primaryKey" json:"-"`
+
+	// SourceStateID links this file state to its parent source state.
+	SourceStateID int64 `gorm:"column:source_state_id;index" json:"-"`
+
+	// Path is the file path relative to the repository root.
+	Path string `gorm:"column:path" json:"path"`
+
+	// ContentHash is the xxhash64 hex digest of the file content (empty if deleted).
+	ContentHash string `gorm:"column:content_hash" json:"content_hash"`
+
+	// ModTime is the file modification time (nil if deleted).
+	ModTime *time.Time `gorm:"column:mod_time" json:"mod_time,omitempty"`
 }
