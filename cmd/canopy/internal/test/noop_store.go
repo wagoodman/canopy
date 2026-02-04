@@ -73,7 +73,7 @@ func (s *noopStore) AddTestEvent(_ uuid.UUID, _ gotest.Event) error {
 	return nil // the key optimization: do nothing
 }
 
-func (s *noopStore) EndTestRun(_ uuid.UUID, _ *float64) error {
+func (s *noopStore) EndTestRun(_ uuid.UUID, _ *db.CoverageInput) error {
 	return nil
 }
 

@@ -44,10 +44,11 @@ func newRunInfo(run db.TestRun) RunInfo {
 		// TODO return error
 	}
 	return RunInfo{
-		UUID:    uuid.MustParse(run.UUID),
-		Started: run.Started,
-		Ended:   run.Ended,
-		Config:  cfg,
+		UUID:     uuid.MustParse(run.UUID),
+		Started:  run.Started,
+		Ended:    run.Ended,
+		Coverage: run.Coverage,
+		Config:   cfg,
 	}
 }
 
@@ -62,7 +63,7 @@ func (r run) addEvent(event gotest.Event) error {
 
 // end marks the test run as complete and records final coverage information.
 // Coverage can be nil if not available. Safe to call even if store is nil.
-func (r *run) end(coverage *float64) error {
+func (r *run) end(coverage *db.CoverageInput) error {
 	r.complete = true
 	if r.session == nil || r.session.store == nil {
 		return nil

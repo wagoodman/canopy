@@ -14,9 +14,16 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/failure"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
+	"golang.org/x/tools/cover"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+// CoverageInput bundles coverage data for storage when a test run completes.
+type CoverageInput struct {
+	Percent  float64
+	Profiles []*cover.Profile
+}
 
 // Store provides database operations for test session persistence using SQLite and GORM.
 type Store struct {
@@ -129,18 +136,30 @@ func (s Store) StartTestRun(sessionID uuid.UUID, cfg gotest.RunnerConfig) (uuid.
 	return uuid.Parse(run.UUID)
 }
 
-// EndTestRun marks a test run as completed, setting its ended timestamp and optional coverage percentage.
-func (s Store) EndTestRun(runID uuid.UUID, coverage *float64) error {
+// EndTestRun marks a test run as completed, setting its ended timestamp and optional coverage data.
+// When coverage profiles are provided, structured coverage data is stored alongside the aggregate percentage.
+func (s Store) EndTestRun(runID uuid.UUID, coverage *CoverageInput) error {
 	run, err := s.GetTestRun(runID)
 	if err != nil {
 		return err
 	}
 	n := time.Now()
 	run.Ended = &n
-	run.Coverage = coverage
+
+	if coverage != nil {
+		run.Coverage = &coverage.Percent
+	}
+
 	if err := s.db.Save(&run).Error; err != nil {
 		return fmt.Errorf("unable to end test run: %w", err)
 	}
+
+	if coverage != nil && len(coverage.Profiles) > 0 {
+		if err := s.addCoverageData(run.ID, coverage.Profiles); err != nil {
+			log.WithFields("error", err).Warn("failed to store structured coverage data")
+		}
+	}
+
 	return nil
 }
 
@@ -389,6 +408,75 @@ func (s Store) GetFailuresByFingerprint(fingerprint string) ([]FailedTestDetails
 		return nil, fmt.Errorf("unable to get failures by fingerprint: %w", err)
 	}
 	return failures, nil
+}
+
+// addCoverageData stores structured coverage data from parsed profiles for a test run.
+func (s Store) addCoverageData(runID int64, profiles []*cover.Profile) error {
+	if len(profiles) == 0 {
+		return nil
+	}
+
+	// determine coverage mode from the first profile
+	mode := profiles[0].Mode
+
+	covData := CoverageData{
+		RunID: runID,
+		Mode:  mode,
+	}
+
+	if err := s.db.Create(&covData).Error; err != nil {
+		return fmt.Errorf("unable to create coverage data: %w", err)
+	}
+
+	for _, p := range profiles {
+		fileCov := FileCoverage{
+			CoverageDataID: covData.ID,
+			FileName:       p.FileName,
+		}
+
+		if err := s.db.Create(&fileCov).Error; err != nil {
+			return fmt.Errorf("unable to create file coverage: %w", err)
+		}
+
+		if len(p.Blocks) > 0 {
+			blocks := make([]CoverageBlock, len(p.Blocks))
+			for i, b := range p.Blocks {
+				blocks[i] = CoverageBlock{
+					FileCoverageID: fileCov.ID,
+					StartLine:      b.StartLine,
+					StartCol:       b.StartCol,
+					EndLine:        b.EndLine,
+					EndCol:         b.EndCol,
+					NumStmt:        b.NumStmt,
+					Count:          b.Count,
+				}
+			}
+
+			if err := s.db.CreateInBatches(blocks, 500).Error; err != nil {
+				return fmt.Errorf("unable to create coverage blocks: %w", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// GetCoverageData retrieves structured coverage data for a test run, including files and blocks.
+// Returns nil if no coverage data exists for the run.
+func (s Store) GetCoverageData(runID uuid.UUID) (*CoverageData, error) {
+	run, err := s.GetTestRun(runID)
+	if err != nil {
+		return nil, err
+	}
+
+	var covData CoverageData
+	if err := s.db.Preload("Files.Blocks").Where("run_id = ?", run.ID).First(&covData).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("unable to get coverage data: %w", err)
+	}
+	return &covData, nil
 }
 
 // open creates a new connection to a SQLite database file.

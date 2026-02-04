@@ -116,12 +116,13 @@ func (r *Runner) Start(ctx context.Context, resultConfig ResultConfig, onEvent .
 		}
 
 		if r.coverageFile != nil {
-			percent, err := cover.Coverage(r.CoverageFile())
+			percent, profiles, err := cover.Coverage(r.CoverageFile())
 			if err != nil {
 				done <- fmt.Errorf("error calculating coverage: %v", err)
 				return
 			}
 			run.Result.coverage = &percent
+			run.CoverageProfiles = profiles
 
 			if !r.config.KeepCoverageFile {
 				if err := os.Remove(r.coverageFile.Name()); err != nil {

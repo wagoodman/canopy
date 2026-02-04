@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/bus/event"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/db"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/go-partybus"
@@ -179,10 +180,13 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 	onEvent := func(event *gotest.Event) {
 		if event == nil {
 			// this is the end of the test run...
-			var coverage *float64
+			var coverage *db.CoverageInput
 			cov, ok := r.Result.Coverage()
 			if ok {
-				coverage = &cov
+				coverage = &db.CoverageInput{
+					Percent:  cov,
+					Profiles: r.CoverageProfiles,
+				}
 			}
 			if err := runModel.end(coverage); err != nil {
 				log.WithFields("error", err).Error("unable to end test run")
