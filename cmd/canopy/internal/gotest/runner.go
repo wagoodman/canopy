@@ -65,7 +65,7 @@ func (r *Runner) Run(ctx context.Context, resultConfig ResultConfig, onEvent ...
 // Start executes tests asynchronously and returns immediately with a Run and error channel.
 // Events are processed in real-time and sent to provided callbacks. The error channel
 // will receive nil when execution completes successfully, or an error if something fails.
-func (r *Runner) Start(ctx context.Context, resultConfig ResultConfig, onEvent ...func(*Event)) (*Run, <-chan error) { //nolint: gocognit
+func (r *Runner) Start(ctx context.Context, resultConfig ResultConfig, onEvent ...func(*Event)) (*Run, <-chan error) {
 	run := NewRun(r.config)
 	run.Result = *NewResult(resultConfig)
 	done := make(chan error)
@@ -135,7 +135,7 @@ func (r *Runner) Start(ctx context.Context, resultConfig ResultConfig, onEvent .
 	return run, done
 }
 
-func (r *Runner) startEventStream() (<-chan JSONL, error) { //nolint: funlen,gocognit
+func (r *Runner) startEventStream() (<-chan JSONL, error) { //nolint:funlen
 	events := make(chan JSONL)
 
 	initArgs := []string{"test"}

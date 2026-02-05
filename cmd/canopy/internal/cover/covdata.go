@@ -29,7 +29,7 @@ type FunctionResult struct {
 //
 //	package/path		coverage: 41.1% of statements
 func PackageCoverage(coverDir string) ([]PackageResult, error) {
-	cmd := exec.Command("go", "tool", "covdata", "percent", fmt.Sprintf("-i=%s", coverDir))
+	cmd := exec.Command("go", "tool", "covdata", "percent", fmt.Sprintf("-i=%s", coverDir)) //nolint:gosec
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -49,7 +49,7 @@ func PackageCoverage(coverDir string) ([]PackageResult, error) {
 //	package/path/file.go:12:	funcName	100.0%
 //	total					(statements)	41.1%
 func FunctionCoverage(coverDir string) ([]FunctionResult, float64, error) {
-	cmd := exec.Command("go", "tool", "covdata", "func", fmt.Sprintf("-i=%s", coverDir))
+	cmd := exec.Command("go", "tool", "covdata", "func", fmt.Sprintf("-i=%s", coverDir)) //nolint:gosec
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

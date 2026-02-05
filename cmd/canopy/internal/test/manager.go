@@ -181,7 +181,7 @@ func (s *Manager) RunTests(ctx context.Context, cfg RunConfig) (*gotest.Run, err
 // Creates a new session if one doesn't exist. Events are logged, published to the bus, and persisted to storage.
 // If cfg.Reader is provided, events are replayed from that reader instead of executing tests.
 // The error channel will be closed when execution completes or fails.
-func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <-chan error) { //nolint:funlen
+func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <-chan error) { //nolint:funlen,gocognit
 	var r *gotest.Run
 	var errs <-chan error
 	var runModel *run
