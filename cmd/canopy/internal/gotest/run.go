@@ -2,7 +2,7 @@ package gotest
 
 import (
 	"github.com/google/uuid"
-	"golang.org/x/tools/cover"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/cover"
 )
 
 // Run represents a single `go test` execution session with its configuration and accumulated results.
@@ -12,7 +12,8 @@ type Run struct {
 
 	Config           RunnerConfig
 	Result           Result
-	CoverageProfiles []*cover.Profile // raw profiles for structured storage
+	PackageCoverage  []cover.PackageResult  // per-package coverage from covdata
+	FunctionCoverage []cover.FunctionResult // per-function coverage from covdata
 }
 
 // NewRun creates a new test execution session with a unique identifier.

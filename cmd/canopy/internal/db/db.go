@@ -11,18 +11,20 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/google/uuid"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/cover"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/failure"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
-	"golang.org/x/tools/cover"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 // CoverageInput bundles coverage data for storage when a test run completes.
 type CoverageInput struct {
-	Percent  float64
-	Profiles []*cover.Profile
+	Percent     float64
+	CoverageDir string
+	Packages    []cover.PackageResult
+	Functions   []cover.FunctionResult
 }
 
 // SourceStateInput bundles source state data for storage.
@@ -63,6 +65,15 @@ func New(dbFilePath string) (*Store, error) {
 		if err := db.AutoMigrate(&model); err != nil {
 			// TODO: get model name that failed...
 			return nil, fmt.Errorf("unable to migrate: %w", err)
+		}
+	}
+
+	// drop old coverage tables that are no longer used (replaced by PackageCoverage + FunctionCoverage)
+	for _, table := range droppedModels() {
+		if db.Migrator().HasTable(table) {
+			if err := db.Migrator().DropTable(table); err != nil {
+				log.WithFields("table", table, "error", err).Warn("failed to drop old table")
+			}
 		}
 	}
 
@@ -163,15 +174,23 @@ func (s Store) EndTestRun(runID uuid.UUID, coverage *CoverageInput) error {
 
 	if coverage != nil {
 		run.Coverage = &coverage.Percent
+		run.CoverageDir = coverage.CoverageDir
 	}
 
 	if err := s.db.Save(&run).Error; err != nil {
 		return fmt.Errorf("unable to end test run: %w", err)
 	}
 
-	if coverage != nil && len(coverage.Profiles) > 0 {
-		if err := s.addCoverageData(run.ID, coverage.Profiles); err != nil {
-			log.WithFields("error", err).Warn("failed to store structured coverage data")
+	if coverage != nil {
+		if len(coverage.Packages) > 0 {
+			if err := s.addPackageCoverage(run.ID, coverage.Packages); err != nil {
+				log.WithFields("error", err).Warn("failed to store package coverage")
+			}
+		}
+		if len(coverage.Functions) > 0 {
+			if err := s.addFunctionCoverage(run.ID, coverage.Functions); err != nil {
+				log.WithFields("error", err).Warn("failed to store function coverage")
+			}
 		}
 	}
 
@@ -425,73 +444,78 @@ func (s Store) GetFailuresByFingerprint(fingerprint string) ([]FailedTestDetails
 	return failures, nil
 }
 
-// addCoverageData stores structured coverage data from parsed profiles for a test run.
-func (s Store) addCoverageData(runID int64, profiles []*cover.Profile) error {
-	if len(profiles) == 0 {
+// addPackageCoverage stores per-package coverage data for a test run.
+func (s Store) addPackageCoverage(runID int64, pkgs []cover.PackageResult) error {
+	if len(pkgs) == 0 {
 		return nil
 	}
 
-	// determine coverage mode from the first profile
-	mode := profiles[0].Mode
-
-	covData := CoverageData{
-		RunID: runID,
-		Mode:  mode,
+	records := make([]PackageCoverage, len(pkgs))
+	for i, p := range pkgs {
+		records[i] = PackageCoverage{
+			RunID:       runID,
+			PackagePath: p.PackagePath,
+			Percent:     p.Percent,
+		}
 	}
 
-	if err := s.db.Create(&covData).Error; err != nil {
-		return fmt.Errorf("unable to create coverage data: %w", err)
-	}
-
-	for _, p := range profiles {
-		fileCov := FileCoverage{
-			CoverageDataID: covData.ID,
-			FileName:       p.FileName,
-		}
-
-		if err := s.db.Create(&fileCov).Error; err != nil {
-			return fmt.Errorf("unable to create file coverage: %w", err)
-		}
-
-		if len(p.Blocks) > 0 {
-			blocks := make([]CoverageBlock, len(p.Blocks))
-			for i, b := range p.Blocks {
-				blocks[i] = CoverageBlock{
-					FileCoverageID: fileCov.ID,
-					StartLine:      b.StartLine,
-					StartCol:       b.StartCol,
-					EndLine:        b.EndLine,
-					EndCol:         b.EndCol,
-					NumStmt:        b.NumStmt,
-					Count:          b.Count,
-				}
-			}
-
-			if err := s.db.CreateInBatches(blocks, 500).Error; err != nil {
-				return fmt.Errorf("unable to create coverage blocks: %w", err)
-			}
-		}
+	if err := s.db.CreateInBatches(records, 500).Error; err != nil {
+		return fmt.Errorf("unable to create package coverage: %w", err)
 	}
 
 	return nil
 }
 
-// GetCoverageData retrieves structured coverage data for a test run, including files and blocks.
-// Returns nil if no coverage data exists for the run.
-func (s Store) GetCoverageData(runID uuid.UUID) (*CoverageData, error) {
+// addFunctionCoverage stores per-function coverage data for a test run.
+func (s Store) addFunctionCoverage(runID int64, funcs []cover.FunctionResult) error {
+	if len(funcs) == 0 {
+		return nil
+	}
+
+	records := make([]FunctionCoverage, len(funcs))
+	for i, f := range funcs {
+		records[i] = FunctionCoverage{
+			RunID:    runID,
+			FilePath: f.FilePath,
+			Line:     f.Line,
+			FuncName: f.FuncName,
+			Percent:  f.Percent,
+		}
+	}
+
+	if err := s.db.CreateInBatches(records, 500).Error; err != nil {
+		return fmt.Errorf("unable to create function coverage: %w", err)
+	}
+
+	return nil
+}
+
+// GetPackageCoverage retrieves per-package coverage data for a test run.
+func (s Store) GetPackageCoverage(runID uuid.UUID) ([]PackageCoverage, error) {
 	run, err := s.GetTestRun(runID)
 	if err != nil {
 		return nil, err
 	}
 
-	var covData CoverageData
-	if err := s.db.Preload("Files.Blocks").Where("run_id = ?", run.ID).First(&covData).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("unable to get coverage data: %w", err)
+	var pkgs []PackageCoverage
+	if err := s.db.Where("run_id = ?", run.ID).Find(&pkgs).Error; err != nil {
+		return nil, fmt.Errorf("unable to get package coverage: %w", err)
 	}
-	return &covData, nil
+	return pkgs, nil
+}
+
+// GetFunctionCoverage retrieves per-function coverage data for a test run.
+func (s Store) GetFunctionCoverage(runID uuid.UUID) ([]FunctionCoverage, error) {
+	run, err := s.GetTestRun(runID)
+	if err != nil {
+		return nil, err
+	}
+
+	var funcs []FunctionCoverage
+	if err := s.db.Where("run_id = ?", run.ID).Find(&funcs).Error; err != nil {
+		return nil, fmt.Errorf("unable to get function coverage: %w", err)
+	}
+	return funcs, nil
 }
 
 // AddSourceState stores source state data for a test run.
@@ -579,29 +603,22 @@ func open(path string) (*gorm.DB, error) {
 // The caller is responsible for managing the transaction boundary.
 // When adding new run-related tables, add a corresponding DELETE here.
 func (s Store) deleteRun(tx *gorm.DB, runID int64) error {
-	// 1. coverage blocks (deepest child — requires nested subqueries to reach run_id)
-	covDataIDs := tx.Model(&CoverageData{}).Select("id").Where("run_id = ?", runID)
-	fileCovIDs := tx.Model(&FileCoverage{}).Select("id").Where("coverage_data_id IN (?)", covDataIDs)
-	if err := tx.Where("file_coverage_id IN (?)", fileCovIDs).Delete(&CoverageBlock{}).Error; err != nil {
-		return fmt.Errorf("unable to delete coverage blocks for run %d: %w", runID, err)
+	// 1. package coverage
+	if err := tx.Where("run_id = ?", runID).Delete(&PackageCoverage{}).Error; err != nil {
+		return fmt.Errorf("unable to delete package coverage for run %d: %w", runID, err)
 	}
 
-	// 2. file coverages
-	if err := tx.Where("coverage_data_id IN (?)", tx.Model(&CoverageData{}).Select("id").Where("run_id = ?", runID)).Delete(&FileCoverage{}).Error; err != nil {
-		return fmt.Errorf("unable to delete file coverages for run %d: %w", runID, err)
+	// 2. function coverage
+	if err := tx.Where("run_id = ?", runID).Delete(&FunctionCoverage{}).Error; err != nil {
+		return fmt.Errorf("unable to delete function coverage for run %d: %w", runID, err)
 	}
 
-	// 3. coverage data
-	if err := tx.Where("run_id = ?", runID).Delete(&CoverageData{}).Error; err != nil {
-		return fmt.Errorf("unable to delete coverage data for run %d: %w", runID, err)
-	}
-
-	// 4. failed test details
+	// 3. failed test details
 	if err := tx.Where("run_id = ?", runID).Delete(&FailedTestDetails{}).Error; err != nil {
 		return fmt.Errorf("unable to delete failed test details for run %d: %w", runID, err)
 	}
 
-	// 5. test_event_annotations join table (many2many between TestEvent and Annotation).
+	// 4. test_event_annotations join table (many2many between TestEvent and Annotation).
 	// This is an implicit GORM join table with no model, so we reference the table name directly
 	// but still use a GORM subquery for the IN clause.
 	eventIDs := tx.Model(&TestEvent{}).Select("id").Where("run_id = ?", runID)
@@ -609,12 +626,12 @@ func (s Store) deleteRun(tx *gorm.DB, runID int64) error {
 		return fmt.Errorf("unable to delete test event annotations for run %d: %w", runID, err)
 	}
 
-	// 6. test events
+	// 5. test events
 	if err := tx.Where("run_id = ?", runID).Delete(&TestEvent{}).Error; err != nil {
 		return fmt.Errorf("unable to delete test events for run %d: %w", runID, err)
 	}
 
-	// 7. the test run itself
+	// 6. the test run itself
 	if err := tx.Where("id = ?", runID).Delete(&TestRun{}).Error; err != nil {
 		return fmt.Errorf("unable to delete test run %d: %w", runID, err)
 	}
@@ -623,9 +640,21 @@ func (s Store) deleteRun(tx *gorm.DB, runID int64) error {
 }
 
 // DeleteRuns removes test runs by internal IDs and cascades to all child data.
+// Also removes persistent coverage directories from disk.
 func (s Store) DeleteRuns(runIDs []int64) (int, error) {
 	if len(runIDs) == 0 {
 		return 0, nil
+	}
+
+	// collect coverage directory paths before deleting the DB records
+	var coverageDirs []string
+	var runs []TestRun
+	if err := s.db.Where("id IN ?", runIDs).Find(&runs).Error; err == nil {
+		for _, r := range runs {
+			if r.CoverageDir != "" {
+				coverageDirs = append(coverageDirs, r.CoverageDir)
+			}
+		}
 	}
 
 	deleted := 0
@@ -640,6 +669,13 @@ func (s Store) DeleteRuns(runIDs []int64) (int, error) {
 	})
 	if err != nil {
 		return deleted, err
+	}
+
+	// clean up persistent coverage directories from disk
+	for _, dir := range coverageDirs {
+		if err := os.RemoveAll(dir); err != nil {
+			log.WithFields("dir", dir, "error", err).Debug("failed to remove coverage directory")
+		}
 	}
 
 	if _, err := s.DeleteOrphanedSessions(); err != nil {

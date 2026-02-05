@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -180,7 +181,7 @@ func (s *Manager) RunTests(ctx context.Context, cfg RunConfig) (*gotest.Run, err
 // Creates a new session if one doesn't exist. Events are logged, published to the bus, and persisted to storage.
 // If cfg.Reader is provided, events are replayed from that reader instead of executing tests.
 // The error channel will be closed when execution completes or fails.
-func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <-chan error) { //nolint:funlen
+func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <-chan error) { //nolint:funlen,gocognit
 	var r *gotest.Run
 	var errs <-chan error
 	var runModel *run
@@ -208,6 +209,18 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 		return nil, done
 	}
 
+	// set up persistent coverage directory if coverage is enabled
+	if cfg.Runner.Coverage && s.config.DBRoot != "" {
+		coverageDir, absErr := filepath.Abs(filepath.Join(s.config.DBRoot, "coverage", runModel.uuid.String()))
+		if absErr != nil {
+			log.WithFields("error", absErr).Warn("failed to resolve coverage directory path")
+		} else if mkErr := os.MkdirAll(coverageDir, 0o755); mkErr != nil {
+			log.WithFields("error", mkErr).Warn("failed to create coverage directory")
+		} else {
+			cfg.Runner.CoverageDir = coverageDir
+		}
+	}
+
 	if cfg.SourceState != nil {
 		if err := s.AddSourceState(runModel.uuid, cfg.SourceState); err != nil {
 			log.WithFields("error", err).Warn("failed to store source state")
@@ -221,8 +234,10 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 			cov, ok := r.Result.Coverage()
 			if ok {
 				coverage = &db.CoverageInput{
-					Percent:  cov,
-					Profiles: r.CoverageProfiles,
+					Percent:     cov,
+					CoverageDir: cfg.Runner.CoverageDir,
+					Packages:    r.PackageCoverage,
+					Functions:   r.FunctionCoverage,
 				}
 			}
 			if err := runModel.end(coverage); err != nil {

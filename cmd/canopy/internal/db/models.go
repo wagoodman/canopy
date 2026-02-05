@@ -18,11 +18,19 @@ func models() []any {
 		Reference{},
 		Annotation{},
 		FailedTestDetails{},
-		CoverageData{},
-		FileCoverage{},
-		CoverageBlock{},
+		PackageCoverage{},
+		FunctionCoverage{},
 		SourceState{},
 		FileState{},
+	}
+}
+
+// droppedModels returns old model types that should be removed during migration.
+func droppedModels() []string {
+	return []string{
+		"coverage_data",
+		"file_coverages",
+		"coverage_blocks",
 	}
 }
 
@@ -70,6 +78,9 @@ type TestRun struct {
 
 	// Coverage is the overall code coverage percentage for this run (nil if not calculated).
 	Coverage *float64 `gorm:"column:coverage" json:"coverage"`
+
+	// CoverageDir is the absolute path to the persistent binary coverage directory for this run.
+	CoverageDir string `gorm:"column:coverage_dir" json:"coverage_dir,omitempty"`
 }
 
 // TestEvent represents a single event from the go test JSON output stream.
@@ -171,61 +182,40 @@ type FailedTestDetails struct {
 	Fingerprint string `gorm:"column:fingerprint;index" json:"fingerprint"`
 }
 
-// CoverageData stores structured coverage information for a test run.
-type CoverageData struct {
+// PackageCoverage stores per-package coverage data from `go tool covdata percent`.
+type PackageCoverage struct {
 	// ID is the primary key for database relationships.
 	ID int64 `gorm:"primaryKey" json:"-"`
 
-	// RunID links this coverage data to its parent test run (one coverage data per run).
-	RunID int64 `gorm:"column:run_id;uniqueIndex" json:"-"`
+	// RunID links this coverage data to its parent test run.
+	RunID int64 `gorm:"column:run_id;uniqueIndex:idx_pkg_cov_run_pkg" json:"-"`
 
-	// Mode is the coverage mode from the profile (e.g., "set", "count", "atomic").
-	Mode string `gorm:"column:mode" json:"mode"`
+	// PackagePath is the Go package import path (e.g., "github.com/org/repo/pkg").
+	PackagePath string `gorm:"column:package_path;uniqueIndex:idx_pkg_cov_run_pkg" json:"package_path"`
 
-	// Files contains per-file coverage data for this run.
-	Files []FileCoverage `gorm:"foreignKey:CoverageDataID" json:"files"`
+	// Percent is the coverage percentage for this package.
+	Percent float64 `gorm:"column:percent" json:"percent"`
 }
 
-// FileCoverage stores coverage data for a single source file.
-type FileCoverage struct {
+// FunctionCoverage stores per-function coverage data from `go tool covdata func`.
+type FunctionCoverage struct {
 	// ID is the primary key for database relationships.
 	ID int64 `gorm:"primaryKey" json:"-"`
 
-	// CoverageDataID links this file coverage to its parent coverage data.
-	CoverageDataID int64 `gorm:"column:coverage_data_id;index" json:"-"`
+	// RunID links this coverage data to its parent test run.
+	RunID int64 `gorm:"column:run_id;index" json:"-"`
 
-	// FileName is the package-qualified file path from the coverage profile.
-	FileName string `gorm:"column:file_name" json:"file_name"`
+	// FilePath is the source file path containing the function.
+	FilePath string `gorm:"column:file_path" json:"file_path"`
 
-	// Blocks contains per-block coverage data for this file.
-	Blocks []CoverageBlock `gorm:"foreignKey:FileCoverageID" json:"blocks"`
-}
+	// Line is the line number where the function is defined.
+	Line int `gorm:"column:line" json:"line"`
 
-// CoverageBlock stores a single coverage block from the Go coverage profile.
-type CoverageBlock struct {
-	// ID is the primary key for database relationships.
-	ID int64 `gorm:"primaryKey" json:"-"`
+	// FuncName is the function name.
+	FuncName string `gorm:"column:func_name" json:"func_name"`
 
-	// FileCoverageID links this block to its parent file coverage.
-	FileCoverageID int64 `gorm:"column:file_coverage_id;index" json:"-"`
-
-	// StartLine is the starting line number of the block.
-	StartLine int `gorm:"column:start_line" json:"start_line"`
-
-	// StartCol is the starting column number of the block.
-	StartCol int `gorm:"column:start_col" json:"start_col"`
-
-	// EndLine is the ending line number of the block.
-	EndLine int `gorm:"column:end_line" json:"end_line"`
-
-	// EndCol is the ending column number of the block.
-	EndCol int `gorm:"column:end_col" json:"end_col"`
-
-	// NumStmt is the number of statements in the block.
-	NumStmt int `gorm:"column:num_stmt" json:"num_stmt"`
-
-	// Count is the number of times the block was executed.
-	Count int `gorm:"column:count" json:"count"`
+	// Percent is the coverage percentage for this function.
+	Percent float64 `gorm:"column:percent" json:"percent"`
 }
 
 // SourceState captures git repository state at test run time.

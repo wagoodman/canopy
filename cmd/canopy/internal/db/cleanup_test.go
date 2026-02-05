@@ -47,20 +47,18 @@ func createRunWithData(t *testing.T, store *Store, sessionID int64, started time
 	}
 	require.NoError(t, store.db.Create(&failure).Error)
 
-	// add coverage data
-	covData := CoverageData{RunID: run.ID, Mode: "set"}
-	require.NoError(t, store.db.Create(&covData).Error)
+	// add coverage data (new schema)
+	pkgCov := PackageCoverage{RunID: run.ID, PackagePath: "pkg/foo", Percent: 75.0}
+	require.NoError(t, store.db.Create(&pkgCov).Error)
 
-	fileCov := FileCoverage{CoverageDataID: covData.ID, FileName: "foo.go"}
-	require.NoError(t, store.db.Create(&fileCov).Error)
-
-	block := CoverageBlock{
-		FileCoverageID: fileCov.ID,
-		StartLine:      1, StartCol: 1,
-		EndLine: 10, EndCol: 1,
-		NumStmt: 5, Count: 1,
+	funcCov := FunctionCoverage{
+		RunID:    run.ID,
+		FilePath: "foo.go",
+		Line:     10,
+		FuncName: "TestFoo",
+		Percent:  100.0,
 	}
-	require.NoError(t, store.db.Create(&block).Error)
+	require.NoError(t, store.db.Create(&funcCov).Error)
 
 	return run.ID
 }
@@ -100,9 +98,8 @@ func TestDeleteRun_CascadesAllData(t *testing.T) {
 	require.Equal(t, int64(1), countRows(t, store, &TestRun{}))
 	require.Equal(t, int64(1), countRows(t, store, &TestEvent{}))
 	require.Equal(t, int64(1), countRows(t, store, &FailedTestDetails{}))
-	require.Equal(t, int64(1), countRows(t, store, &CoverageData{}))
-	require.Equal(t, int64(1), countRows(t, store, &FileCoverage{}))
-	require.Equal(t, int64(1), countRows(t, store, &CoverageBlock{}))
+	require.Equal(t, int64(1), countRows(t, store, &PackageCoverage{}))
+	require.Equal(t, int64(1), countRows(t, store, &FunctionCoverage{}))
 	require.Equal(t, int64(1), countJoinTableRows(t, store))
 
 	// delete the run
@@ -114,9 +111,8 @@ func TestDeleteRun_CascadesAllData(t *testing.T) {
 	require.Equal(t, int64(0), countRows(t, store, &TestRun{}))
 	require.Equal(t, int64(0), countRows(t, store, &TestEvent{}))
 	require.Equal(t, int64(0), countRows(t, store, &FailedTestDetails{}))
-	require.Equal(t, int64(0), countRows(t, store, &CoverageData{}))
-	require.Equal(t, int64(0), countRows(t, store, &FileCoverage{}))
-	require.Equal(t, int64(0), countRows(t, store, &CoverageBlock{}))
+	require.Equal(t, int64(0), countRows(t, store, &PackageCoverage{}))
+	require.Equal(t, int64(0), countRows(t, store, &FunctionCoverage{}))
 	require.Equal(t, int64(0), countJoinTableRows(t, store))
 }
 
@@ -153,7 +149,7 @@ func TestDeleteRun_PreservesOtherRuns(t *testing.T) {
 	require.Equal(t, int64(2), countRows(t, store, &TestRun{}))
 	require.Equal(t, int64(2), countRows(t, store, &TestEvent{}))
 	require.Equal(t, int64(2), countRows(t, store, &FailedTestDetails{}))
-	require.Equal(t, int64(2), countRows(t, store, &CoverageData{}))
+	require.Equal(t, int64(2), countRows(t, store, &PackageCoverage{}))
 
 	// delete only the first run
 	deleted, err := store.DeleteRuns([]int64{run1ID})
@@ -164,9 +160,8 @@ func TestDeleteRun_PreservesOtherRuns(t *testing.T) {
 	require.Equal(t, int64(1), countRows(t, store, &TestRun{}))
 	require.Equal(t, int64(1), countRows(t, store, &TestEvent{}))
 	require.Equal(t, int64(1), countRows(t, store, &FailedTestDetails{}))
-	require.Equal(t, int64(1), countRows(t, store, &CoverageData{}))
-	require.Equal(t, int64(1), countRows(t, store, &FileCoverage{}))
-	require.Equal(t, int64(1), countRows(t, store, &CoverageBlock{}))
+	require.Equal(t, int64(1), countRows(t, store, &PackageCoverage{}))
+	require.Equal(t, int64(1), countRows(t, store, &FunctionCoverage{}))
 }
 
 func TestDeleteRunsByAge(t *testing.T) {
@@ -254,7 +249,7 @@ func TestDeleteAllRuns(t *testing.T) {
 	require.Equal(t, 3, deleted)
 	require.Equal(t, int64(0), countRows(t, store, &TestRun{}))
 	require.Equal(t, int64(0), countRows(t, store, &TestEvent{}))
-	require.Equal(t, int64(0), countRows(t, store, &CoverageData{}))
+	require.Equal(t, int64(0), countRows(t, store, &PackageCoverage{}))
 
 	// sessions should also be gone (orphaned)
 	require.Equal(t, int64(0), countRows(t, store, &TestSession{}))
@@ -332,23 +327,21 @@ func TestDeleteRun_CascadesAllData_StructComparison(t *testing.T) {
 	require.NoError(t, err)
 
 	type tableCounts struct {
-		Runs           int64
-		Events         int64
-		Failures       int64
-		CoverageData   int64
-		FileCoverages  int64
-		CoverageBlocks int64
-		JoinTableRows  int64
+		Runs              int64
+		Events            int64
+		Failures          int64
+		PackageCoverages  int64
+		FunctionCoverages int64
+		JoinTableRows     int64
 	}
 
 	got := tableCounts{
-		Runs:           countRows(t, store, &TestRun{}),
-		Events:         countRows(t, store, &TestEvent{}),
-		Failures:       countRows(t, store, &FailedTestDetails{}),
-		CoverageData:   countRows(t, store, &CoverageData{}),
-		FileCoverages:  countRows(t, store, &FileCoverage{}),
-		CoverageBlocks: countRows(t, store, &CoverageBlock{}),
-		JoinTableRows:  countJoinTableRows(t, store),
+		Runs:              countRows(t, store, &TestRun{}),
+		Events:            countRows(t, store, &TestEvent{}),
+		Failures:          countRows(t, store, &FailedTestDetails{}),
+		PackageCoverages:  countRows(t, store, &PackageCoverage{}),
+		FunctionCoverages: countRows(t, store, &FunctionCoverage{}),
+		JoinTableRows:     countJoinTableRows(t, store),
 	}
 
 	want := tableCounts{}
