@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -28,19 +27,18 @@ func (e ErrRunStderr) Error() string {
 
 // RunnerConfig specifies how tests should be executed.
 type RunnerConfig struct {
-	Packages         *golist.PackageCollection
-	Coverage         bool
-	KeepCoverageFile bool
-	NoCache          bool
-	UserArgs         []string
-	OnlyRefs         []Reference
+	Packages    *golist.PackageCollection
+	Coverage    bool
+	CoverageDir string // absolute path to persistent binary coverage directory (set externally when Coverage is true)
+	NoCache     bool
+	UserArgs    []string
+	OnlyRefs    []Reference
 }
 
 // Runner coordinates test execution by spawning `go test` subprocesses and processing
 // their JSON output into structured events and results.
 type Runner struct {
-	config       RunnerConfig
-	coverageFile *os.File
+	config RunnerConfig
 }
 
 // NewRunner creates a test runner with the specified configuration.
@@ -115,31 +113,26 @@ func (r *Runner) Start(ctx context.Context, resultConfig ResultConfig, onEvent .
 			}
 		}
 
-		if r.coverageFile != nil {
-			percent, profiles, err := cover.Coverage(r.CoverageFile())
+		if r.config.CoverageDir != "" {
+			pkgs, err := cover.PackageCoverage(r.config.CoverageDir)
 			if err != nil {
-				done <- fmt.Errorf("error calculating coverage: %v", err)
+				done <- fmt.Errorf("error calculating package coverage: %v", err)
 				return
 			}
-			run.Result.coverage = &percent
-			run.CoverageProfiles = profiles
 
-			if !r.config.KeepCoverageFile {
-				if err := os.Remove(r.coverageFile.Name()); err != nil {
-					log.WithFields("error", err).Debug("error removing coverage file")
-				}
+			funcs, overallPercent, err := cover.FunctionCoverage(r.config.CoverageDir)
+			if err != nil {
+				done <- fmt.Errorf("error calculating function coverage: %v", err)
+				return
 			}
+
+			run.Result.coverage = &overallPercent
+			run.PackageCoverage = pkgs
+			run.FunctionCoverage = funcs
 		}
 	}()
 
 	return run, done
-}
-
-func (r Runner) CoverageFile() string {
-	if r.coverageFile == nil {
-		return ""
-	}
-	return r.coverageFile.Name()
 }
 
 func (r *Runner) startEventStream() (<-chan JSONL, error) { //nolint: funlen,gocognit
@@ -147,14 +140,7 @@ func (r *Runner) startEventStream() (<-chan JSONL, error) { //nolint: funlen,goc
 
 	initArgs := []string{"test"}
 	if r.config.Coverage {
-		fh, err := os.CreateTemp("", "canopy-coverage-*.out")
-		if err != nil {
-			return nil, fmt.Errorf("error creating coverage file: %v", err)
-		}
-
-		r.coverageFile = fh
-
-		initArgs = append(initArgs, "-coverprofile", fh.Name())
+		initArgs = append(initArgs, "-cover")
 	}
 	initArgs = append(initArgs, "-json")
 
@@ -169,16 +155,12 @@ func (r *Runner) startEventStream() (<-chan JSONL, error) { //nolint: funlen,goc
 	args = append(args, r.config.UserArgs...)
 	args = append(args, runFilters(r.config.OnlyRefs)...)
 
-	cmd := exec.Command("go", args...)
-
-	// use GOEXPERIMENT=nocoverageredesign to avoid issues found in go 1.22+ (see https://github.com/golang/go/issues/65570)
-	if goExperiment := os.Getenv("GOEXPERIMENT"); goExperiment != "" {
-		if !strings.Contains(goExperiment, "nocoverageredesign") {
-			cmd.Env = append(os.Environ(), "GOEXPERIMENT=nocoverageredesign,"+goExperiment)
-		}
-	} else {
-		cmd.Env = append(os.Environ(), "GOEXPERIMENT=nocoverageredesign")
+	// -args must come last: it separates `go test` flags from test binary flags
+	if r.config.CoverageDir != "" {
+		args = append(args, "-args", fmt.Sprintf("-test.gocoverdir=%s", r.config.CoverageDir))
 	}
+
+	cmd := exec.Command("go", args...)
 
 	log.WithFields("cmd", fmt.Sprintf("%q", strings.Join(cmd.Args, " "))).Trace("executing")
 
