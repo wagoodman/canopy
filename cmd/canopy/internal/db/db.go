@@ -21,10 +21,10 @@ import (
 
 // CoverageInput bundles coverage data for storage when a test run completes.
 type CoverageInput struct {
-	Percent      float64
-	CoverageDir  string
-	Packages     []cover.PackageResult
-	Functions    []cover.FunctionResult
+	Percent     float64
+	CoverageDir string
+	Packages    []cover.PackageResult
+	Functions   []cover.FunctionResult
 }
 
 // SourceStateInput bundles source state data for storage.

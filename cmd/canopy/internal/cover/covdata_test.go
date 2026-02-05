@@ -71,11 +71,11 @@ func TestParsePercentOutput(t *testing.T) {
 
 func TestParseFuncOutput(t *testing.T) {
 	tests := []struct {
-		name           string
-		input          string
-		wantFuncs      []FunctionResult
-		wantOverall    float64
-		wantErr        require.ErrorAssertionFunc
+		name        string
+		input       string
+		wantFuncs   []FunctionResult
+		wantOverall float64
+		wantErr     require.ErrorAssertionFunc
 	}{
 		{
 			name: "typical output",
