@@ -73,13 +73,16 @@ func collectNamedFlagSets(v reflect.Value, result *Named, visited map[uintptr]bo
 }
 
 // BindCobraHelpFromOpts configures the cobra command's help and usage functions to display
-// named flag groups collected from the options struct. It wraps the original help function
-// to preserve default behavior while adding organized flag sections.
+// named flag groups collected from the options struct. The custom help is only applied to
+// the specific command, not to subcommands that inherit the help function.
 func BindCobraHelpFromOpts(cmd *cobra.Command, opts any) {
-	ogHelp := cmd.Help
-	cmd.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
-		nfs := CollectNamedFlagSets(opts)
-		nfs.BindUsageAndHelpFunc(cmd, -1)
-		_ = ogHelp()
+	cmd.SetHelpFunc(func(c *cobra.Command, _ []string) {
+		if c == cmd {
+			// for this command, use grouped flag sets
+			nfs := CollectNamedFlagSets(opts)
+			nfs.BindUsageAndHelpFunc(c, -1)
+		}
+		// print the help using the command's usage function/template
+		c.Println(c.UsageString())
 	})
 }
