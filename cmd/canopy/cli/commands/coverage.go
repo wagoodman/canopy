@@ -23,6 +23,8 @@ import (
 	"github.com/anchore/fangs"
 )
 
+const sortByPercent = "percent"
+
 var _ fangs.FlagAdder = (*coverageConfig)(nil)
 
 // coverageConfig holds all configuration options for the coverage command.
@@ -138,7 +140,15 @@ type functionOutput struct {
 	Percent float64 `json:"percent"`
 }
 
-func runCoverage(cfg coverageConfig) error {
+// coverageData holds all fetched coverage information for a single run.
+type coverageData struct {
+	runInfo      test.RunInfo
+	testRun      db.TestRun
+	pkgCoverage  []db.PackageCoverage
+	funcCoverage []db.FunctionCoverage
+}
+
+func loadCoverageData(cfg coverageConfig) (*coverageData, error) {
 	m, err := test.NewManager(
 		test.Config{
 			DBRoot:    cfg.Root,
@@ -146,7 +156,7 @@ func runCoverage(cfg coverageConfig) error {
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("unable to create test manager: %w", err)
+		return nil, fmt.Errorf("unable to create test manager: %w", err)
 	}
 	defer func() {
 		if err := m.Close(); err != nil {
@@ -154,86 +164,91 @@ func runCoverage(cfg coverageConfig) error {
 		}
 	}()
 
-	// determine which run to show
 	runID, err := resolveRunID(m, cfg.RunID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	log.WithFields("run-id", runID.String()).Debug("showing coverage for test run")
 
-	// get run info
 	runInfo, err := m.GetRunInfo(runID)
 	if err != nil {
-		return fmt.Errorf("unable to get run info: %w", err)
+		return nil, fmt.Errorf("unable to get run info: %w", err)
 	}
 
-	// get the underlying test run from DB for coverage directory
 	store := m.DBStore()
 	if store == nil {
-		return fmt.Errorf("database not available")
+		return nil, fmt.Errorf("database not available")
 	}
 
 	testRun, err := store.GetTestRun(runID)
 	if err != nil {
-		return fmt.Errorf("unable to get test run: %w", err)
+		return nil, fmt.Errorf("unable to get test run: %w", err)
 	}
 
-	// check if coverage data exists
 	if runInfo.Coverage == nil {
-		return fmt.Errorf("no coverage data available for this run (was coverage enabled?)")
+		return nil, fmt.Errorf("no coverage data available for this run (was coverage enabled?)")
 	}
 
-	// get coverage data
 	pkgCoverage, err := store.GetPackageCoverage(runID)
 	if err != nil {
-		return fmt.Errorf("unable to get package coverage: %w", err)
+		return nil, fmt.Errorf("unable to get package coverage: %w", err)
 	}
 
 	funcCoverage, err := store.GetFunctionCoverage(runID)
 	if err != nil {
-		return fmt.Errorf("unable to get function coverage: %w", err)
+		return nil, fmt.Errorf("unable to get function coverage: %w", err)
+	}
+
+	return &coverageData{
+		runInfo:      runInfo,
+		testRun:      testRun,
+		pkgCoverage:  pkgCoverage,
+		funcCoverage: funcCoverage,
+	}, nil
+}
+
+func runCoverage(cfg coverageConfig) error {
+	data, err := loadCoverageData(cfg)
+	if err != nil {
+		return err
 	}
 
 	// convert sentinel to nil for optional min/max
-	var minPtr, maxPtr *float64
+	var minPct, maxPct *float64
 	if cfg.Min >= 0 {
-		minPtr = &cfg.Min
+		minPct = &cfg.Min
 	}
 	if cfg.Max >= 0 {
-		maxPtr = &cfg.Max
+		maxPct = &cfg.Max
 	}
 
-	// filter packages
-	pkgCoverage = filterPackages(pkgCoverage, cfg.Package, minPtr, maxPtr)
-
-	// filter functions by package pattern
-	funcCoverage = filterFunctions(funcCoverage, cfg.Package, minPtr, maxPtr)
-
-	// sort coverage data
-	sortPackages(pkgCoverage, cfg.Sort, cfg.Desc)
-	sortFunctions(funcCoverage, cfg.Sort, cfg.Desc)
+	// filter and sort
+	pkgs := filterPackages(data.pkgCoverage, cfg.Package, minPct, maxPct)
+	funcs := filterFunctions(data.funcCoverage, cfg.Package, minPct, maxPct)
+	sortPackages(pkgs, cfg.Sort, cfg.Desc)
+	sortFunctions(funcs, cfg.Sort, cfg.Desc)
 
 	switch strings.ToLower(cfg.Output) {
 	case "json":
-		return writeCoverageJSON(os.Stdout, runInfo, testRun, pkgCoverage, funcCoverage)
+		return writeCoverageJSON(os.Stdout, data.runInfo, data.testRun, pkgs, funcs)
 	case "text", "":
-		return writeCoverageText(os.Stdout, cfg.Unit, runInfo, pkgCoverage, funcCoverage, minPtr, maxPtr)
+		return writeCoverageText(os.Stdout, cfg.Unit, data.runInfo, pkgs, funcs, minPct, maxPct)
 	default:
 		return fmt.Errorf("unknown output format: %s", cfg.Output)
 	}
 }
 
-func filterPackages(pkgs []db.PackageCoverage, pattern string, min, max *float64) []db.PackageCoverage {
+func filterPackages(pkgs []db.PackageCoverage, pattern string, minPct, maxPct *float64) []db.PackageCoverage {
 	var result []db.PackageCoverage
 	for _, pkg := range pkgs {
 		if pattern != "" && !matchPackagePattern(pattern, pkg.PackagePath) {
 			continue
 		}
-		if min != nil && pkg.Percent < *min {
+		if minPct != nil && pkg.Percent < *minPct {
 			continue
 		}
-		if max != nil && pkg.Percent > *max {
+		if maxPct != nil && pkg.Percent > *maxPct {
 			continue
 		}
 		result = append(result, pkg)
@@ -241,20 +256,18 @@ func filterPackages(pkgs []db.PackageCoverage, pattern string, min, max *float64
 	return result
 }
 
-func filterFunctions(funcs []db.FunctionCoverage, pattern string, min, max *float64) []db.FunctionCoverage {
+func filterFunctions(funcs []db.FunctionCoverage, pattern string, minPct, maxPct *float64) []db.FunctionCoverage {
 	var result []db.FunctionCoverage
 	for _, fn := range funcs {
-		// extract package path from file path
 		pkgPath := extractPackagePath(fn.FilePath)
 
-		// if we have a package pattern, filter by it
 		if pattern != "" && !matchPackagePattern(pattern, pkgPath) {
 			continue
 		}
-		if min != nil && fn.Percent < *min {
+		if minPct != nil && fn.Percent < *minPct {
 			continue
 		}
-		if max != nil && fn.Percent > *max {
+		if maxPct != nil && fn.Percent > *maxPct {
 			continue
 		}
 		result = append(result, fn)
@@ -292,13 +305,8 @@ func sortPackages(pkgs []db.PackageCoverage, sortBy string, desc bool) {
 	sort.Slice(pkgs, func(i, j int) bool {
 		var less bool
 		switch sortBy {
-		case "percent":
+		case sortByPercent:
 			less = pkgs[i].Percent < pkgs[j].Percent
-			// default desc for percent
-			if sortBy == "percent" && !desc {
-				// when sorting by percent, default is ascending (lowest first) to find gaps
-				less = pkgs[i].Percent < pkgs[j].Percent
-			}
 		default: // name
 			less = pkgs[i].PackagePath < pkgs[j].PackagePath
 		}
@@ -313,7 +321,7 @@ func sortFunctions(funcs []db.FunctionCoverage, sortBy string, desc bool) {
 	sort.Slice(funcs, func(i, j int) bool {
 		var less bool
 		switch sortBy {
-		case "percent":
+		case sortByPercent:
 			less = funcs[i].Percent < funcs[j].Percent
 		default: // name
 			// sort by package path then function name
@@ -383,12 +391,12 @@ func writeCoverageJSON(w io.Writer, runInfo test.RunInfo, testRun db.TestRun, pk
 	return err
 }
 
-func writeCoverageText(w io.Writer, unit string, runInfo test.RunInfo, pkgs []db.PackageCoverage, funcs []db.FunctionCoverage, min, max *float64) error {
+func writeCoverageText(w io.Writer, unit string, runInfo test.RunInfo, pkgs []db.PackageCoverage, funcs []db.FunctionCoverage, minPct, maxPct *float64) error {
 	switch strings.ToLower(unit) {
 	case "total":
 		writeTotalCoverage(w, runInfo)
 	case "function":
-		writeFunctionCoverage(w, runInfo, funcs, min, max)
+		writeFunctionCoverage(w, runInfo, funcs, minPct, maxPct)
 	case "package", "":
 		writePackageCoverage(w, runInfo, pkgs)
 	default:
@@ -433,7 +441,7 @@ func writePackageCoverage(w io.Writer, runInfo test.RunInfo, pkgs []db.PackageCo
 	t.Render()
 }
 
-func writeFunctionCoverage(w io.Writer, runInfo test.RunInfo, funcs []db.FunctionCoverage, min, max *float64) {
+func writeFunctionCoverage(w io.Writer, runInfo test.RunInfo, funcs []db.FunctionCoverage, minPct, maxPct *float64) {
 	if len(funcs) == 0 {
 		fmt.Fprintln(w, "No function coverage data available")
 		return
@@ -448,7 +456,6 @@ func writeFunctionCoverage(w io.Writer, runInfo test.RunInfo, funcs []db.Functio
 	t.AppendHeader(table.Row{"FUNCTION", "COVERAGE", "FILE:LINE"})
 
 	for _, fn := range funcs {
-		// build full function name with package
 		pkgPath := extractPackagePath(fn.FilePath)
 		fullName := fmt.Sprintf("%s.%s", pkgPath, fn.FuncName)
 
@@ -462,16 +469,17 @@ func writeFunctionCoverage(w io.Writer, runInfo test.RunInfo, funcs []db.Functio
 	t.AppendSeparator()
 
 	// show appropriate footer based on filters
-	if min != nil || max != nil {
-		var desc string
-		if max != nil && min == nil {
-			desc = fmt.Sprintf("%d functions at or below %.0f%% coverage", len(funcs), *max)
-		} else if min != nil && max == nil {
-			desc = fmt.Sprintf("%d functions at or above %.0f%% coverage", len(funcs), *min)
-		} else {
-			desc = fmt.Sprintf("%d functions between %.0f%% and %.0f%% coverage", len(funcs), *min, *max)
+	if minPct != nil || maxPct != nil {
+		var footer string
+		switch {
+		case maxPct != nil && minPct == nil:
+			footer = fmt.Sprintf("%d functions at or below %.0f%% coverage", len(funcs), *maxPct)
+		case minPct != nil && maxPct == nil:
+			footer = fmt.Sprintf("%d functions at or above %.0f%% coverage", len(funcs), *minPct)
+		default:
+			footer = fmt.Sprintf("%d functions between %.0f%% and %.0f%% coverage", len(funcs), *minPct, *maxPct)
 		}
-		t.AppendRow(table.Row{desc, "", ""})
+		t.AppendRow(table.Row{footer, "", ""})
 	} else {
 		t.AppendRow(table.Row{
 			"TOTAL",
