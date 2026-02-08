@@ -33,6 +33,10 @@ func New(id clio.Identification) *cobra.Command {
 
 	app.AddFlags(root.PersistentFlags())
 
+	openCmd := commands.SessionOpen(app)
+	openCmd.Use = "open [SESSION-ID]"
+	openCmd.Short = "open an interactive session from existing test results (alias for `session open` command)"
+
 	root.AddCommand(
 		clio.VersionCommand(id),
 		clio.ConfigCommand(app, nil),
@@ -44,6 +48,9 @@ func New(id clio.Identification) *cobra.Command {
 		commands.Coverage(app),
 		commands.Trend(app),
 		commands.DB(app),
+
+		// Add alias for `open` command to the `session open` command
+		openCmd,
 	)
 
 	return root

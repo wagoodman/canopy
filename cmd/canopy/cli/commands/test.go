@@ -362,7 +362,7 @@ func setupTestUI(app clio.Application, format options.FormatWriter, appearance o
 	//	ux = ui.NewGoxxUI(uiConfig, maxPkgName)
 	case "go":
 		ux = ui.NewTestGoUI(uiConfig, maxPkgName)
-	case "json":
+	case "json": //nolint:goconst
 		// TODO: we're not passing testPkgs intentionally?
 		ux = ui.NewTestJSONUI(uiConfig)
 	case "jest":

@@ -23,14 +23,5 @@ func Session(app clio.Application) *cobra.Command {
 		SessionOpen(app),
 	)
 
-	// Add alias for `open` command to the `session open` command
-	db.AddCommand(&cobra.Command{
-		Use:   "open",
-		Short: "alias for `session open` command",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return SessionOpen(app).RunE(cmd, args)
-		},
-	})
-
 	return db
 }
