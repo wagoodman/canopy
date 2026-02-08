@@ -114,11 +114,11 @@ Examples:
 
 // coverageOutput represents the full JSON output structure.
 type coverageOutput struct {
-	RunID       string           `json:"run_id"`
-	Timestamp   time.Time        `json:"timestamp"`
-	CovdataPath string           `json:"covdata_path"`
-	Total       coverageTotal    `json:"total"`
-	Packages    []packageOutput  `json:"packages"`
+	RunID       string          `json:"run_id"`
+	Timestamp   time.Time       `json:"timestamp"`
+	CovdataPath string          `json:"covdata_path"`
+	Total       coverageTotal   `json:"total"`
+	Packages    []packageOutput `json:"packages"`
 }
 
 type coverageTotal struct {
