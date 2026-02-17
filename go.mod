@@ -20,7 +20,7 @@ require (
 	github.com/deckarep/golang-set/v2 v2.8.0
 	github.com/gkampitakis/go-snaps v0.5.19
 	github.com/glebarez/sqlite v1.11.0
-	github.com/go-git/go-git/v5 v5.16.4
+	github.com/go-git/go-git/v5 v5.16.5
 	github.com/google/go-cmp v0.7.0
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/google/uuid v1.6.0
