@@ -1,8 +1,6 @@
 module github.com/wagoodman/canopy
 
-go 1.24.2
-
-toolchain go1.24.9
+go 1.25.0
 
 require (
 	github.com/anchore/bubbly v0.0.0-20250717181826-8a411f9d8cbf
@@ -38,7 +36,7 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
 	github.com/wagoodman/go-partybus v0.0.0-20230516145632-8ccac152c651
-	golang.org/x/term v0.39.0
+	golang.org/x/term v0.41.0
 	golang.org/x/tools v0.41.0
 	gorm.io/datatypes v1.2.7
 	gorm.io/gorm v1.31.1
@@ -123,7 +121,7 @@ require (
 	golang.org/x/exp v0.0.0-20260112195511-716be5621a96 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.40.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
