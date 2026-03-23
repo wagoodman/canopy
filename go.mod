@@ -18,7 +18,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.11.4
 	github.com/deckarep/golang-set/v2 v2.8.0
-	github.com/gkampitakis/go-snaps v0.5.19
+	github.com/gkampitakis/go-snaps v0.5.21
 	github.com/glebarez/sqlite v1.11.0
 	github.com/go-git/go-git/v5 v5.16.4
 	github.com/google/go-cmp v0.7.0
