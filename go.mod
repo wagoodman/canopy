@@ -27,7 +27,7 @@ require (
 	github.com/gookit/color v1.6.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/jedib0t/go-pretty/v6 v6.7.8
-	github.com/junegunn/fzf v0.67.0
+	github.com/junegunn/fzf v0.71.0
 	github.com/lindell/go-ordered-set v1.1.0
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/magiconair/properties v1.8.10
@@ -81,6 +81,7 @@ require (
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/junegunn/go-shellwords v0.0.0-20250127100254-2aa3b3277741 // indirect
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
