@@ -9,7 +9,7 @@ require (
 	github.com/anchore/clio v0.0.0-20260121204944-b804fea6ab43
 	github.com/anchore/fangs v0.0.0-20260121185152-7c80b632e334
 	github.com/anchore/go-homedir v0.0.0-20250319154043-c29668562e4d
-	github.com/anchore/go-logger v0.0.0-20260121204825-e2a682192337
+	github.com/anchore/go-logger v0.1.0
 	github.com/anchore/go-sync v0.0.0-20251016141314-9644b03ca06e
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/cespare/xxhash/v2 v2.3.0
@@ -38,7 +38,7 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
 	github.com/wagoodman/go-partybus v0.0.0-20230516145632-8ccac152c651
-	golang.org/x/term v0.39.0
+	golang.org/x/term v0.40.0
 	golang.org/x/tools v0.41.0
 	gorm.io/datatypes v1.2.7
 	gorm.io/gorm v1.31.1
@@ -123,7 +123,7 @@ require (
 	golang.org/x/exp v0.0.0-20260112195511-716be5621a96 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.40.0 // indirect
+	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
