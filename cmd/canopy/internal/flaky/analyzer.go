@@ -4,6 +4,7 @@ import (
 	"math"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -275,25 +276,23 @@ func (a *Analyzer) matchesPackagePatterns(pkg string) bool {
 
 // matchGlobPrefix handles Go-style "..." patterns and more flexible matching.
 func matchGlobPrefix(pattern, pkg string) bool {
-	// handle trailing /... pattern (common in Go)
-	if len(pattern) > 4 && pattern[len(pattern)-4:] == "/..." {
-		prefix := pattern[:len(pattern)-4]
-		return len(pkg) >= len(prefix) && pkg[:len(prefix)] == prefix
+	// handle trailing /... pattern (common in Go). "foo/..." matches "foo" and "foo/bar"
+	// but NOT "foobar", so require an exact match or a "/" boundary after the prefix.
+	if prefix, ok := strings.CutSuffix(pattern, "/..."); ok {
+		return pkg == prefix || strings.HasPrefix(pkg, prefix+"/")
 	}
 
-	// handle ** patterns by converting to a simpler check
-	// e.g., "**/internal/*" matches any path containing "/internal/"
-	if len(pattern) > 2 && pattern[:2] == "**" {
-		// strip leading **/ and try to match the rest anywhere in the path
-		rest := pattern[2:]
-		if len(rest) > 0 && rest[0] == '/' {
-			rest = rest[1:]
+	// handle ** patterns, e.g. "**/mocks" or "**/internal/*". filepath.Match is start-anchored,
+	// so match the portion after **/ against every path suffix — that lets "**/mocks" match
+	// "github.com/x/y/mocks" and "**/internal/*" match ".../internal/foo".
+	if after, ok := strings.CutPrefix(pattern, "**"); ok {
+		rest := strings.TrimPrefix(after, "/")
+		if rest == "" {
+			return true
 		}
-		// simple substring check for the portion after **
-		if len(rest) > 0 {
-			// for patterns like "**/internal/*", check if "/internal/" exists in path
-			// this is a simplified implementation
-			if matched, _ := filepath.Match(rest, pkg); matched {
+		segs := strings.Split(pkg, "/")
+		for i := range segs {
+			if matched, _ := filepath.Match(rest, strings.Join(segs[i:], "/")); matched {
 				return true
 			}
 		}
