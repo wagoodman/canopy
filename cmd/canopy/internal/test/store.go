@@ -57,6 +57,8 @@ type runStore interface {
 	AddTestEvent(runID uuid.UUID, event gotest.Event) error
 	// EndTestRun marks a run as complete with optional coverage data.
 	EndTestRun(runID uuid.UUID, coverage *db.CoverageInput) error
+	// SetRunCoverageDir records the on-disk coverage directory for a run.
+	SetRunCoverageDir(runID uuid.UUID, dir string) error
 	// GetFailuresByRun retrieves all failure data for a specific test run.
 	GetFailuresByRun(runID uuid.UUID) ([]db.FailedTestDetails, error)
 	// AddSourceState stores source state data for a test run.

@@ -64,6 +64,15 @@ func (r run) addEvent(event gotest.Event) error {
 	return r.session.store.AddTestEvent(r.uuid, event)
 }
 
+// setCoverageDir records the on-disk coverage directory as soon as it's created,
+// so it can always be cleaned up regardless of whether covdata produces data.
+func (r *run) setCoverageDir(dir string) error {
+	if r.session == nil || r.session.store == nil {
+		return nil
+	}
+	return r.session.store.SetRunCoverageDir(r.uuid, dir)
+}
+
 // end marks the test run as complete and records final coverage information.
 // Coverage can be nil if not available. Safe to call even if store is nil.
 func (r *run) end(coverage *db.CoverageInput) error {

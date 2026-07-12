@@ -77,6 +77,10 @@ func (s *noopStore) EndTestRun(_ uuid.UUID, _ *db.CoverageInput) error {
 	return nil
 }
 
+func (s *noopStore) SetRunCoverageDir(_ uuid.UUID, _ string) error {
+	return nil
+}
+
 func (s *noopStore) GetFailuresByRun(_ uuid.UUID) ([]db.FailedTestDetails, error) {
 	return nil, nil
 }
