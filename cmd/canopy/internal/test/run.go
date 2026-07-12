@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/db"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
-	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 )
 
 // run represents a single test execution within a session, managing event collection and lifecycle.
@@ -37,19 +36,23 @@ type RunInfo struct {
 
 // newRunInfo converts a database test run record into a RunInfo struct.
 // Returns RunInfo with deserialized configuration and metadata.
-func newRunInfo(run db.TestRun) RunInfo {
+func newRunInfo(run db.TestRun) (RunInfo, error) {
 	var cfg gotest.RunnerConfig
 	if err := json.Unmarshal(run.Config, &cfg); err != nil {
-		log.Errorf("unable to unmarshal runner config: %v", err)
-		// TODO return error
+		// don't silently return an empty config: a re-run would lose OnlyRefs/Coverage/UserArgs
+		return RunInfo{}, fmt.Errorf("unable to unmarshal runner config for run %q: %w", run.UUID, err)
+	}
+	id, err := uuid.Parse(run.UUID)
+	if err != nil {
+		return RunInfo{}, fmt.Errorf("invalid run uuid %q: %w", run.UUID, err)
 	}
 	return RunInfo{
-		UUID:     uuid.MustParse(run.UUID),
+		UUID:     id,
 		Started:  run.Started,
 		Ended:    run.Ended,
 		Coverage: run.Coverage,
 		Config:   cfg,
-	}
+	}, nil
 }
 
 // addEvent records a test event to the run's persistent storage.
@@ -59,6 +62,15 @@ func (r run) addEvent(event gotest.Event) error {
 		return fmt.Errorf("cannot add event to completed test run")
 	}
 	return r.session.store.AddTestEvent(r.uuid, event)
+}
+
+// setCoverageDir records the on-disk coverage directory as soon as it's created,
+// so it can always be cleaned up regardless of whether covdata produces data.
+func (r *run) setCoverageDir(dir string) error {
+	if r.session == nil || r.session.store == nil {
+		return nil
+	}
+	return r.session.store.SetRunCoverageDir(r.uuid, dir)
 }
 
 // end marks the test run as complete and records final coverage information.

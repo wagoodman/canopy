@@ -126,7 +126,7 @@ func runListRuns(cfg listRunsConfig) error {
 	}
 
 	switch strings.ToLower(cfg.Output) {
-	case "json":
+	case formatJSON:
 		return writeRunsJSON(os.Stdout, entries)
 	case "table", "":
 		writeRunsTable(os.Stdout, os.Stderr, entries)

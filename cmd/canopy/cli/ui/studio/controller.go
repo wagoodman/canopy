@@ -7,6 +7,7 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/event"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/studio/state"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/test"
 )
 
@@ -123,18 +124,20 @@ func (c controller) switchToLatestStoredTestRun(config Config) tea.Cmd {
 		}
 
 		if latestRun == nil {
-			panic("errg, no runs?") // TODO: handle this better
-		} // TODO: handle this better
+			// a session with no runs shouldn't crash the studio; surface it as an action error
+			log.Warn("no test runs in session to display")
+			return event.ActionError{Message: "no test runs found in this session"}
+		}
 
 		run, err := config.RunStore.GetRun(latestRun.UUID)
 		if err != nil {
-			panic(err) // TODO: handle this better
-		} // TODO: handle this better
-
-		// TODO: if result is nil then we should have a prototype result to build on with events? No ... we're always starting with a result
+			log.WithFields("error", err, "run", latestRun.UUID).Error("failed to load stored test run")
+			return event.ActionError{Message: "failed to load the latest test run: " + err.Error()}
+		}
 
 		if run == nil {
-			panic("errg, no run cfg?") // TODO: handle this better
+			log.WithFields("run", latestRun.UUID).Warn("stored test run not found")
+			return event.ActionError{Message: "the latest test run could not be found"}
 		}
 
 		return event.SwitchTestRun{

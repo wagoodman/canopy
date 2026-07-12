@@ -90,7 +90,7 @@ func (o *Flaky) PostLoad() error {
 	if o.WindowStr == "" || o.WindowStr == "0" {
 		o.Window = 0
 	} else {
-		d, err := time.ParseDuration(o.WindowStr)
+		d, err := ParseDuration(o.WindowStr)
 		if err != nil {
 			return fmt.Errorf("invalid window duration %q: %w", o.WindowStr, err)
 		}

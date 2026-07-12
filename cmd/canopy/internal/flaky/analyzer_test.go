@@ -821,6 +821,30 @@ func TestMatchGlobPrefix(t *testing.T) {
 			pkg:     "github.com/foo/bar/cmd",
 			want:    false,
 		},
+		{
+			name:    "trailing /... does not over-match a sibling prefix",
+			pattern: "github.com/foo/...",
+			pkg:     "github.com/foobar",
+			want:    false,
+		},
+		{
+			name:    "** matches a trailing segment",
+			pattern: "**/mocks",
+			pkg:     "github.com/x/y/mocks",
+			want:    true,
+		},
+		{
+			name:    "** does not match a non-suffix segment",
+			pattern: "**/mocks",
+			pkg:     "github.com/x/y/handlers",
+			want:    false,
+		},
+		{
+			name:    "** with inner glob matches",
+			pattern: "**/internal/*",
+			pkg:     "github.com/x/y/internal/foo",
+			want:    true,
+		},
 	}
 
 	for _, tt := range tests {

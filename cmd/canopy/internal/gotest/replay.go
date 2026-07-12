@@ -1,6 +1,7 @@
 package gotest
 
 import (
+	"context"
 	"io"
 
 	"github.com/google/uuid"
@@ -14,7 +15,8 @@ func ReplayJSON(reader io.Reader) <-chan JSONL {
 
 	go func() {
 		defer close(events)
-		jsonLFromReader(reader, events)
+		// replay has no external cancellation, so an uncancellable context is fine here.
+		jsonLFromReader(context.Background(), reader, events)
 	}()
 
 	return events

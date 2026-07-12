@@ -36,8 +36,13 @@ func run(moreArgs []string, fn processorFn, pkgs ...string) error {
 		return fmt.Errorf("error starting command: %v", err)
 	}
 
-	if err := fn(stdout); err != nil {
-		return fmt.Errorf("unable to process stdout: %v", err)
+	if procErr := fn(stdout); procErr != nil {
+		// processor bailed mid-stream. Kill the child so it can't linger, drain
+		// the pipe so a blocked write can't wedge it, then reap it before returning.
+		_ = cmd.Process.Kill()
+		_, _ = io.Copy(io.Discard, stdout)
+		_ = cmd.Wait()
+		return fmt.Errorf("unable to process stdout: %v", procErr)
 	}
 
 	if err := cmd.Wait(); err != nil {

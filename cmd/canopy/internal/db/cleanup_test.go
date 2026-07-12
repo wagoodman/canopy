@@ -1,11 +1,14 @@
 package db
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
 
 func createRunWithData(t *testing.T, store *Store, sessionID int64, started time.Time) int64 {
@@ -349,4 +352,40 @@ func TestDeleteRun_CascadesAllData_StructComparison(t *testing.T) {
 	if d := cmp.Diff(want, got); d != "" {
 		t.Errorf("table counts after deletion mismatch (-want +got):\n%s", d)
 	}
+}
+
+// TestSetRunCoverageDir_OrphanCleanup covers the orphan scenario: a coverage-enabled run
+// creates its on-disk dir but covdata produces no data (so EndTestRun gets nil coverage).
+// The dir must still be tracked and removed by DeleteRuns.
+func TestSetRunCoverageDir_OrphanCleanup(t *testing.T) {
+	store, err := New(":memory:")
+	require.NoError(t, err)
+
+	sessionID, err := store.StartTestSession()
+	require.NoError(t, err)
+
+	runID, err := store.StartTestRun(sessionID, gotest.RunnerConfig{Coverage: true})
+	require.NoError(t, err)
+
+	// simulate the dir being created on disk at run start
+	covDir := filepath.Join(t.TempDir(), "coverage", runID.String())
+	require.NoError(t, os.MkdirAll(covDir, 0o755))
+
+	// persist the dir immediately (as manager.go now does)
+	require.NoError(t, store.SetRunCoverageDir(runID, covDir))
+
+	// end the run with NO coverage data (the orphan-producing path)
+	require.NoError(t, store.EndTestRun(runID, nil))
+
+	// column must still hold the dir despite no coverage data at end
+	run, err := store.GetTestRun(runID)
+	require.NoError(t, err)
+	require.Equal(t, covDir, run.CoverageDir)
+
+	// DeleteRuns must now find and remove the dir
+	_, err = store.DeleteRuns([]int64{run.ID})
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(covDir)
+	require.True(t, os.IsNotExist(statErr), "expected coverage dir to be removed")
 }

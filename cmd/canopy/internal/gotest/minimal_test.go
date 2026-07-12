@@ -1,212 +1,108 @@
 package gotest
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestMinimalSelection(t *testing.T) {
+func TestGroupIntoRuns(t *testing.T) {
 	tests := []struct {
-		name     string
-		defs     Definitions
-		refs     References
-		expected References
+		name string
+		refs References
+		want [][]string // per-group set of ref strings
 	}{
 		{
-			name: "all functions in package selected - returns package reference",
-			defs: Definitions{
-				{ImportPath: "github.com/example/pkg", FnName: "TestFunc1"},
-				{ImportPath: "github.com/example/pkg", FnName: "TestFunc2"},
-				{ImportPath: "github.com/example/pkg", FnName: "TestFunc3"},
-			},
-			refs: References{
-				{Package: "github.com/example/pkg", FuncName: "TestFunc1"},
-				{Package: "github.com/example/pkg", FuncName: "TestFunc2"},
-				{Package: "github.com/example/pkg", FuncName: "TestFunc3"},
-			},
-			expected: References{
-				{Package: "github.com/example/pkg"},
-			},
+			name: "empty",
+			refs: nil,
+			want: nil,
 		},
 		{
-			name: "partial functions selected - returns individual function references",
-			defs: Definitions{
-				{ImportPath: "github.com/example/pkg", FnName: "TestFunc1"},
-				{ImportPath: "github.com/example/pkg", FnName: "TestFunc2"},
-				{ImportPath: "github.com/example/pkg", FnName: "TestFunc3"},
-			},
+			name: "package refs group together",
 			refs: References{
-				{Package: "github.com/example/pkg", FuncName: "TestFunc1"},
-				{Package: "github.com/example/pkg", FuncName: "TestFunc2"},
+				{Package: "a"},
+				{Package: "b"},
 			},
-			expected: References{
-				{Package: "github.com/example/pkg", FuncName: "TestFunc1"},
-				{Package: "github.com/example/pkg", FuncName: "TestFunc2"},
-			},
+			want: [][]string{{"a", "b"}},
 		},
 		{
-			name: "package reference provided - returns package reference",
-			defs: Definitions{
-				{ImportPath: "github.com/example/pkg", FnName: "TestFunc1"},
-				{ImportPath: "github.com/example/pkg", FnName: "TestFunc2"},
-			},
+			name: "function and subtest refs split per package",
 			refs: References{
-				{Package: "github.com/example/pkg"},
+				{Package: "a"},
+				{Package: "b", FuncName: "TestFoo"},
+				{Package: "b", FuncName: "TestBar", TRunName: "case_two"},
 			},
-			expected: References{
-				{Package: "github.com/example/pkg"},
+			want: [][]string{
+				{"a"},
+				{"b/TestFoo", "b/TestBar/case_two"},
 			},
-		},
-		{
-			name: "subtests are ignored in minimal selection",
-			defs: Definitions{
-				{ImportPath: "github.com/example/pkg", FnName: "TestFunc1"},
-				{ImportPath: "github.com/example/pkg", FnName: "TestFunc2"},
-			},
-			refs: References{
-				{Package: "github.com/example/pkg", FuncName: "TestFunc1"},
-				{Package: "github.com/example/pkg", FuncName: "TestFunc1", TRunName: "subtest1"},
-				{Package: "github.com/example/pkg", FuncName: "TestFunc1", TRunName: "subtest2"},
-				{Package: "github.com/example/pkg", FuncName: "TestFunc2"},
-			},
-			expected: References{
-				{Package: "github.com/example/pkg"},
-			},
-		},
-		{
-			name: "mixed packages - some complete, some partial",
-			defs: Definitions{
-				{ImportPath: "github.com/example/pkg1", FnName: "TestFunc1"},
-				{ImportPath: "github.com/example/pkg1", FnName: "TestFunc2"},
-				{ImportPath: "github.com/example/pkg2", FnName: "TestFuncA"},
-				{ImportPath: "github.com/example/pkg2", FnName: "TestFuncB"},
-				{ImportPath: "github.com/example/pkg2", FnName: "TestFuncC"},
-			},
-			refs: References{
-				{Package: "github.com/example/pkg1", FuncName: "TestFunc1"},
-				{Package: "github.com/example/pkg1", FuncName: "TestFunc2"},
-				{Package: "github.com/example/pkg2", FuncName: "TestFuncA"},
-				{Package: "github.com/example/pkg2", FuncName: "TestFuncB"},
-			},
-			expected: References{
-				{Package: "github.com/example/pkg1"},
-				{Package: "github.com/example/pkg2", FuncName: "TestFuncA"},
-				{Package: "github.com/example/pkg2", FuncName: "TestFuncB"},
-			},
-		},
-		{
-			name: "complex example from documentation",
-			defs: Definitions{
-				{ImportPath: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler", FnName: "TestMultiPackageHandler_Handle"},
-				{ImportPath: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler", FnName: "TestMultiPackageHandler_OnGoTestEvent"},
-				{ImportPath: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler", FnName: "TestMultiPackageHandler_String"},
-				{ImportPath: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler", FnName: "TestNewMultiPackageHandler"},
-				{ImportPath: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx", FnName: "TestQuietHandler"},
-				{ImportPath: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx", FnName: "TestQuietPackage"},
-				{ImportPath: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx", FnName: "TestVerboseHandler"},
-				{ImportPath: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx", FnName: "TestVerbosePackage"},
-			},
-			refs: References{
-				{Package: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"},
-				{Package: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler", FuncName: "TestMultiPackageHandler_Handle"},
-				{Package: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler", FuncName: "TestMultiPackageHandler_OnGoTestEvent"},
-				{Package: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler", FuncName: "TestMultiPackageHandler_String"},
-				{Package: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler", FuncName: "TestNewMultiPackageHandler"},
-				{Package: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx"},
-				{Package: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx", FuncName: "TestQuietHandler"},
-				{Package: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx", FuncName: "TestQuietPackage"},
-			},
-			expected: References{
-				{Package: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler"},
-				{Package: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx", FuncName: "TestQuietHandler"},
-				{Package: "github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/handler/goxx", FuncName: "TestQuietPackage"},
-			},
-		},
-		{
-			name:     "empty inputs",
-			defs:     Definitions{},
-			refs:     References{},
-			expected: nil,
-		},
-		{
-			name: "no definitions but refs provided",
-			defs: Definitions{},
-			refs: References{
-				{Package: "github.com/example/pkg", FuncName: "TestFunc1"},
-			},
-			expected: References{
-				{Package: "github.com/example/pkg", FuncName: "TestFunc1"},
-			},
-		},
-		{
-			name: "only subtests provided - filtered out",
-			defs: Definitions{
-				{ImportPath: "github.com/example/pkg", FnName: "TestFunc1"},
-			},
-			refs: References{
-				{Package: "github.com/example/pkg", FuncName: "TestFunc1", TRunName: "subtest1"},
-				{Package: "github.com/example/pkg", FuncName: "TestFunc1", TRunName: "subtest2"},
-			},
-			expected: nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := MinimalSelection(tt.defs, tt.refs)
-
-			if diff := cmp.Diff(tt.expected, result); diff != "" {
-				t.Errorf("MinimalSelection() mismatch (-want +got):\n%s", diff)
+			got := GroupIntoRuns(tt.refs)
+			if len(got) != len(tt.want) {
+				t.Fatalf("group count: got %d want %d", len(got), len(tt.want))
+			}
+			for i, group := range got {
+				var names []string
+				for _, ref := range group {
+					names = append(names, ref.String(true))
+				}
+				if diff := cmp.Diff(tt.want[i], names); diff != "" {
+					t.Errorf("group %d mismatch (-want +got):\n%s", i, diff)
+				}
 			}
 		})
 	}
 }
 
-func TestMinimalSelection_EdgeCases(t *testing.T) {
+// TestSingleCaseRunPipeline is the regression that motivated the fix: a single selected
+// table case must survive minimization/grouping and become an anchored -run for just that case.
+func TestSingleCaseRunPipeline(t *testing.T) {
+	defs := Definitions{
+		{Module: "m", ImportPath: "m/pkg", FnName: "TestTable", Cases: []string{"case_one", "case_two", "case_three"}},
+		{Module: "m", ImportPath: "m/pkg", FnName: "TestOther"},
+	}
+
 	tests := []struct {
 		name     string
-		defs     Definitions
-		refs     References
-		expected References
+		selected References
+		wantRun  string // the -run= flag we expect to reach `go test`
 	}{
 		{
-			name: "function selected but not defined - should still be included",
-			defs: Definitions{
-				{ImportPath: "github.com/example/pkg", FnName: "TestFunc1"},
-			},
-			refs: References{
-				{Package: "github.com/example/pkg", FuncName: "TestFunc1"},
-				{Package: "github.com/example/pkg", FuncName: "TestFunc2"}, // not defined
-			},
-			expected: References{
-				{Package: "github.com/example/pkg", FuncName: "TestFunc1"},
-				{Package: "github.com/example/pkg", FuncName: "TestFunc2"},
-			},
+			name:     "single case runs only that case",
+			selected: References{{Package: "m/pkg", FuncName: "TestTable", TRunName: "case_two"}},
+			wantRun:  "-run=^TestTable/case_two$",
 		},
 		{
-			name: "duplicate references - should be handled correctly",
-			defs: Definitions{
-				{ImportPath: "github.com/example/pkg", FnName: "TestFunc1"},
-				{ImportPath: "github.com/example/pkg", FnName: "TestFunc2"},
+			name:     "whole function runs the whole table",
+			selected: References{{Package: "m/pkg", FuncName: "TestTable"}},
+			wantRun:  "-run=^TestTable$",
+		},
+		{
+			name: "all cases collapse to the function",
+			selected: References{
+				{Package: "m/pkg", FuncName: "TestTable", TRunName: "case_one"},
+				{Package: "m/pkg", FuncName: "TestTable", TRunName: "case_two"},
+				{Package: "m/pkg", FuncName: "TestTable", TRunName: "case_three"},
 			},
-			refs: References{
-				{Package: "github.com/example/pkg", FuncName: "TestFunc1"},
-				{Package: "github.com/example/pkg", FuncName: "TestFunc1"}, // duplicate
-				{Package: "github.com/example/pkg", FuncName: "TestFunc2"},
-			},
-			expected: References{
-				{Package: "github.com/example/pkg"},
-			},
+			wantRun: "-run=^TestTable$",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := MinimalSelection(tt.defs, tt.refs)
-
-			if diff := cmp.Diff(tt.expected, result); diff != "" {
-				t.Errorf("MinimalSelection() mismatch (-want +got):\n%s", diff)
+			minimized := MinimizeReferences(defs.References(), tt.selected)
+			var got []string
+			for _, group := range GroupIntoRuns(minimized) {
+				got = append(got, runFilters(group)...)
+			}
+			joined := strings.Join(got, " ")
+			if !strings.Contains(joined, tt.wantRun) {
+				t.Errorf("expected %q in run flags, got %q", tt.wantRun, joined)
 			}
 		})
 	}

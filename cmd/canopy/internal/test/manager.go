@@ -218,6 +218,11 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 			log.WithFields("error", mkErr).Warn("failed to create coverage directory")
 		} else {
 			cfg.Runner.CoverageDir = coverageDir
+			// persist the dir immediately so DeleteRuns can clean it up even if covdata
+			// never produces data (build failure, replay, early error, aborted run).
+			if setErr := runModel.setCoverageDir(coverageDir); setErr != nil {
+				log.WithFields("error", setErr, "run", runModel.uuid).Warn("failed to persist coverage directory")
+			}
 		}
 	}
 
@@ -257,8 +262,9 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 
 		if runModel != nil {
 			if err := runModel.addEvent(e); err != nil {
-				// TODO:
-				panic(err)
+				// don't crash the whole app on a transient store error (e.g. SQLITE_BUSY, a
+				// unique-constraint race, disk full) on the hot event path; log and continue.
+				log.WithFields("error", err, "run", runModel.uuid).Error("failed to persist test event")
 			}
 		}
 	}

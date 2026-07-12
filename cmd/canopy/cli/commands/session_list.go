@@ -34,7 +34,15 @@ func SessionList(app clio.Application) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list [SESSION-ID]",
 		Short: "list sessions and runs related to each session",
-		Args:  cobra.MaximumNArgs(1),
+		Args: func(_ *cobra.Command, args []string) error {
+			if err := cobra.MaximumNArgs(1)(nil, args); err != nil {
+				return err
+			}
+			if len(args) == 1 {
+				opts.SessionID = args[0]
+			}
+			return nil
+		},
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runSessionList(*opts)
 		},
@@ -58,10 +66,29 @@ func runSessionList(cfg sessionListConfig) error {
 	if err != nil {
 		return fmt.Errorf("unable to create test session: %w", err)
 	}
+	defer func() {
+		if err := s.Close(); err != nil {
+			log.WithFields("error", err).Error("unable to close test session")
+		}
+	}()
 
 	sessions, err := s.ListSessions()
 	if err != nil {
 		return fmt.Errorf("unable to list test sessions: %w", err)
+	}
+
+	// if a specific session id was given, narrow the listing to just that session
+	if cfg.SessionID != "" {
+		filtered := sessions[:0]
+		for i := range sessions {
+			if sessions[i].UUID.String() == cfg.SessionID {
+				filtered = append(filtered, sessions[i])
+			}
+		}
+		if len(filtered) == 0 {
+			return fmt.Errorf("session %q not found", cfg.SessionID)
+		}
+		sessions = filtered
 	}
 
 	var rows []table.Row

@@ -21,12 +21,12 @@ func CollectNamedFlagSets(v any) *Named {
 // The visited map tracks pointer addresses to prevent infinite loops from circular references.
 func collectNamedFlagSets(v reflect.Value, result *Named, visited map[uintptr]bool) {
 	// dereference pointers
-	for v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface {
+	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
 		if v.IsNil() {
 			return
 		}
 		// track visited pointers to prevent infinite loops
-		if v.Kind() == reflect.Ptr {
+		if v.Kind() == reflect.Pointer {
 			addr := v.Pointer()
 			if visited[addr] {
 				return
@@ -64,7 +64,7 @@ func collectNamedFlagSets(v reflect.Value, result *Named, visited map[uintptr]bo
 		switch field.Kind() {
 		case reflect.Struct:
 			collectNamedFlagSets(field, result, visited)
-		case reflect.Ptr:
+		case reflect.Pointer:
 			if !field.IsNil() {
 				collectNamedFlagSets(field, result, visited)
 			}

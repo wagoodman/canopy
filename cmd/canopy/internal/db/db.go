@@ -77,9 +77,8 @@ func New(dbFilePath string) (*Store, error) {
 		}
 	}
 
-	// probably not safe... should reconsider this
-	db.Exec("PRAGMA synchronous = OFF")
-	db.Exec("PRAGMA journal_mode = OFF")
+	// durability pragmas (journal_mode=WAL, synchronous=NORMAL, busy_timeout) are set in the
+	// connection string so they apply to every pooled connection; see connectionString.
 	db.Exec("PRAGMA temp_store = MEMORY")
 	db.Exec("PRAGMA cache_size = 100000")
 	db.Exec("PRAGMA mmap_size = 268435456") // 256 MB
@@ -174,7 +173,11 @@ func (s Store) EndTestRun(runID uuid.UUID, coverage *CoverageInput) error {
 
 	if coverage != nil {
 		run.Coverage = &coverage.Percent
-		run.CoverageDir = coverage.CoverageDir
+		// don't clobber a CoverageDir already recorded at creation time (see SetRunCoverageDir):
+		// covdata may produce no data, but the dir still exists on disk and must stay tracked for cleanup.
+		if coverage.CoverageDir != "" {
+			run.CoverageDir = coverage.CoverageDir
+		}
 	}
 
 	if err := s.db.Save(&run).Error; err != nil {
@@ -194,6 +197,16 @@ func (s Store) EndTestRun(runID uuid.UUID, coverage *CoverageInput) error {
 		}
 	}
 
+	return nil
+}
+
+// SetRunCoverageDir records the on-disk coverage directory for a run as soon as it's created,
+// so orphaned dirs get cleaned up by DeleteRuns even when covdata produces no data. Targeted
+// single-column update to avoid Save cascading has-many writes.
+func (s Store) SetRunCoverageDir(runID uuid.UUID, dir string) error {
+	if err := s.db.Model(&TestRun{}).Where("uuid = ?", runID.String()).Update("coverage_dir", dir).Error; err != nil {
+		return fmt.Errorf("unable to set run coverage dir: %w", err)
+	}
 	return nil
 }
 
@@ -811,5 +824,9 @@ func connectionString(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("no db filepath given")
 	}
-	return fmt.Sprintf("file:%s?cache=shared", path), nil
+	// WAL + synchronous=NORMAL keeps transaction rollback working and avoids the corruption
+	// risk of the old journal_mode=OFF/synchronous=OFF. busy_timeout lets concurrent writers
+	// wait for a lock instead of failing immediately. set via DSN so every pooled connection
+	// (not just the first) gets them.
+	return fmt.Sprintf("file:%s?cache=shared&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)", path), nil
 }

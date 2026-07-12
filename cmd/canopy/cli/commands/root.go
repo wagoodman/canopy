@@ -4,7 +4,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/hashicorp/go-multierror"
@@ -158,8 +157,10 @@ func discoverAndSelectTests(rootCfg rootConfig) (gotest.Definitions, gotest.Refe
 		}
 
 		patternRemoveFilter := func(ref gotest.Reference) bool {
-			if !internal.MatchesAny(ref.FuncName, runPatterns) {
-				log.WithFields("fn", ref.FuncName, "package", ref.Package).Trace("skipping test function that does not match run patterns")
+			// match against the full Func/Case name so `--run 'TestFoo/case'` can target a
+			// single table case, mirroring `go test -run` semantics
+			if !internal.MatchesAny(ref.TestName(true), runPatterns) {
+				log.WithFields("test", ref.TestName(true), "package", ref.Package).Trace("skipping test that does not match run patterns")
 				return true
 			}
 			return false
@@ -215,7 +216,18 @@ func prepareTestExecution(app clio.Application, rootCfg rootConfig, testDefs got
 		return nil, fmt.Errorf("unable to setup test UIs: %w", err)
 	}
 
-	runGroups := gotest.GroupIntoRuns(gotest.MinimalSelection(testDefs, refs))
+	// MinimizeReferences (unlike the old MinimalSelection) preserves t.Run case leaves, so a
+	// single selected table case survives to `-run=^Func/Case$`.
+	minimized := gotest.MinimizeReferences(testDefs.References(), refs)
+	if len(minimized) == 0 && len(refs) > 0 {
+		// a fully-selected set collapses to nothing (the tree prunes to its root); represent
+		// that as "run every selected package with no -run filter"
+		for _, pkg := range refs.Packages() {
+			minimized = append(minimized, gotest.Reference{Package: pkg})
+		}
+	}
+
+	runGroups := gotest.GroupIntoRuns(minimized)
 
 	if len(runGroups) == 0 {
 		return &executionPlan{
@@ -226,17 +238,7 @@ func prepareTestExecution(app clio.Application, rootCfg rootConfig, testDefs got
 	}
 
 	log.WithFields("references", refs.TestFunctionsCount()).Info("running selected tests")
-	log.WithFields("runGroups", len(runGroups)).Debug("selected test run groups")
-	for i, group := range runGroups {
-		log.WithFields("group", i+1, "refs", len(group)).Trace("test run group")
-		for j, ref := range group {
-			branch := "├── "
-			if j == len(group)-1 {
-				branch = "└── "
-			}
-			log.Trace(branch + ref.String(true))
-		}
-	}
+	logRunGroups(runGroups)
 
 	cfg := rootCfg.Test
 
@@ -247,14 +249,11 @@ func prepareTestExecution(app clio.Application, rootCfg rootConfig, testDefs got
 
 	var runCfgs []test.RunConfig
 	for _, group := range runGroups {
+		// UserArgs carries only the package args; test selection (-run) is applied by
+		// the runner via OnlyRefs, so we must not inject -run here.
 		var args []string
 		args = append(args, commonArgs...)
 		args = append(args, group.Packages()...)
-
-		rArgs := runArgs(group)
-		if rArgs != "" {
-			args = append(args, rArgs)
-		}
 
 		runCfgs = append(runCfgs,
 			test.RunConfig{
@@ -278,6 +277,21 @@ func prepareTestExecution(app clio.Application, rootCfg rootConfig, testDefs got
 		runConfigs:              runCfgs,
 		logTestFailuresAsErrors: logTestFailuresAsErrors,
 	}, nil
+}
+
+// logRunGroups emits the selected test run groups as a trace-level tree.
+func logRunGroups(runGroups []gotest.References) {
+	log.WithFields("runGroups", len(runGroups)).Debug("selected test run groups")
+	for i, group := range runGroups {
+		log.WithFields("group", i+1, "refs", len(group)).Trace("test run group")
+		for j, ref := range group {
+			branch := "├── "
+			if j == len(group)-1 {
+				branch = "└── "
+			}
+			log.Trace(branch + ref.String(true))
+		}
+	}
 }
 
 // executeTests creates a session, runs all test configurations, and evaluates results
@@ -318,19 +332,6 @@ func executeTests(ctx context.Context, coreCfg *TestCoreConfig, plan *executionP
 	_, resultErr := evaluateResults(runs, time.Since(start), plan.logTestFailuresAsErrors)
 
 	return resultErr
-}
-
-func runArgs(refs gotest.References) string {
-	var funcs []string
-	for _, ref := range refs {
-		if ref.FuncName != "" {
-			funcs = append(funcs, ref.FuncName)
-		}
-	}
-	if len(funcs) == 0 {
-		return ""
-	}
-	return "-run='" + strings.Join(funcs, "|") + "'"
 }
 
 func evaluateResults(runs []*gotest.Run, elapsed time.Duration, logTestFailuresAsErrors bool) (bool, error) {

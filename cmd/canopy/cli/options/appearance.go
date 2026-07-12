@@ -47,7 +47,7 @@ type Appearance struct {
 // DefaultAppearance returns appearance options with sensible defaults (auto color detection, short names enabled).
 func DefaultAppearance() Appearance {
 	return Appearance{
-		Color:                   "auto",
+		Color:                   autoColor,
 		ShowPackagesWithNoTests: false,
 		UseShortNames:           true,
 		ExecutionMarkers:        output.ExecutionMarkersParallelOnly,

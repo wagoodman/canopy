@@ -40,7 +40,7 @@ type Grouping struct {
 // is grouped, and failed output is not grouped (so failures are immediately visible).
 func DefaultGrouping() Grouping {
 	return Grouping{
-		Style:          "auto", // resolved in PostLoad
+		Style:          autoColor, // resolved in PostLoad
 		Passed:         true,
 		Failed:         false,
 		Skipped:        true,

@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/db"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 
 	"github.com/anchore/go-homedir"
 )
@@ -56,6 +57,8 @@ type runStore interface {
 	AddTestEvent(runID uuid.UUID, event gotest.Event) error
 	// EndTestRun marks a run as complete with optional coverage data.
 	EndTestRun(runID uuid.UUID, coverage *db.CoverageInput) error
+	// SetRunCoverageDir records the on-disk coverage directory for a run.
+	SetRunCoverageDir(runID uuid.UUID, dir string) error
 	// GetFailuresByRun retrieves all failure data for a specific test run.
 	GetFailuresByRun(runID uuid.UUID) ([]db.FailedTestDetails, error)
 	// AddSourceState stores source state data for a test run.
@@ -109,7 +112,12 @@ func (s dbStore) GetSessionInfo(id uuid.UUID) (*SessionInfo, error) {
 
 	if se.TestRuns != nil {
 		for _, r := range *se.TestRuns {
-			runs = append(runs, newRunInfo(r))
+			ri, err := newRunInfo(r)
+			if err != nil {
+				log.WithFields("run", r.UUID, "error", err).Warn("skipping unreadable test run")
+				continue
+			}
+			runs = append(runs, ri)
 		}
 	}
 
@@ -156,7 +164,12 @@ func (s dbStore) ListSessions() ([]SessionInfo, error) {
 
 		if se.TestRuns != nil {
 			for _, r := range *se.TestRuns {
-				runs = append(runs, newRunInfo(r))
+				ri, err := newRunInfo(r)
+				if err != nil {
+					log.WithFields("run", r.UUID, "error", err).Warn("skipping unreadable test run")
+					continue
+				}
+				runs = append(runs, ri)
 			}
 		}
 
@@ -176,7 +189,7 @@ func (s dbStore) GetRunInfo(runID uuid.UUID) (RunInfo, error) {
 	if err != nil {
 		return RunInfo{}, err
 	}
-	return newRunInfo(tr), nil
+	return newRunInfo(tr)
 }
 
 // GetFailuresByRun retrieves all failure data for a specific test run.
