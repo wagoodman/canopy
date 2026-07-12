@@ -144,26 +144,40 @@ func (a *Analyzer) collectSessionOutcomes(session *test.SessionInfo, cutoff time
 			return err
 		}
 
-		// build a map of event ID to failure data for quick lookup
-		// note: failures have EventID but events don't expose their DB ID directly,
-		// so we'll match by looking up failures that have matching fingerprints
 		a.collectEventOutcomes(run.UUID, events, failures, outcomes)
 	}
 	return nil
 }
 
 // collectEventOutcomes filters and collects outcomes from events into the outcomes map.
-// Failures are matched to events by index order (both are ordered by event occurrence).
+//
+// Failure rows are written one-per-fail-event in event order during ingestion (see
+// db.Store.addFailureData), and both events and failures are returned in that same
+// insertion order, so we correlate them positionally: the n-th fail event maps to the
+// n-th failure row.
+//
+// ponytail: positional correlation. the ceiling is that it assumes exactly one failure
+// row per fail event. a fail event with empty aggregated output writes no row (db.go's
+// `if aggregatedOutput != ""` guard), which would shift every later fingerprint by one.
+// in practice every real fail event has output, so this holds. upgrade path if it ever
+// stops holding: thread the DB event Index onto gotest.Event and join failures by Index.
 func (a *Analyzer) collectEventOutcomes(runID uuid.UUID, events []gotest.Event, failures []db.FailedTestDetails, outcomes map[gotest.Reference][]Outcome) {
-	// build a map of event index to failure for quick lookup
-	// events and failures both track the event index
-	failureByEventIndex := make(map[int64]*db.FailedTestDetails)
-	for i := range failures {
-		failureByEventIndex[failures[i].EventID] = &failures[i]
-	}
-
+	failIdx := 0
 	for k := range events {
 		event := events[k]
+
+		// advance the failure cursor on EVERY fail event, not just analyzer-included ones:
+		// the store writes a row for all fail events (including package-level and
+		// pattern-filtered ones), so the cursor must track the full failures slice to stay
+		// aligned.
+		var fail *db.FailedTestDetails
+		if event.Action == gotest.FailAction {
+			if failIdx < len(failures) {
+				fail = &failures[failIdx]
+			}
+			failIdx++
+		}
+
 		if !a.shouldIncludeEvent(&event) {
 			continue
 		}
@@ -173,26 +187,10 @@ func (a *Analyzer) collectEventOutcomes(runID uuid.UUID, events []gotest.Event, 
 			Time:   event.Time,
 			RunID:  runID,
 		}
-
-		// if this is a failure event, look for associated failure data
-		// note: we use event.Index which corresponds to the event's position,
-		// but EventID in failures is the DB primary key, not the index.
-		// We need to match failures by finding them in the same run.
-		// For now, we iterate failures to find a match by checking if
-		// the failure's event has the same index.
-		if event.Action == gotest.FailAction {
-			for i := range failures {
-				f := &failures[i]
-				// this is a simplification - in practice we'd need to join via event ID
-				// but since we're iterating all failures for this run, we can check if
-				// any failure matches this event's characteristics
-				// For now, we'll attach the first unmatched failure we find
-				// A proper implementation would track event IDs through the store
-				outcome.Failure = &FailureInfo{
-					Fingerprint: f.Fingerprint,
-					Type:        failure.Type(f.Type),
-				}
-				break
+		if fail != nil {
+			outcome.Failure = &FailureInfo{
+				Fingerprint: fail.Fingerprint,
+				Type:        failure.Type(fail.Type),
 			}
 		}
 
