@@ -20,6 +20,7 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/env"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/ide"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 )
 
 var _ tea.Model = (*Model)(nil)
@@ -183,14 +184,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case event.SwitchTestRun:
 		m.onSetRun(state.NewRunViewer(msg.TestRun))
 		if err := m.refreshSelect(); err != nil {
-			panic("output pane: " + err.Error())
+			// degrade instead of tearing down the whole TUI on a malformed run/event
+			log.WithFields("error", err).Error("output pane: failed to refresh selection")
 		}
 
 	case event.SelectedTestReferences:
 		if m.currentTestRun != nil {
 			m.allSelected = msg.All
 			if err := m.onSelect(m.currentTestRun.Config(), msg.Refs); err != nil {
-				panic("output pane: " + err.Error())
+				log.WithFields("error", err).Error("output pane: failed to apply selection")
 			}
 		}
 
@@ -198,7 +200,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case gotest.Event:
 		if m.viewModel != nil {
 			if err := m.viewModel.OnGoTestEvent(msg); err != nil {
-				panic("erg output model: " + err.Error()) // TODO: make this more robust
+				log.WithFields("error", err).Error("output pane: failed to handle test event")
 			}
 			// TODO: this will scroll to the top of the output pane
 			// m.viewport.SetContent(m.viewModel.String())
