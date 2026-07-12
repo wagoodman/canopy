@@ -314,15 +314,16 @@ func (d *listItemDelegate) handleFilterKeys(msg tea.KeyMsg, m *list.Model) []tea
 
 // nextPkg moves the cursor to the first item of the next package.
 func (d *listItemDelegate) nextPkg(m *list.Model) tea.Cmd {
+	// iterate the list's visible items (honors an active filter) rather than the
+	// unfiltered refState.visible, since m.Index() is a filtered index
+	items := d.visibleItems(m)
 	currentIdx := m.Index()
-	currentElement := m.SelectedItem()
-	if currentElement == nil {
+	if currentIdx < 0 || currentIdx >= len(items) {
 		return nil
 	}
-	currentItem := currentElement.(item)
-	curPkg := currentItem.ref.Package
-	for i := currentIdx; i < len(d.refState.visible); i++ {
-		if d.refState.visible[i].Package != curPkg {
+	curPkg := items[currentIdx].ref.Package
+	for i := currentIdx; i < len(items); i++ {
+		if items[i].ref.Package != curPkg {
 			m.Select(i)
 			break
 		}
@@ -333,23 +334,22 @@ func (d *listItemDelegate) nextPkg(m *list.Model) tea.Cmd {
 
 // prevPkg moves the cursor to the first item of the previous package.
 func (d *listItemDelegate) prevPkg(m *list.Model) tea.Cmd {
+	items := d.visibleItems(m)
 	currentIdx := m.Index()
-	currentElement := m.SelectedItem()
-	if currentElement == nil {
+	if currentIdx < 0 || currentIdx >= len(items) {
 		return nil
 	}
-	currentItem := currentElement.(item)
-	curPkg := currentItem.ref.Package
+	curPkg := items[currentIdx].ref.Package
 	targetPkg := ""
 	for i := currentIdx; i >= 0; i-- {
 		if targetPkg == "" {
-			if d.refState.visible[i].Package != curPkg {
-				targetPkg = d.refState.visible[i].Package
+			if items[i].ref.Package != curPkg {
+				targetPkg = items[i].ref.Package
 				continue
 			}
 		} else {
 			// head to the top of the package
-			if d.refState.visible[i].Package != targetPkg {
+			if items[i].ref.Package != targetPkg {
 				// select the previous reference...
 				m.Select(i + 1)
 				break
@@ -365,6 +365,10 @@ func (d *listItemDelegate) prevPkg(m *list.Model) tea.Cmd {
 func (d *listItemDelegate) onNavigate(m *list.Model) tea.Cmd {
 	currentItem := m.SelectedItem()
 	if currentItem == nil {
+		if len(m.Items()) == 0 {
+			// nothing to navigate to (no references at all)
+			return nil
+		}
 		// we have changed the view in a way that invalidates the selection (we're outside of the bounds)
 		// let's select the last item in the list to keep the cursor in a valid position but as close as
 		// possible to the last selected item
@@ -377,7 +381,10 @@ func (d *listItemDelegate) onNavigate(m *list.Model) tea.Cmd {
 
 	// TODO: maybe only on OnArrow or other keys?
 	d.cursorScope = make(map[gotest.Reference]struct{})
-	selectedIdx, selected := d.selectedItem(m)
+	selectedIdx, selected, ok := d.selectedItem(m)
+	if !ok {
+		return nil
+	}
 	d.cursorScopeSize = markChildren(selected, selectedIdx, d.visibleItems(m), d.cursorScope, false, d.refState.children)
 
 	if len(d.cursorScope) > 0 && len(d.userSelect) == 0 {
@@ -402,7 +409,10 @@ func (d *listItemDelegate) onSelectAll(m *list.Model, isAllAlreadySelected bool)
 func (d *listItemDelegate) onToggleMultiselect(m *list.Model) tea.Cmd {
 	d.cursorScope = make(map[gotest.Reference]struct{}) // reset!
 
-	selectedIdx, selected := d.selectedItem(m)
+	selectedIdx, selected, ok := d.selectedItem(m)
+	if !ok {
+		return nil
+	}
 	var invert bool
 	if _, ok := d.userSelect[selected.ref]; ok {
 		delete(d.userSelect, selected.ref)
@@ -426,8 +436,10 @@ func (d listItemDelegate) visibleItems(m *list.Model) []item {
 }
 
 // selectedItem returns the index and item at the current cursor position.
-func (d listItemDelegate) selectedItem(m *list.Model) (int, item) {
-	return m.Index(), m.SelectedItem().(item)
+func (d listItemDelegate) selectedItem(m *list.Model) (int, item, bool) {
+	// guard the type assertion: SelectedItem() is nil when the visible list is empty
+	it, ok := m.SelectedItem().(item)
+	return m.Index(), it, ok
 }
 
 // selectedTestReferences returns a command that emits the currently selected test references.

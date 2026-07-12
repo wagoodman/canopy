@@ -115,8 +115,9 @@ func (o *Format) PostLoad() error {
 			})
 			nonFileOutputs = append(nonFileOutputs, output)
 		case 2:
-			if filesDisallowedSet.Has(output) {
-				return fmt.Errorf("output format %q cannot be written to a file", output)
+			// compare the bare format name, not the full "name=path" string
+			if filesDisallowedSet.Has(fields[0]) {
+				return fmt.Errorf("output format %q cannot be written to a file", fields[0])
 			}
 			// write to file
 			f, err := os.Create(fields[1])

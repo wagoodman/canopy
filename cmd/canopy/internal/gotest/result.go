@@ -250,6 +250,11 @@ func (r Result) Children(ref Reference) []Reference {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
+	return r.childrenLocked(ref)
+}
+
+// childrenLocked assumes the caller already holds the lock.
+func (r Result) childrenLocked(ref Reference) []Reference {
 	if children, ok := r.children[ref]; ok {
 		return children.Values()
 	}
@@ -293,10 +298,17 @@ func (r Result) ReferenceTestStats(ref Reference, inclusive bool) ResultStats {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
+	return r.referenceTestStatsLocked(ref, inclusive)
+}
+
+// referenceTestStatsLocked assumes the caller already holds the lock. It must not re-take the
+// lock (nor call any method that does): Go's RWMutex forbids recursive read-locking, so a writer
+// queued between two RLocks would deadlock. It delegates only to *Locked helpers.
+func (r Result) referenceTestStatsLocked(ref Reference, inclusive bool) ResultStats {
 	stats := ResultStats{}
 
 	if inclusive {
-		action := r.ReferenceConclusiveAction(ref)
+		action := r.referenceConclusiveActionLocked(ref)
 		switch action {
 		case PassAction:
 			stats.Passed++
@@ -309,8 +321,8 @@ func (r Result) ReferenceTestStats(ref Reference, inclusive bool) ResultStats {
 		}
 	}
 
-	for _, childRef := range r.Children(ref) {
-		childStats := r.ReferenceTestStats(childRef, true)
+	for _, childRef := range r.childrenLocked(ref) {
+		childStats := r.referenceTestStatsLocked(childRef, true)
 		stats.Passed += childStats.Passed
 		stats.Failed += childStats.Failed
 		stats.Skipped += childStats.Skipped
@@ -362,6 +374,11 @@ func (r Result) ReferenceConclusiveAction(ref Reference) Action {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
+	return r.referenceConclusiveActionLocked(ref)
+}
+
+// referenceConclusiveActionLocked assumes the caller already holds the lock.
+func (r Result) referenceConclusiveActionLocked(ref Reference) Action {
 	e, ok := r.conclusionEvent[ref]
 	if !ok {
 		return ""

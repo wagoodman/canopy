@@ -3,13 +3,16 @@ package golist
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"io"
 	"strings"
 
-	"github.com/google/shlex"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 )
+
+// packageInfoTemplate is the `go list -f` template that emits one JSON object per package.
+// Fields are rendered with %q so paths containing backslashes (all Windows paths) or quotes
+// stay valid JSON, and Module is guarded since it's nil for stdlib/GOPATH packages.
+const packageInfoTemplate = `{ "Dir": {{printf "%q" .Dir}}, "ImportPath": {{printf "%q" .ImportPath}}, "ModulePath": {{if .Module}}{{printf "%q" .Module.Path}}{{else}}""{{end}} }`
 
 // derived from "go help list" output
 
@@ -251,12 +254,7 @@ func PackageInfo(pkgs ...string) ([]Package, error) {
 
 	// note: doing -f with minimal fields is much faster than doing -json
 
-	args, err := shlex.Split(`-f '{ "Dir": "{{ .Dir }}",  "ImportPath": "{{ .ImportPath }}", "ModulePath": "{{.Module.Path}}" }'`)
-	if err != nil {
-		return nil, fmt.Errorf("unable to parse go list args: %w", err)
-	}
-
-	if err := run(args, fn, pkgs...); err != nil {
+	if err := run([]string{"-f", packageInfoTemplate}, fn, pkgs...); err != nil {
 		return nil, err
 	}
 

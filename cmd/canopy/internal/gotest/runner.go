@@ -70,7 +70,7 @@ func (r *Runner) Start(ctx context.Context, resultConfig ResultConfig, onEvent .
 	run.Result = *NewResult(resultConfig)
 	done := make(chan error)
 
-	events, err := r.startEventStream()
+	events, err := r.startEventStream(ctx)
 	if err != nil {
 		go func() {
 			done <- fmt.Errorf("error running go test: %v", err)
@@ -126,7 +126,12 @@ func (r *Runner) Start(ctx context.Context, resultConfig ResultConfig, onEvent .
 				return
 			}
 
-			run.Result.coverage = &overallPercent
+			// only record coverage when covdata actually produced data. an empty coverage dir
+			// (e.g. a build failure) yields empty results with a nil error; setting coverage
+			// anyway would fabricate a bogus 0.0%. leave it unset so Coverage() returns (_, false).
+			if len(pkgs) > 0 || len(funcs) > 0 {
+				run.Result.coverage = &overallPercent
+			}
 			run.PackageCoverage = pkgs
 			run.FunctionCoverage = funcs
 		}
@@ -135,7 +140,7 @@ func (r *Runner) Start(ctx context.Context, resultConfig ResultConfig, onEvent .
 	return run, done
 }
 
-func (r *Runner) startEventStream() (<-chan JSONL, error) { //nolint:funlen
+func (r *Runner) startEventStream(ctx context.Context) (<-chan JSONL, error) { //nolint:funlen
 	events := make(chan JSONL)
 
 	initArgs := []string{"test"}
@@ -160,7 +165,9 @@ func (r *Runner) startEventStream() (<-chan JSONL, error) { //nolint:funlen
 		args = append(args, "-args", fmt.Sprintf("-test.gocoverdir=%s", r.config.CoverageDir))
 	}
 
-	cmd := exec.Command("go", args...)
+	// use CommandContext so a cancelled ctx kills the child `go test` (and its process group)
+	// instead of orphaning it.
+	cmd := exec.CommandContext(ctx, "go", args...)
 
 	log.WithFields("cmd", fmt.Sprintf("%q", strings.Join(cmd.Args, " "))).Trace("executing")
 
@@ -181,10 +188,19 @@ func (r *Runner) startEventStream() (<-chan JSONL, error) { //nolint:funlen
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 
+	// send delivers to events but bails on ctx cancel so reader goroutines don't block forever on
+	// an undrained channel once the consuming loop has returned.
+	send := func(j JSONL) {
+		select {
+		case events <- j:
+		case <-ctx.Done():
+		}
+	}
+
 	go func() {
 		defer wg.Done()
 
-		jsonLFromReader(stdout, events)
+		jsonLFromReader(ctx, stdout, events)
 
 		if err := cmd.Wait(); err != nil {
 			// handle exit gracefully (0 or non-0)
@@ -193,10 +209,10 @@ func (r *Runner) startEventStream() (<-chan JSONL, error) { //nolint:funlen
 				// note: exit code 1 means there was a test failure
 				rc := exitErr.ExitCode()
 				if rc != 0 && rc != 1 {
-					events <- JSONL{Index: math.MaxInt64, Error: fmt.Errorf("error running command: %v", exitErr)}
+					send(JSONL{Index: math.MaxInt64, Error: fmt.Errorf("error running command: %v", exitErr)})
 				}
 			} else {
-				events <- JSONL{Index: math.MaxInt64, Error: fmt.Errorf("error running command: %v", err)}
+				send(JSONL{Index: math.MaxInt64, Error: fmt.Errorf("error running command: %v", err)})
 			}
 		}
 	}()
@@ -225,7 +241,7 @@ func (r *Runner) startEventStream() (<-chan JSONL, error) { //nolint:funlen
 		wg.Wait()
 
 		if sb.Len() > 0 {
-			events <- JSONL{Index: math.MaxInt64, Error: ErrRunStderr{Output: sb.String()}}
+			send(JSONL{Index: math.MaxInt64, Error: ErrRunStderr{Output: sb.String()}})
 		}
 
 		close(events)
@@ -239,14 +255,25 @@ func runFilters(refs []Reference) []string {
 		return nil
 	}
 
-	var args []string
+	// go test honors only the LAST -run flag, so multiple per-ref flags would silently drop all
+	// but one ref. Join the anchored per-ref patterns into a single alternation instead.
+	// ponytail: for the common function-level case (^A$|^B$) this is exact. mixing subtest depths
+	// in one alternation is imperfect since `/` is go test's level separator, but each ref pattern
+	// is fully anchored so a function-level ref won't accidentally match a subtest of another ref.
+	var patterns []string
 	for _, ref := range refs {
 		str := refString(ref)
 		if str == "" {
 			continue
 		}
-		args = append(args, fmt.Sprintf("-run=%s", str))
+		patterns = append(patterns, str)
 	}
+
+	if len(patterns) == 0 {
+		return nil
+	}
+
+	args := []string{fmt.Sprintf("-run=%s", strings.Join(patterns, "|"))}
 
 	debug.SetLine(fmt.Sprintf("running tests: %v", args))
 
@@ -265,13 +292,16 @@ func refString(ref Reference) string {
 	return fmt.Sprintf("^%s/%s$", ref.FuncName, ref.TRunName)
 }
 
-func jsonLFromReader(stdout io.Reader, events chan<- JSONL) {
+func jsonLFromReader(ctx context.Context, stdout io.Reader, events chan<- JSONL) {
 	reader := bufio.NewReader(stdout)
 	var idx int64 = 1
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil && err != io.EOF {
-			events <- JSONL{Index: math.MaxInt64, Error: fmt.Errorf("error reading input: %v", err)}
+			select {
+			case events <- JSONL{Index: math.MaxInt64, Error: fmt.Errorf("error reading input: %v", err)}:
+			case <-ctx.Done():
+			}
 			return
 		}
 
@@ -279,7 +309,11 @@ func jsonLFromReader(stdout io.Reader, events chan<- JSONL) {
 			break
 		}
 
-		events <- NewJSONL(line, idx)
+		select {
+		case events <- NewJSONL(line, idx):
+		case <-ctx.Done():
+			return
+		}
 		idx++
 	}
 }

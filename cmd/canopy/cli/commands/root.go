@@ -4,7 +4,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/hashicorp/go-multierror"
@@ -247,14 +246,11 @@ func prepareTestExecution(app clio.Application, rootCfg rootConfig, testDefs got
 
 	var runCfgs []test.RunConfig
 	for _, group := range runGroups {
+		// UserArgs carries only the package args; test selection (-run) is applied by
+		// the runner via OnlyRefs, so we must not inject -run here.
 		var args []string
 		args = append(args, commonArgs...)
 		args = append(args, group.Packages()...)
-
-		rArgs := runArgs(group)
-		if rArgs != "" {
-			args = append(args, rArgs)
-		}
 
 		runCfgs = append(runCfgs,
 			test.RunConfig{
@@ -318,19 +314,6 @@ func executeTests(ctx context.Context, coreCfg *TestCoreConfig, plan *executionP
 	_, resultErr := evaluateResults(runs, time.Since(start), plan.logTestFailuresAsErrors)
 
 	return resultErr
-}
-
-func runArgs(refs gotest.References) string {
-	var funcs []string
-	for _, ref := range refs {
-		if ref.FuncName != "" {
-			funcs = append(funcs, ref.FuncName)
-		}
-	}
-	if len(funcs) == 0 {
-		return ""
-	}
-	return "-run='" + strings.Join(funcs, "|") + "'"
 }
 
 func evaluateResults(runs []*gotest.Run, elapsed time.Duration, logTestFailuresAsErrors bool) (bool, error) {
