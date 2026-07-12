@@ -77,9 +77,8 @@ func New(dbFilePath string) (*Store, error) {
 		}
 	}
 
-	// probably not safe... should reconsider this
-	db.Exec("PRAGMA synchronous = OFF")
-	db.Exec("PRAGMA journal_mode = OFF")
+	// durability pragmas (journal_mode=WAL, synchronous=NORMAL, busy_timeout) are set in the
+	// connection string so they apply to every pooled connection; see connectionString.
 	db.Exec("PRAGMA temp_store = MEMORY")
 	db.Exec("PRAGMA cache_size = 100000")
 	db.Exec("PRAGMA mmap_size = 268435456") // 256 MB
@@ -811,5 +810,9 @@ func connectionString(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("no db filepath given")
 	}
-	return fmt.Sprintf("file:%s?cache=shared", path), nil
+	// WAL + synchronous=NORMAL keeps transaction rollback working and avoids the corruption
+	// risk of the old journal_mode=OFF/synchronous=OFF. busy_timeout lets concurrent writers
+	// wait for a lock instead of failing immediately. set via DSN so every pooled connection
+	// (not just the first) gets them.
+	return fmt.Sprintf("file:%s?cache=shared&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)", path), nil
 }
