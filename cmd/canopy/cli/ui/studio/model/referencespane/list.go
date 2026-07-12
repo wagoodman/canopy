@@ -18,6 +18,9 @@ import (
 // TODO: this is a bad global, please delete me
 var isFiltering bool
 
+// selectionColor accents borders for highlighted and selected references.
+var selectionColor = lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"}
+
 type item struct {
 	id         string
 	ref        gotest.Reference
@@ -150,7 +153,7 @@ func newListItemDelegate(navigateBindings ...key.Binding) *listItemDelegate {
 
 	d.Styles.SelectedTitle = highlightPadding.
 		Border(cursorBrd, false, false, false, true).
-		BorderForeground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"}).
+		BorderForeground(selectionColor).
 		// BorderForeground(lipgloss.AdaptiveColor{Light: "#AD58B4", Dark: "#EEEEEE"}).
 		// BorderBackground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"}).
 		Foreground(lipgloss.AdaptiveColor{Light: "#EE6FF8", Dark: "#EE6FF8"})
@@ -160,7 +163,7 @@ func newListItemDelegate(navigateBindings ...key.Binding) *listItemDelegate {
 
 	highlightStyle := highlightPadding.
 		Border(scopeBrd, false, false, false, true).
-		BorderForeground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"})
+		BorderForeground(selectionColor)
 	// Foreground(lipgloss.AdaptiveColor{Light: "#EE6FF8", Dark: "#EE6FF8"})
 
 	multiSelectBrd := lipgloss.NormalBorder()
@@ -168,7 +171,7 @@ func newListItemDelegate(navigateBindings ...key.Binding) *listItemDelegate {
 
 	multiSelectStyle := highlightStyle.
 		Border(multiSelectBrd, false, false, false, true).
-		BorderForeground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"})
+		BorderForeground(selectionColor)
 
 	failedStyle := notHighlightedPadding.Foreground(lipgloss.Color("9"))
 	runStyle := notHighlightedPadding.Foreground(lipgloss.Color("11"))

@@ -51,8 +51,8 @@ func ListDefs(app clio.Application) *cobra.Command {
 		List: listConfig{
 			Packages: options.DefaultPackages(),
 			Format: options.Format{
-				Outputs:          []string{"function"},
-				AllowableFormats: []string{"function", "json", "package"},
+				Outputs:          []string{formatFunction},
+				AllowableFormats: []string{formatFunction, formatJSON, formatPackage},
 				Aliases:          []string{"fn", "fns", "f", "p", "pkg", "pkgs", "functions", "packages"},
 				AllowMultiple:    false,
 			},
@@ -99,11 +99,11 @@ func runList(cfg listConfig) error {
 
 	var report string
 	switch strings.ToLower(cfg.Outputs[0]) {
-	case "package", "packages", "pkg", "pkgs", "p":
+	case formatPackage, "packages", "pkg", "pkgs", "p":
 		report = listTestPkgs(tests)
-	case "function", "functions", "fn", "fns", "f":
+	case formatFunction, "functions", "fn", "fns", "f":
 		report = listTestFunctions(tests, cfg.Cases)
-	case "json":
+	case formatJSON:
 		report, err = listTestJSON(tests)
 	default:
 		err = fmt.Errorf("unknown format: %s", cfg.Outputs)
@@ -131,7 +131,7 @@ func listTestPkgs(tests []gotest.Definition) string {
 	sb := strings.Builder{}
 
 	for _, p := range pkgsSlice {
-		sb.WriteString(fmt.Sprintf("%s\n", p))
+		fmt.Fprintf(&sb, "%s\n", p)
 	}
 
 	return sb.String()
@@ -142,13 +142,13 @@ func listTestPkgs(tests []gotest.Definition) string {
 func listTestFunctions(tests []gotest.Definition, showCases bool) string {
 	sb := strings.Builder{}
 	for _, t := range tests {
-		sb.WriteString(fmt.Sprintf("%s.%s\n", t.ImportPath, t.FnName))
+		fmt.Fprintf(&sb, "%s.%s\n", t.ImportPath, t.FnName)
 		if !showCases {
 			continue
 		}
 
 		for _, c := range t.Cases {
-			sb.WriteString(fmt.Sprintf("%s.%s/%s\n", t.ImportPath, t.FnName, c))
+			fmt.Fprintf(&sb, "%s.%s/%s\n", t.ImportPath, t.FnName, c)
 		}
 	}
 	return sb.String()

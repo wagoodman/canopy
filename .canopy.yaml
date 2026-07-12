@@ -1,15 +1,3 @@
 store:
   enabled: true
 
-#profiles:
-#  unit:
-#    store:
-#      enabled: false
-#
-#    test:
-#      cover: true
-#      covermin: 55
-#     packages:
-#        - ./...
-#      exclude:
-#        - '**/internal/test-fixtures/**'

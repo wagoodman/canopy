@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
-
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
 

@@ -21,6 +21,11 @@ var (
 	userSelectedBorder = lipgloss.Border{Left: "█"}
 	// emptyBorder is the border style used for items with no selection state.
 	emptyBorder = lipgloss.Border{Left: " "}
+
+	// matchColor highlights active filter matches and selection accents.
+	matchColor = lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#ECFD65"}
+	// selectionColor accents borders and text for user-selected items.
+	selectionColor = lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"}
 )
 
 // listItemDelegate is the custom item renderer for the test selector list.
@@ -70,7 +75,7 @@ func newItemDelegate(keyMap keyMap) *listItemDelegate {
 	d.ShowDescription = false
 	d.SetHeight(1)
 	d.SetSpacing(0)
-	d.Styles.FilterMatch = lipgloss.NewStyle().Underline(true).Foreground(lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#ECFD65"})
+	d.Styles.FilterMatch = lipgloss.NewStyle().Underline(true).Foreground(matchColor)
 
 	baseStyle := lipgloss.NewStyle().Padding(0, 0, 0, 1)
 
@@ -87,19 +92,19 @@ func newItemDelegate(keyMap keyMap) *listItemDelegate {
 
 			hoverLine: baseStyle.
 				BorderLeft(true).
-				BorderForeground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"}),
+				BorderForeground(selectionColor),
 
 			hoverBullet: lipgloss.NewStyle().
-				Foreground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"}),
+				Foreground(selectionColor),
 
 			cursorLine: baseStyle.
 				BorderLeft(true).
-				BorderForeground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"}).
+				BorderForeground(selectionColor).
 				Foreground(lipgloss.AdaptiveColor{Light: "#EE6FF8", Dark: "#EE6FF8"}),
 
 			userSelectedLine: baseStyle.
 				BorderLeft(true).
-				BorderForeground(lipgloss.AdaptiveColor{Light: "#F793FF", Dark: "#AD58B4"}),
+				BorderForeground(selectionColor),
 
 			allTestsLine: lipgloss.NewStyle().
 				Italic(true).

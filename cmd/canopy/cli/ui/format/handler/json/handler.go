@@ -1,6 +1,6 @@
 // Package json provides a handler that writes raw JSON test events in
 // JSONL (JSON Chunks) format without additional formatting or transformation.
-package json //nolint:revive
+package json
 
 import (
 	"fmt"

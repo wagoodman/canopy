@@ -67,7 +67,7 @@ func defaultCoverageOptions() *coverageConfig {
 
 	return &coverageConfig{
 		Store:  store,
-		Unit:   "package",
+		Unit:   formatPackage,
 		Output: "text",
 		Sort:   "name",
 		Min:    -1, // sentinel for "not set"
@@ -230,7 +230,7 @@ func runCoverage(cfg coverageConfig) error {
 	sortFunctions(funcs, cfg.Sort, cfg.Desc)
 
 	switch strings.ToLower(cfg.Output) {
-	case "json":
+	case formatJSON:
 		return writeCoverageJSON(os.Stdout, data.runInfo, data.testRun, pkgs, funcs)
 	case "text", "":
 		return writeCoverageText(os.Stdout, cfg.Unit, data.runInfo, pkgs, funcs, minPct, maxPct)
@@ -395,9 +395,9 @@ func writeCoverageText(w io.Writer, unit string, runInfo test.RunInfo, pkgs []db
 	switch strings.ToLower(unit) {
 	case "total":
 		writeTotalCoverage(w, runInfo)
-	case "function":
+	case formatFunction:
 		writeFunctionCoverage(w, runInfo, funcs, minPct, maxPct)
-	case "package", "":
+	case formatPackage, "":
 		writePackageCoverage(w, runInfo, pkgs)
 	default:
 		return fmt.Errorf("unknown unit: %s (expected: total, package, function)", unit)

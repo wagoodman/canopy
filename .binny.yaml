@@ -2,7 +2,7 @@ tools:
   # we want to use a pinned version of binny to manage the toolchain (so binny manages itself!)
   - name: binny
     version:
-      want: v0.11.1
+      want: v0.13.2
     method: github-release
     with:
       repo: anchore/binny
@@ -34,7 +34,7 @@ tools:
   # used for linting
   - name: golangci-lint
     version:
-      want: v2.8.0
+      want: v2.12.2
     method: github-release
     with:
       repo: golangci/golangci-lint
@@ -42,7 +42,7 @@ tools:
   # used for showing the changelog at release
   - name: glow
     version:
-      want: v2.1.1
+      want: v2.1.2
     method: github-release
     with:
       repo: charmbracelet/glow
@@ -50,7 +50,7 @@ tools:
   # used to release all artifacts
   - name: goreleaser
     version:
-      want: v2.13.3
+      want: v2.17.0
     method: github-release
     with:
       repo: goreleaser/goreleaser
@@ -66,7 +66,7 @@ tools:
   # used at release to generate the changelog
   - name: chronicle
     version:
-      want: v0.8.0
+      want: v0.13.1
     method: github-release
     with:
       repo: anchore/chronicle
@@ -82,7 +82,7 @@ tools:
   # used for running all local and CI tasks
   - name: task
     version:
-      want: v3.46.4
+      want: v3.52.0
     method: github-release
     with:
       repo: go-task/task
@@ -90,7 +90,7 @@ tools:
   # used for triggering a release
   - name: gh
     version:
-      want: v2.86.0
+      want: v2.96.0
     method: github-release
     with:
       repo: cli/cli

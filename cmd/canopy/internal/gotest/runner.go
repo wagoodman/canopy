@@ -113,31 +113,42 @@ func (r *Runner) Start(ctx context.Context, resultConfig ResultConfig, onEvent .
 			}
 		}
 
-		if r.config.CoverageDir != "" {
-			pkgs, err := cover.PackageCoverage(r.config.CoverageDir)
-			if err != nil {
-				done <- fmt.Errorf("error calculating package coverage: %v", err)
-				return
-			}
-
-			funcs, overallPercent, err := cover.FunctionCoverage(r.config.CoverageDir)
-			if err != nil {
-				done <- fmt.Errorf("error calculating function coverage: %v", err)
-				return
-			}
-
-			// only record coverage when covdata actually produced data. an empty coverage dir
-			// (e.g. a build failure) yields empty results with a nil error; setting coverage
-			// anyway would fabricate a bogus 0.0%. leave it unset so Coverage() returns (_, false).
-			if len(pkgs) > 0 || len(funcs) > 0 {
-				run.Result.coverage = &overallPercent
-			}
-			run.PackageCoverage = pkgs
-			run.FunctionCoverage = funcs
+		if err := r.recordCoverage(run); err != nil {
+			done <- err
+			return
 		}
 	}()
 
 	return run, done
+}
+
+// recordCoverage calculates and attaches package/function coverage to run when a coverage dir
+// is configured. it is a no-op when coverage is disabled.
+func (r *Runner) recordCoverage(run *Run) error {
+	if r.config.CoverageDir == "" {
+		return nil
+	}
+
+	pkgs, err := cover.PackageCoverage(r.config.CoverageDir)
+	if err != nil {
+		return fmt.Errorf("error calculating package coverage: %v", err)
+	}
+
+	funcs, overallPercent, err := cover.FunctionCoverage(r.config.CoverageDir)
+	if err != nil {
+		return fmt.Errorf("error calculating function coverage: %v", err)
+	}
+
+	// only record coverage when covdata actually produced data. an empty coverage dir
+	// (e.g. a build failure) yields empty results with a nil error; setting coverage
+	// anyway would fabricate a bogus 0.0%. leave it unset so Coverage() returns (_, false).
+	if len(pkgs) > 0 || len(funcs) > 0 {
+		run.Result.coverage = &overallPercent
+	}
+	run.PackageCoverage = pkgs
+	run.FunctionCoverage = funcs
+
+	return nil
 }
 
 func (r *Runner) startEventStream(ctx context.Context) (<-chan JSONL, error) { //nolint:funlen

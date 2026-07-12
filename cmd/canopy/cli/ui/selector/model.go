@@ -107,13 +107,13 @@ func New(config Config) Model {
 		keyMap:     km,
 		titleStyle: lipgloss.NewStyle().Italic(true).Foreground(lipgloss.Color("#04B5F7")),
 		cancelledStyle: lipgloss.NewStyle().Italic(true).
-			Foreground(lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#ECFD65"}),
+			Foreground(matchColor),
 		auxStyle: lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{
 			Light: "#909090",
 			Dark:  "#626262",
 		}),
 		filterTitleStyle: lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#ECFD65"}),
+			Foreground(matchColor),
 	}
 }
 
