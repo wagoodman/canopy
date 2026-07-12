@@ -319,8 +319,10 @@ func (d listItemDelegate) visibleItems(m *list.Model) []item {
 	return refs
 }
 
-func (d listItemDelegate) selectedItem(m *list.Model) (int, item) {
-	return m.Index(), m.SelectedItem().(item)
+func (d listItemDelegate) selectedItem(m *list.Model) (int, item, bool) {
+	// guard the type assertion: SelectedItem() is nil when the visible list is empty
+	it, ok := m.SelectedItem().(item)
+	return m.Index(), it, ok
 }
 
 func (d listItemDelegate) Render(w io.Writer, m list.Model, idx int, i list.Item) {
@@ -426,7 +428,10 @@ func (d *listItemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 func (d *listItemDelegate) onToggleMultiselect(m *list.Model) tea.Cmd {
 	d.cursorScope = make(map[gotest.Reference]struct{}) // reset!
 
-	selectedIdx, selected := d.selectedItem(m)
+	selectedIdx, selected, ok := d.selectedItem(m)
+	if !ok {
+		return nil
+	}
 	var invert bool
 	if _, ok := d.multiSelect[selected.ref]; ok {
 		delete(d.multiSelect, selected.ref)
@@ -476,6 +481,10 @@ func markChildren(selected item, start int, visibleItems []item, marker map[gote
 func (d *listItemDelegate) onNavigate(m *list.Model) tea.Cmd {
 	currentItem := m.SelectedItem()
 	if currentItem == nil {
+		if len(m.Items()) == 0 {
+			// nothing to navigate to (no references at all)
+			return nil
+		}
 		// we have changed the view in a way that invalidates the selection (we're outside of the bounds)
 		// let's select the last item in the list to keep the cursor in a valid position but as close as
 		// possible to the last selected item
@@ -491,7 +500,10 @@ func (d *listItemDelegate) onNavigate(m *list.Model) tea.Cmd {
 	// changed := false
 	if len(d.multiSelect) == 0 {
 		d.cursorScope = make(map[gotest.Reference]struct{})
-		selectedIdx, selected := d.selectedItem(m)
+		selectedIdx, selected, ok := d.selectedItem(m)
+		if !ok {
+			return nil
+		}
 		markChildren(selected, selectedIdx, d.visibleItems(m), d.cursorScope, false)
 		return d.selectedTestReferencesCmd(m)
 	}
@@ -507,9 +519,17 @@ func (d listItemDelegate) selectedTestReferencesCmd(m *list.Model) tea.Cmd {
 		refs = append(refs, ref)
 	}
 	sort.Sort(gotest.References(refs))
+
+	// capture the "all tests" flag eagerly: the returned tea.Cmd runs asynchronously
+	// (concurrent with Update) and must not read live model state. guard the assertion
+	// since the visible list may be empty.
+	var all bool
+	if sel, ok := m.SelectedItem().(item); ok {
+		all = sel.ref.Package == "*"
+	}
 	return func() tea.Msg {
 		return uievent.SelectedTestReferences{
-			All:  m.SelectedItem().(item).ref.Package == "*",
+			All:  all,
 			Refs: refs,
 		}
 	}
