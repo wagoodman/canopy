@@ -39,6 +39,10 @@ type Analysis struct {
 	// Each entry represents a run where the outcome changed from the previous run.
 	// The first entry is the "before" state, subsequent entries show transitions.
 	NotableRuns []NotableRun
+	// Sequence is every run outcome in chronological order (oldest first). Unlike the
+	// counts and NotableRuns, this preserves the full timeline so callers can render a
+	// pass/fail trend of what's actually been happening.
+	Sequence []gotest.Action
 }
 
 // FailureMode represents a distinct way a test can fail.

@@ -54,7 +54,7 @@ func (o *affectedConfig) AddFlags(flags fangs.FlagSet) {
 // to verify a change, using the static Go import graph.
 func Affected(app clio.Application) *cobra.Command {
 	opts := &affectedConfig{
-		Specifiers: []string{"./..."},
+		Specifiers: []string{options.DefaultPackageSpecifier},
 		Output:     formatTable,
 	}
 

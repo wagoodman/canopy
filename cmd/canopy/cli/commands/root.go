@@ -51,7 +51,6 @@ func defaultRootOptions() *rootConfig {
 			withCombineMultipleRuns(), // we want a single summary for multiple running sessions
 		),
 	}
-	c.Test.Specifiers = []string{"./..."} // default to all project packages
 	return &c
 }
 

@@ -9,12 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/google/uuid"
-	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/flaky"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/failure"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/test"
@@ -154,63 +155,81 @@ func runFlaky(cfg flakyConfig) error {
 	return nil
 }
 
-// displayFlakyResults renders the flaky test analysis results to stdout.
+// sparkWidth is the fixed column width of the trend sparkline, so a test with 5 runs and one
+// with 500 both render in the same space. sparkLevels map a fail rate (0..1) to bar height.
+const sparkWidth = 20
+
+var sparkLevels = []rune("▁▂▃▄▅▆▇█")
+
+// bar color reinforces the height: green while a slice is fully passing, red once any run in it failed.
+var (
+	sparkPass = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // green
+	sparkFail = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))  // red
+)
+
+// displayFlakyResults renders the flaky test analysis as one line per test to stdout:
+// score, a fail-rate trend, then the full test name. Aux summary goes to stderr.
 func displayFlakyResults(results []flaky.Analysis) {
-	// sort by score descending
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Score > results[j].Score
 	})
 
-	t := table.NewWriter()
-	t.SetStyle(table.StyleLight)
-	t.Style().Options.DrawBorder = false
-	t.Style().Options.SeparateColumns = false
-
-	t.AppendHeader(table.Row{"Test", "Score", "Runs", "Pass", "Fail", "Skip", "Distinct Failures", "Last Flip"})
-
 	for _, r := range results {
-		testName := formatTestReference(r.Reference)
-		score := fmt.Sprintf("%.0f%%", r.Score*100)
-		lastFlip := ""
+		line := fmt.Sprintf("%3.0f%%  %s  %s", r.Score*100, trendSpark(r.Sequence), r.Reference.String(false))
 		if r.LastFlip != nil {
-			lastFlip = formatRelativeTime(r.LastFlip.Time)
+			line += "  " + styleAux.Render("flipped "+formatRelativeTime(r.LastFlip.Time))
 		}
-
-		t.AppendRow(table.Row{
-			testName,
-			score,
-			r.TotalRuns,
-			r.PassCount,
-			r.FailCount,
-			r.SkipCount,
-			len(r.FailureModes),
-			lastFlip,
-		})
+		fmt.Println(line)
 	}
 
-	fmt.Println(t.Render())
-
-	// print summary
-	flakyCount := 0
-	for _, r := range results {
-		if r.IsFlaky() {
-			flakyCount++
-		}
-	}
-
-	fmt.Printf("\nFound %d flaky test(s) out of %d analyzed.\n", flakyCount, len(results))
+	// summary + legend are aux context, not the report: faint and on stderr so stdout stays pipeable.
+	fmt.Fprintf(os.Stderr, "\n%s\n", styleAux.Render(fmt.Sprintf("%d flaky test(s)", len(results))))
+	fmt.Fprintf(os.Stderr, "%s %s%s %s%s\n",
+		styleAux.Render("trend: fail rate per time-slice, ▁ low → █ high,"),
+		sparkPass.Render("green"), styleAux.Render(" passing /"),
+		sparkFail.Render("red"), styleAux.Render(" failing  (oldest → newest)"))
 }
 
-// formatTestReference formats a test reference for display.
-func formatTestReference(ref interface{ String(bool) string }) string {
-	s := ref.String(false)
-	// truncate long package paths for readability
-	parts := strings.Split(s, "/")
-	if len(parts) > 4 {
-		// keep first part, ellipsis, last 3 parts
-		s = parts[0] + "/.../" + strings.Join(parts[len(parts)-3:], "/")
+// trendSpark renders the run history as a fixed-width fail-rate sparkline (oldest→newest). The
+// history is split into at most sparkWidth time-slices; each column's bar height is the fraction
+// of runs in that slice that failed, so a flat low line reads healthy and spikes mark clusters of
+// failures. Skips are ignored since they're neither pass nor fail. Always sparkWidth cells wide so
+// the test-name column stays aligned across rows.
+func trendSpark(seq []gotest.Action) string {
+	var fails []bool // one entry per pass/fail run: true = fail
+	for _, a := range seq {
+		switch a {
+		case gotest.FailAction:
+			fails = append(fails, true)
+		case gotest.PassAction:
+			fails = append(fails, false)
+		}
 	}
-	return s
+
+	buckets := min(sparkWidth, len(fails))
+
+	var b strings.Builder
+	for i := range buckets {
+		lo := i * len(fails) / buckets
+		hi := (i + 1) * len(fails) / buckets
+		failed := 0
+		for _, f := range fails[lo:hi] {
+			if f {
+				failed++
+			}
+		}
+		rate := float64(failed) / float64(hi-lo)
+		level := int(rate*float64(len(sparkLevels)-1) + 0.5)
+		glyph := string(sparkLevels[level])
+		if rate == 0 {
+			b.WriteString(sparkPass.Render(glyph))
+		} else {
+			b.WriteString(sparkFail.Render(glyph))
+		}
+	}
+	// pad to a fixed width so names line up regardless of run count
+	b.WriteString(strings.Repeat(" ", sparkWidth-buckets))
+	return b.String()
 }
 
 // formatRelativeTime formats a time as a relative duration from now.

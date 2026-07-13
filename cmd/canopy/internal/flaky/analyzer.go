@@ -371,6 +371,7 @@ func (a *Analyzer) processOutcomes(analysis *Analysis, outcomes []Outcome) map[s
 		out := &outcomes[i]
 		fingerprint := outcomeFingerprint(out)
 
+		analysis.Sequence = append(analysis.Sequence, out.Action)
 		a.countOutcome(analysis, out, fingerprint, failureModeMap)
 		a.detectFlip(analysis, out, fingerprint, i, lastAction, lastOutcome)
 

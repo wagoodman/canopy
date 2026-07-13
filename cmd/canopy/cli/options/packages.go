@@ -11,6 +11,10 @@ var _ interface {
 	fangs.PostLoader
 } = (*Packages)(nil)
 
+// DefaultPackageSpecifier is the package path pattern used when the user gives none:
+// all packages under the current module, recursively.
+const DefaultPackageSpecifier = "./..."
+
 // Packages configures package selection for test discovery and execution.
 type Packages struct {
 	// Specifiers are Go package path patterns (e.g., "./...", "github.com/user/pkg/...").
@@ -24,10 +28,10 @@ type Packages struct {
 	NamedFlagSet *xflagset.Named `yaml:"-" json:"-" mapstructure:"-"`
 }
 
-// DefaultPackages returns package options with the current directory as the default specifier.
+// DefaultPackages returns package options defaulting to all packages under the current module.
 func DefaultPackages() Packages {
 	return Packages{
-		Specifiers: []string{"."},
+		Specifiers: []string{DefaultPackageSpecifier},
 	}
 }
 
