@@ -22,9 +22,9 @@ type sessionListConfig struct {
 	SessionID string `yaml:"session-id" json:"session-id" mapstructure:"session-id"`
 }
 
-// SessionList creates a command to display all test sessions and their associated run information.
-// Sessions are shown with their UUID, start time, duration, and number of test runs.
-func SessionList(app clio.Application) *cobra.Command {
+// ListSessions creates a command to display all test sessions and their associated run information.
+// Sessions are shown with their name, UUID, start time, duration, and number of test runs.
+func ListSessions(app clio.Application) *cobra.Command {
 	store := options.DefaultStore()
 	store.Enabled = true
 	opts := &sessionListConfig{
@@ -32,8 +32,8 @@ func SessionList(app clio.Application) *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "list [SESSION-ID]",
-		Short: "list sessions and runs related to each session",
+		Use:   "sessions [SESSION-ID]",
+		Short: "list sessions and the runs grouped under each",
 		Args: func(_ *cobra.Command, args []string) error {
 			if err := cobra.MaximumNArgs(1)(nil, args); err != nil {
 				return err
@@ -95,6 +95,7 @@ func runSessionList(cfg sessionListConfig) error {
 	for i := range sessions {
 		session := sessions[i]
 		rows = append(rows, table.Row{
+			session.Name,
 			session.UUID.String(),
 			fmtTime(&session.Started),
 			fmtElapsed(session.Started, session.Ended),
@@ -102,9 +103,9 @@ func runSessionList(cfg sessionListConfig) error {
 		})
 	}
 
-	// sort rows by start time
+	// sort rows by start time (index 2 now that Name is prepended)
 	sort.Slice(rows, func(i, j int) bool {
-		return rows[i][1].(string) > rows[j][1].(string)
+		return rows[i][2].(string) > rows[j][2].(string)
 	})
 
 	t := table.NewWriter()
@@ -112,7 +113,7 @@ func runSessionList(cfg sessionListConfig) error {
 	t.Style().Options.DrawBorder = false
 	t.Style().Options.SeparateColumns = false
 
-	t.AppendHeader(table.Row{"Session", "Started", "Elapsed", "Test Runs"})
+	t.AppendHeader(table.Row{"Name", "Session", "Started", "Elapsed", "Test Runs"})
 	t.AppendRows(rows)
 
 	fmt.Println(t.Render())

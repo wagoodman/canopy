@@ -10,12 +10,13 @@ import (
 func List(app clio.Application) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "list test definitions or historical test runs",
+		Short: "list test definitions, historical runs, or sessions",
 	}
 
 	cmd.AddCommand(
 		ListDefs(app),
 		ListRuns(app),
+		ListSessions(app),
 	)
 
 	return cmd

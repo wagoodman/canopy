@@ -110,14 +110,35 @@ func (s Store) GetTestSessions() ([]TestSession, error) {
 
 // StartTestSession creates a new test session with the current timestamp and returns its UUID.
 func (s Store) StartTestSession() (uuid.UUID, error) {
+	return s.StartTestSessionWithName("")
+}
+
+// StartTestSessionWithName creates a new named test session with the current timestamp and returns its UUID.
+// An empty name yields an unnamed session (the TUI/legacy behavior).
+func (s Store) StartTestSessionWithName(name string) (uuid.UUID, error) {
 	session := TestSession{
 		UUID:    uuid.NewString(),
+		Name:    name,
 		Started: time.Now(),
 	}
 	if err := s.db.Create(&session).Error; err != nil {
 		return uuid.Nil, fmt.Errorf("unable to create test session: %w", err)
 	}
 	return uuid.Parse(session.UUID)
+}
+
+// GetTestSessionByName returns the most recent (by Started desc) session with the given name,
+// or (nil, nil) if no session with that name exists.
+func (s Store) GetTestSessionByName(name string) (*TestSession, error) {
+	var session TestSession
+	err := s.db.Preload("TestRuns").Where("name = ?", name).Order("started DESC").First(&session).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("unable to get test session by name: %w", err)
+	}
+	return &session, nil
 }
 
 // EndTestSession marks a test session as completed by setting its ended timestamp.

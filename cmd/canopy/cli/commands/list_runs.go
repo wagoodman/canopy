@@ -77,11 +77,12 @@ Examples:
 
 // runListEntry is a flattened representation of a run for display and serialization.
 type runListEntry struct {
-	RunID     string     `json:"run_id"`
-	SessionID string     `json:"session_id"`
-	Started   time.Time  `json:"started"`
-	Ended     *time.Time `json:"ended,omitempty"`
-	Elapsed   string     `json:"elapsed,omitempty"`
+	RunID       string     `json:"run_id"`
+	SessionID   string     `json:"session_id"`
+	SessionName string     `json:"session_name,omitempty"`
+	Started     time.Time  `json:"started"`
+	Ended       *time.Time `json:"ended,omitempty"`
+	Elapsed     string     `json:"elapsed,omitempty"`
 }
 
 func runListRuns(cfg listRunsConfig) error {
@@ -141,10 +142,11 @@ func collectRunEntries(sessions []test.SessionInfo) []runListEntry {
 	for _, session := range sessions {
 		for _, run := range session.Runs {
 			entry := runListEntry{
-				RunID:     run.UUID.String(),
-				SessionID: session.UUID.String(),
-				Started:   run.Started,
-				Ended:     run.Ended,
+				RunID:       run.UUID.String(),
+				SessionID:   session.UUID.String(),
+				SessionName: session.Name,
+				Started:     run.Started,
+				Ended:       run.Ended,
 			}
 			if run.Ended != nil {
 				entry.Elapsed = run.Ended.Sub(run.Started).Round(time.Millisecond).String()
@@ -172,9 +174,14 @@ func writeRunsTable(stdout, stderr io.Writer, entries []runListEntry) {
 	t.AppendHeader(table.Row{"Run ID", "Session", "Started", "Elapsed"})
 
 	for _, entry := range entries {
+		// prefer the session name, fall back to the abbreviated session ID
+		session := entry.SessionName
+		if session == "" {
+			session = entry.SessionID[:8]
+		}
 		t.AppendRow(table.Row{
 			entry.RunID,
-			entry.SessionID[:8], // abbreviated session ID
+			session,
 			fmtTime(&entry.Started),
 			entry.Elapsed,
 		})

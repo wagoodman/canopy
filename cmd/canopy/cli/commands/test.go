@@ -76,6 +76,8 @@ type testConfig struct {
 	Affected bool `yaml:"affected" json:"affected" mapstructure:"affected"`
 	// AffectedSince is the git ref to diff against for --affected (empty = dirty working tree).
 	AffectedSince string `yaml:"affected-since" json:"affected-since" mapstructure:"affected-since"`
+	// Session names the session to group runs under (or @branch, @module, @worktree).
+	Session string `yaml:"session" json:"session" mapstructure:"session"`
 
 	// post parse
 	Runtime testRuntimeConfig `yaml:"-" json:"-" mapstructure:"-"`
@@ -94,6 +96,7 @@ func (t *TestCoreConfig) AddFlags(flags fangs.FlagSet) {
 	flags.BoolVarP(&t.Test.NoCache, "no-cache", "", "do not use cached test results")
 	flags.BoolVarP(&t.Test.Affected, "affected", "", "restrict the run to tests affected by local changes (static import graph)")
 	flags.StringVarP(&t.Test.AffectedSince, "affected-since", "", "with --affected, diff against this git ref (default: dirty working tree)")
+	flags.StringVarP(&t.Test.Session, "session", "", "session name to group runs under (or @branch, @module, @worktree)")
 }
 
 // selectTestPackages resolves the final package set for a run: it first narrows to affected
@@ -178,6 +181,7 @@ func defaultTestOptions(opts ...func(*TestCoreConfig)) *TestCoreConfig {
 			Format:     options.DefaultTestFormat(),
 			Open:       options.DefaultOpen(),
 			Appearance: options.DefaultAppearance(),
+			Session:    defaultSessionName,
 		},
 	}
 
@@ -277,8 +281,9 @@ func runTest(ctx context.Context, app clio.Application, coreCfg TestCoreConfig, 
 
 	s, err := test.NewManager(
 		test.Config{
-			DBRoot:    coreCfg.Root,
-			Ephemeral: coreCfg.Ephemeral,
+			DBRoot:      coreCfg.Root,
+			Ephemeral:   coreCfg.Ephemeral,
+			SessionName: resolveSessionName(coreCfg.Test.Session),
 			Retention: test.RetentionConfig{
 				MaxRuns: coreCfg.MaxRuns,
 				MaxAge:  coreCfg.ParsedMaxAge(),

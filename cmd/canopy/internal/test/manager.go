@@ -43,6 +43,8 @@ type Config struct {
 	ExistingSession uuid.UUID
 	// LoadLastSession indicates whether to resume the most recent session.
 	LoadLastSession bool
+	// SessionName, when set, resolves to a find-or-create session by that name instead of a fresh session per run.
+	SessionName string
 	// NoStore uses a no-op store (no persistence) for format-only operations.
 	NoStore bool
 	// Retention configures automatic cleanup of old test runs on startup.
@@ -113,13 +115,14 @@ func NewManager(cfg Config) (*Manager, error) {
 		dbStore:        underlyingStore,
 	}
 
-	if cfg.ExistingSession != uuid.Nil {
+	switch {
+	case cfg.ExistingSession != uuid.Nil:
 		ts, err := sm.getSession(cfg.ExistingSession)
 		if err != nil {
 			return nil, err
 		}
 		m.session = ts
-	} else if cfg.LoadLastSession {
+	case cfg.LoadLastSession:
 		sessions, err := st.ListSessions()
 		if err != nil {
 			return nil, fmt.Errorf("unable to list test sessions: %w", err)
@@ -134,6 +137,13 @@ func NewManager(cfg Config) (*Manager, error) {
 		})
 
 		ts, err := sm.getSession(sessions[0].UUID)
+		if err != nil {
+			return nil, err
+		}
+		m.session = ts
+	case cfg.SessionName != "":
+		// resolve the named session up front so runs append to it instead of minting a fresh session
+		ts, err := sm.getOrCreateSession(cfg.SessionName)
 		if err != nil {
 			return nil, err
 		}

@@ -43,6 +43,9 @@ type TestSession struct {
 	// UUID is the unique identifier exposed externally for this session.
 	UUID string `gorm:"column:uuid;index" json:"uuid"`
 
+	// Name is an optional label used to find-or-create a durable session (empty for TUI-launched sessions).
+	Name string `gorm:"column:name;index" json:"name"`
+
 	// Started is the timestamp when this test session began.
 	Started time.Time `gorm:"column:started" json:"started"`
 

@@ -29,6 +29,8 @@ type sessionManager interface {
 	newSession() (*session, error)
 	// getSession retrieves an existing session by UUID.
 	getSession(uuid uuid.UUID) (*session, error)
+	// getOrCreateSession finds the most recent session with the given name, creating one if none exists.
+	getOrCreateSession(name string) (*session, error)
 }
 
 // sessionStore defines persistence operations for test session metadata.
@@ -151,6 +153,35 @@ func (s dbStore) newSession() (*session, error) {
 	}, nil
 }
 
+// getOrCreateSession resolves the session by name, reusing the most recent match or creating a new one.
+func (s dbStore) getOrCreateSession(name string) (*session, error) {
+	ts, err := s.GetTestSessionByName(name)
+	if err != nil {
+		return nil, err
+	}
+
+	if ts != nil {
+		id, err := uuid.Parse(ts.UUID)
+		if err != nil {
+			return nil, err
+		}
+		return &session{
+			store:    &s,
+			complete: ts.Ended != nil,
+			uuid:     id,
+		}, nil
+	}
+
+	id, err := s.StartTestSessionWithName(name)
+	if err != nil {
+		return nil, err
+	}
+	return &session{
+		store: &s,
+		uuid:  id,
+	}, nil
+}
+
 // ListSessions retrieves all test sessions with their run information.
 func (s dbStore) ListSessions() ([]SessionInfo, error) {
 	sessions, err := s.GetTestSessions()
@@ -173,12 +204,7 @@ func (s dbStore) ListSessions() ([]SessionInfo, error) {
 			}
 		}
 
-		sessionInfos = append(sessionInfos, SessionInfo{
-			UUID:    uuid.MustParse(se.UUID),
-			Started: se.Started,
-			Ended:   se.Ended,
-			Runs:    runs,
-		})
+		sessionInfos = append(sessionInfos, newSessionInfo(se, runs))
 	}
 	return sessionInfos, nil
 }

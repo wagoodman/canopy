@@ -33,6 +33,11 @@ func (s *noopStore) getSession(id uuid.UUID) (*session, error) {
 	}, nil
 }
 
+// getOrCreateSession returns a fresh in-memory session, ignoring the name (no persistence).
+func (s *noopStore) getOrCreateSession(_ string) (*session, error) {
+	return s.newSession()
+}
+
 // sessionStore implementation
 
 func (s *noopStore) GetSessionInfo(id uuid.UUID) (*SessionInfo, error) {

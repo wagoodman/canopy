@@ -23,6 +23,8 @@ type session struct {
 type SessionInfo struct {
 	// UUID uniquely identifies the session.
 	UUID uuid.UUID `json:"uuid"`
+	// Name is the optional session label (empty for TUI-launched sessions).
+	Name string `json:"name"`
 	// Started is when the session was created.
 	Started time.Time `json:"started"`
 	// Ended is when the session was marked complete (nil if still active).
@@ -36,6 +38,7 @@ type SessionInfo struct {
 func newSessionInfo(se db.TestSession, runs []RunInfo) SessionInfo {
 	return SessionInfo{
 		UUID:    uuid.MustParse(se.UUID),
+		Name:    se.Name,
 		Started: se.Started,
 		Ended:   se.Ended,
 		Runs:    runs,
