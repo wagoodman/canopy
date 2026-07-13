@@ -72,12 +72,19 @@ type testConfig struct {
 	options.Appearance `yaml:"appearance" json:"appearance" mapstructure:"appearance"`
 	ExtraFlags         []string `yaml:"extra-flags" json:"extra-flags" mapstructure:"extra-flags"`
 
+	// Affected restricts the run to tests affected by local changes (static import graph).
+	Affected bool `yaml:"affected" json:"affected" mapstructure:"affected"`
+	// AffectedSince is the git ref to diff against for --affected (empty = dirty working tree).
+	AffectedSince string `yaml:"affected-since" json:"affected-since" mapstructure:"affected-since"`
+
 	// post parse
 	Runtime testRuntimeConfig `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 type testRuntimeConfig struct {
 	Packages *golist.PackageCollection
+	// NothingToRun is set when --affected resolved to an empty set; the run is a clean no-op.
+	NothingToRun bool
 }
 
 func (t *TestCoreConfig) AddFlags(flags fangs.FlagSet) {
@@ -85,6 +92,54 @@ func (t *TestCoreConfig) AddFlags(flags fangs.FlagSet) {
 	t.tracker = xflagset.NewDecorator(flags, t.NamedFlagSet.FlagSet("State"))
 	flags = t.tracker
 	flags.BoolVarP(&t.Test.NoCache, "no-cache", "", "do not use cached test results")
+	flags.BoolVarP(&t.Test.Affected, "affected", "", "restrict the run to tests affected by local changes (static import graph)")
+	flags.StringVarP(&t.Test.AffectedSince, "affected-since", "", "with --affected, diff against this git ref (default: dirty working tree)")
+}
+
+// selectTestPackages resolves the final package set for a run: it first narrows to affected
+// packages (when --affected is set), then resolves specifiers via SelectPackages, storing the
+// result in cfg.Runtime.Packages. It returns proceed=false when there is nothing to run, in
+// which case cfg.Runtime.NothingToRun is set and the caller should exit 0 without erroring.
+func selectTestPackages(cfg *testConfig) (proceed bool, err error) {
+	ok, err := narrowToAffected(cfg)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		cfg.Runtime.NothingToRun = true
+		return false, nil
+	}
+
+	testPkgs, err := golist.SelectPackages(cfg.Specifiers, cfg.ExcludePatterns)
+	if err != nil {
+		return false, fmt.Errorf("unable to get test paths: %w", err)
+	}
+	if testPkgs.Size() == 0 {
+		return false, fmt.Errorf("no packages selected to test (given %q)", cfg.Specifiers)
+	}
+	cfg.Runtime.Packages = testPkgs
+	return true, nil
+}
+
+// narrowToAffected applies --affected package narrowing to the test specifiers in place. It
+// returns false when nothing is affected, in which case the caller should treat the run as a
+// clean no-op (exit 0) rather than an error. Narrowed specifiers flow through the normal
+// SelectPackages path, so excludes and package validation still apply downstream.
+func narrowToAffected(cfg *testConfig) (proceed bool, err error) {
+	if !cfg.Affected {
+		return true, nil
+	}
+	affected, err := computeAffectedImportPaths(cfg.Specifiers, cfg.AffectedSince)
+	if err != nil {
+		return false, fmt.Errorf("unable to compute affected packages: %w", err)
+	}
+	if affected.Size() == 0 {
+		log.Info("no packages affected by local changes; nothing to run")
+		return false, nil
+	}
+	cfg.Specifiers = sortedList(affected)
+	log.WithFields("packages", affected.Size()).Debug("restricted run to affected packages")
+	return true, nil
 }
 
 func withoutCoverageOpts() func(*TestCoreConfig) {
@@ -151,15 +206,14 @@ func Test(app clio.Application) *cobra.Command {
 			return nil
 		},
 		PreRunE: func(_ *cobra.Command, _ []string) error {
-			// get the final set of packages to use
-			testPkgs, err := golist.SelectPackages(opts.Test.Specifiers, opts.Test.ExcludePatterns)
+			proceed, err := selectTestPackages(&opts.Test)
 			if err != nil {
-				return fmt.Errorf("unable to get test paths: %w", err)
+				return err
 			}
-			if testPkgs.Size() == 0 {
-				return fmt.Errorf("no packages selected to test (given %q)", opts.Test.Specifiers)
+			if !proceed {
+				return nil
 			}
-			opts.Test.Runtime.Packages = testPkgs
+			testPkgs := opts.Test.Runtime.Packages
 
 			// set the UI dynamically
 			var module string
@@ -173,6 +227,10 @@ func Test(app clio.Application) *cobra.Command {
 			return err
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if opts.Test.Runtime.NothingToRun {
+				return nil
+			}
+
 			defer func() {
 				if err := opts.Test.Writers.Close(); err != nil {
 					runErr = multierror.Append(runErr, err)

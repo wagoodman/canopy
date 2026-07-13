@@ -47,6 +47,8 @@ func New(id clio.Identification) *cobra.Command {
 		commands.Show(app),
 		commands.Coverage(app),
 		commands.Trend(app),
+		commands.Affected(app),
+		commands.Triage(app),
 		commands.DB(app),
 
 		// Add alias for `open` command to the `session open` command

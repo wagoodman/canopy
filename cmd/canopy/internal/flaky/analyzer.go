@@ -76,6 +76,28 @@ func (a *Analyzer) AnalyzeAll() ([]Analysis, error) {
 	return results, nil
 }
 
+// AnalyzeRefs analyzes a specific set of references in a single pass over the store.
+// calling Analyze once per ref re-scans the whole store each time (O(refs * store));
+// this collects outcomes once and looks up each ref. references with no recorded
+// outcomes are absent from the result (mirroring Analyze returning nil).
+func (a *Analyzer) AnalyzeRefs(refs []gotest.Reference) (map[gotest.Reference]*Analysis, error) {
+	outcomes, err := a.collectOutcomes()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[gotest.Reference]*Analysis, len(refs))
+	for _, ref := range refs {
+		outs, ok := outcomes[ref]
+		if !ok {
+			continue
+		}
+		analysis := a.analyze(ref, outs)
+		result[ref] = &analysis
+	}
+	return result, nil
+}
+
 // Analyze analyzes a specific test reference for flakiness.
 func (a *Analyzer) Analyze(ref gotest.Reference) (*Analysis, error) {
 	outcomes, err := a.collectOutcomes()

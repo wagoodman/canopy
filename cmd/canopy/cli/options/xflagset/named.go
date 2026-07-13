@@ -10,6 +10,7 @@ import (
 	"text/template"
 	"unicode"
 
+	"github.com/scylladb/go-set/strset"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -95,29 +96,64 @@ func (nfs *Named) printSections(cols int) string {
 		if !fs.HasFlags() {
 			continue
 		}
-
-		wideFS := pflag.NewFlagSet("", pflag.ExitOnError)
-		wideFS.AddFlagSet(fs)
-
-		var zzz string
-		if cols > 24 {
-			zzz = strings.Repeat("z", cols-24)
-			wideFS.Int(zzz, 0, strings.Repeat("z", cols-24))
-		}
-
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "\n%s flags:\n\n%s", strings.ToUpper(name[:1])+name[1:], wideFS.FlagUsagesWrapped(cols))
-
-		if cols > 24 {
-			i := strings.Index(buf.String(), zzz)
-			lines := strings.Split(buf.String()[:i], "\n")
-			fmt.Fprint(w, strings.Join(lines[:len(lines)-1], "\n"))
-			fmt.Fprintln(w)
-		} else {
-			fmt.Fprint(w, buf.String())
-		}
+		fmt.Fprint(w, renderSection(name, fs, cols))
 	}
 	return w.String()
+}
+
+// printSectionsWithLocal renders the named groups plus a trailing catch-all section for any of the
+// command's local flags that were never placed in a named group. Without this, a flag registered
+// directly on the flag set (not routed through a group decorator) silently vanishes from help since
+// the custom usage template renders only named groups.
+func (nfs *Named) printSectionsWithLocal(local *pflag.FlagSet, cols int) string {
+	out := nfs.printSections(cols)
+
+	grouped := strset.New()
+	for _, fs := range nfs.FlagSets {
+		fs.VisitAll(func(f *pflag.Flag) { grouped.Add(f.Name) })
+	}
+
+	ungrouped := pflag.NewFlagSet("", pflag.ExitOnError)
+	if local != nil {
+		local.VisitAll(func(f *pflag.Flag) {
+			if f.Name == "help" || grouped.Has(f.Name) {
+				return
+			}
+			ungrouped.AddFlag(f)
+		})
+	}
+	if ungrouped.HasFlags() {
+		out += renderSection("", ungrouped, cols)
+	}
+	return out
+}
+
+// renderSection renders a single named flag set as a help section. An empty name yields a generic
+// "Flags:" heading for the ungrouped catch-all.
+func renderSection(name string, fs *pflag.FlagSet, cols int) string {
+	wideFS := pflag.NewFlagSet("", pflag.ExitOnError)
+	wideFS.AddFlagSet(fs)
+
+	var zzz string
+	if cols > 24 {
+		zzz = strings.Repeat("z", cols-24)
+		wideFS.Int(zzz, 0, strings.Repeat("z", cols-24))
+	}
+
+	heading := "Flags"
+	if name != "" {
+		heading = strings.ToUpper(name[:1]) + name[1:] + " flags"
+	}
+
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "\n%s:\n\n%s", heading, wideFS.FlagUsagesWrapped(cols))
+
+	if cols > 24 {
+		i := strings.Index(buf.String(), zzz)
+		lines := strings.Split(buf.String()[:i], "\n")
+		return strings.Join(lines[:len(lines)-1], "\n") + "\n"
+	}
+	return buf.String()
 }
 
 type cmdWrapper struct {
@@ -134,7 +170,7 @@ func (nfs *Named) BindUsageAndHelpFunc(cmd *cobra.Command, cols int) {
 			usageTemplate,
 			&cmdWrapper{
 				Command:         cmd,
-				NamedLocalFlags: nfs.printSections(cols),
+				NamedLocalFlags: nfs.printSectionsWithLocal(cmd.LocalFlags(), cols),
 			},
 		)
 	}

@@ -47,7 +47,7 @@ func ListRuns(app clio.Application) *cobra.Command {
 
 	opts := &listRunsConfig{
 		Store:  store,
-		Output: "table",
+		Output: formatTable,
 	}
 
 	cmd := &cobra.Command{
@@ -128,7 +128,7 @@ func runListRuns(cfg listRunsConfig) error {
 	switch strings.ToLower(cfg.Output) {
 	case formatJSON:
 		return writeRunsJSON(os.Stdout, entries)
-	case "table", "":
+	case formatTable, "":
 		writeRunsTable(os.Stdout, os.Stderr, entries)
 		return nil
 	default:

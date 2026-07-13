@@ -126,6 +126,12 @@ type Package struct {
 	ImportPath string
 	// ModulePath is the module path containing this package (extracted from Module.Path).
 	ModulePath string // module path of package (this is not part of the original datastructure, but instead extracted from Module.Path)
+	// Deps lists all (recursively) imported dependencies of the package's non-test build.
+	Deps []string
+	// TestImports lists imports from in-package _test.go files (TestGoFiles).
+	TestImports []string
+	// XTestImports lists imports from external _test.go files (XTestGoFiles).
+	XTestImports []string
 	// ImportComment string   // path in import comment on package statement
 	// Name          string   // package name
 	// Doc           string   // package documentation string
@@ -259,6 +265,60 @@ func PackageInfo(pkgs ...string) ([]Package, error) {
 	}
 
 	log.WithFields("count", len(output)).Trace("go list packages")
+
+	return output, nil
+}
+
+// goListJSON is the subset of `go list -json` output needed to build the import graph.
+// It mirrors the nested Module object that the minimal -f template flattens into ModulePath.
+type goListJSON struct {
+	Dir          string
+	ImportPath   string
+	Module       *struct{ Path string }
+	Deps         []string
+	TestImports  []string
+	XTestImports []string
+}
+
+// PackageGraph retrieves packages along with their dependency edges (Deps, TestImports,
+// XTestImports) using `go list -json`. This is heavier than PackageInfo's minimal template,
+// but the extra edges are required for reverse import-graph impact analysis and this is not
+// a hot path. Output objects are streamed since `go list -json` emits concatenated (not JSONL)
+// JSON documents.
+func PackageGraph(pkgs ...string) ([]Package, error) {
+	var output []Package
+
+	fn := func(stdout io.ReadCloser) error {
+		dec := json.NewDecoder(stdout)
+		for {
+			var raw goListJSON
+			if err := dec.Decode(&raw); err != nil {
+				if err == io.EOF {
+					break
+				}
+				log.WithFields("error", err).Warn("error decoding go list -json entry")
+				return err
+			}
+			p := Package{
+				Dir:          raw.Dir,
+				ImportPath:   raw.ImportPath,
+				Deps:         raw.Deps,
+				TestImports:  raw.TestImports,
+				XTestImports: raw.XTestImports,
+			}
+			if raw.Module != nil {
+				p.ModulePath = raw.Module.Path
+			}
+			output = append(output, p)
+		}
+		return nil
+	}
+
+	if err := run([]string{"-json"}, fn, pkgs...); err != nil {
+		return nil, err
+	}
+
+	log.WithFields("count", len(output)).Trace("go list -json packages")
 
 	return output, nil
 }

@@ -12,7 +12,6 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/selector"
 	"github.com/wagoodman/canopy/cmd/canopy/internal"
-	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/test"
@@ -73,17 +72,9 @@ func Root(app clio.Application) *cobra.Command {
 		},
 		//Example: // TODO
 		PreRunE: func(_ *cobra.Command, _ []string) error {
-			// get the final set of packages to use
-			testPkgs, err := golist.SelectPackages(opts.Test.Specifiers, opts.Test.ExcludePatterns)
-			if err != nil {
-				return fmt.Errorf("unable to get test paths: %w", err)
-			}
-			if testPkgs.Size() == 0 {
-				return fmt.Errorf("no packages selected to test (given %q)", opts.Test.Specifiers)
-			}
-			opts.Test.Runtime.Packages = testPkgs
-
-			return nil
+			// resolve packages (narrowing to affected first when --affected is set)
+			_, err := selectTestPackages(&opts.Test)
+			return err
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			defer func() {
@@ -111,6 +102,10 @@ func Root(app clio.Application) *cobra.Command {
 }
 
 func runRoot(ctx context.Context, app clio.Application, rootCfg rootConfig) error {
+	if rootCfg.Test.Runtime.NothingToRun {
+		return nil
+	}
+
 	testDefs, selected, err := discoverAndSelectTests(rootCfg)
 	if err != nil {
 		return err
