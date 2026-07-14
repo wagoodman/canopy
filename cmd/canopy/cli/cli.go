@@ -45,6 +45,7 @@ func New(id clio.Identification) *cobra.Command {
 		commands.Trend(app),
 		commands.Affected(app),
 		commands.Triage(app),
+		commands.Verify(app),
 		commands.DB(app),
 	)
 

@@ -199,6 +199,78 @@ func changedGoPathsSince(repo *git.Repository, ref string) ([]string, error) {
 	return paths, nil
 }
 
+// DefaultBranch resolves the repository's default branch name (e.g. "main" or "master").
+// It first consults the remote's advertised default via refs/remotes/origin/HEAD, then falls
+// back to probing for local "main" and "master" branches. Returns an error if none resolve,
+// leaving the fallback decision to the caller.
+func DefaultBranch(dir string) (string, error) {
+	repo, err := openRepo(dir)
+	if err != nil {
+		return "", err
+	}
+	if repo == nil {
+		return "", fmt.Errorf("%s is not within a git repository", dir)
+	}
+
+	// prefer the remote's advertised default, e.g. refs/remotes/origin/HEAD -> refs/remotes/origin/main
+	if ref, err := repo.Reference(plumbing.NewRemoteHEADReferenceName("origin"), false); err == nil {
+		if target := ref.Target(); target.IsRemote() {
+			// short form is "origin/main"; drop the remote name to get the branch name
+			if short := strings.TrimPrefix(target.Short(), "origin/"); short != "" {
+				return short, nil
+			}
+		}
+	}
+
+	// fall back to probing common local default branch names
+	for _, name := range []string{"main", "master"} {
+		if _, err := repo.Reference(plumbing.NewBranchReferenceName(name), false); err == nil {
+			return name, nil
+		}
+	}
+
+	return "", fmt.Errorf("unable to determine default branch for %s", dir)
+}
+
+// MergeBase returns the merge-base commit SHA between baseRef and HEAD. Errors if either side
+// cannot be resolved or the histories share no common ancestor.
+func MergeBase(dir, baseRef string) (string, error) {
+	repo, err := openRepo(dir)
+	if err != nil {
+		return "", err
+	}
+	if repo == nil {
+		return "", fmt.Errorf("%s is not within a git repository", dir)
+	}
+
+	baseHash, err := repo.ResolveRevision(plumbing.Revision(baseRef))
+	if err != nil {
+		return "", fmt.Errorf("unable to resolve ref %q: %w", baseRef, err)
+	}
+	baseCommit, err := repo.CommitObject(*baseHash)
+	if err != nil {
+		return "", err
+	}
+
+	head, err := repo.Head()
+	if err != nil {
+		return "", err
+	}
+	headCommit, err := repo.CommitObject(head.Hash())
+	if err != nil {
+		return "", err
+	}
+
+	bases, err := baseCommit.MergeBase(headCommit)
+	if err != nil {
+		return "", err
+	}
+	if len(bases) == 0 {
+		return "", fmt.Errorf("no common ancestor between %q and HEAD", baseRef)
+	}
+	return bases[0].Hash.String(), nil
+}
+
 // toAbs joins each repo-relative path to root.
 func toAbs(root string, rel []string) []string {
 	abs := make([]string, len(rel))

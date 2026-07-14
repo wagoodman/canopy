@@ -176,7 +176,14 @@ func computeAffectedImportPaths(specifiers []string, since string) (*strset.Set,
 	if err != nil {
 		return nil, err
 	}
+	return affectedImportPathsFromFiles(specifiers, changedFiles)
+}
 
+// affectedImportPathsFromFiles is the import-graph analysis half of the impact pipeline: it takes
+// pre-resolved changed files and returns the affected package import paths, scoped to specifiers.
+// Split out so `canopy verify` can feed it files from its own target selector while `affected`
+// keeps resolving them from git.
+func affectedImportPathsFromFiles(specifiers []string, changedFiles []string) (*strset.Set, error) {
 	pkgs, err := golist.PackageGraph(specifiers...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list packages: %w", err)
