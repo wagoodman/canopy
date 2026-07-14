@@ -305,7 +305,9 @@ func (s Store) GetSessionTestRuns(sessionID uuid.UUID, infoOnly bool) ([]TestRun
 		db = db.Omit(clause.Associations)
 	}
 
-	if err := db.Where("session_id = ?", sessionID.String()).Find(&runs).Error; err != nil {
+	// session_id is the int64 PK of TestSession, not the UUID, so resolve the UUID to the PK first.
+	sessionPK := s.db.Model(&TestSession{}).Select("id").Where("uuid = ?", sessionID.String())
+	if err := db.Where("session_id = (?)", sessionPK).Find(&runs).Error; err != nil {
 		return nil, fmt.Errorf("unable to get test runs: %w", err)
 	}
 	return runs, nil
