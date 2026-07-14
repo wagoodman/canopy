@@ -408,7 +408,13 @@ func (s GoTestResultSummary) summaryFooter() string {
 	}
 
 	summary := strings.Join(sections, " ")
-	wideSummary := lipgloss.NewStyle().Width(s.config.PackageNameWidth).Render(summary)
+	// pad to the package-name column width, but never below the content width, else
+	// lipgloss word-wraps a summary wider than the column (e.g. the waiting state).
+	colWidth := s.config.PackageNameWidth
+	if w := lipgloss.Width(summary); w > colWidth {
+		colWidth = w
+	}
+	wideSummary := lipgloss.NewStyle().Width(colWidth).Render(summary)
 
 	result += wideSummary
 
