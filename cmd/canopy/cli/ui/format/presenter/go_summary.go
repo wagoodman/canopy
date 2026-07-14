@@ -237,7 +237,7 @@ func (s GoTestResultSummary) runningFooter() string { //nolint:funlen
 			completedPkgRefsAfter, pkgStats := s.completedPkgsAfter(s.firstNonStaleRunningRef(runningPkgRefs))
 
 			if len(completedPkgRefsAfter) > 0 {
-				aux := []string{"\t"} // no elapsed time for unrendered packages
+				aux := []string{" "} // blank (not "\t") elapsed placeholder, so stats align with running-package lines rather than landing one tab-stop further right
 				if s.config.ShowTestStatsForRunningPackages {
 					aux = append(aux, s.renderStats(s.mergeStats(pkgStats), true))
 				}
