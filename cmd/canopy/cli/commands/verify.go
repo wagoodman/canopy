@@ -115,6 +115,10 @@ state (all failures are treated as new), not an error.
 'ok' is the one boolean to branch on: every target is fixed/passing (or no target resolved) AND
 there are no new regressions. Exit code is 0 when ok, non-zero otherwise.
 
+verify reads TWO runs (target vs baseline); that baseline is what lets it report a 'fixed'
+bucket and decide the ok gate. To diagnose a single failing run (what's flaky vs real, its
+distinct symptoms, and the likely cause) without a baseline, see 'triage'.
+
 Examples:
   # verify the latest run: derive the targets from what changed on this branch
   canopy verify
@@ -627,10 +631,13 @@ type verifyResultJSON struct {
 	Targets        []verifyTargetJSON     `json:"targets"`
 	TargetSource   targetProvenance       `json:"target_source"`
 	NewRegressions []verifyRegressionJSON `json:"new_regressions"`
-	StillFailing   []verifyStillJSON      `json:"still_failing"`
-	FlakyIgnored   []string               `json:"flaky_ignored"`
-	Summary        string                 `json:"summary"`
-	OK             bool                   `json:"ok"`
+	// NewRegressionClusters collapses new_regressions by shared symptom so an agent fixes K
+	// distinct symptoms, not N failures. omitted when there are no regressions.
+	NewRegressionClusters []clusterJSON     `json:"new_regression_clusters,omitempty"`
+	StillFailing          []verifyStillJSON `json:"still_failing"`
+	FlakyIgnored          []string          `json:"flaky_ignored"`
+	Summary               string            `json:"summary"`
+	OK                    bool              `json:"ok"`
 }
 
 type verifyTargetJSON struct {
@@ -682,6 +689,11 @@ func buildVerifyResult(d verifyDiff, targets []verifyTargetJSON, provenance targ
 	for _, ref := range d.Flaky {
 		res.FlakyIgnored = append(res.FlakyIgnored, ref.String(false))
 	}
+	// fold in the clustered view of the new regressions (reusing triage's clustering) so the
+	// fan-out case reads as "K distinct symptoms" here too. left nil when there are none so JSON omits it.
+	if len(d.NewRegressions) > 0 {
+		res.NewRegressionClusters = clusterFailures(d.NewRegressions).Clusters
+	}
 
 	res.OK = targetsSatisfied(res.Targets) && len(res.NewRegressions) == 0
 	res.Summary = verifySummary(res, noBaselineReason, targetReason)
@@ -713,6 +725,12 @@ func verifySummary(res verifyResultJSON, noBaselineReason, targetReason string) 
 	}
 	if n := len(res.NewRegressions); n == 0 {
 		parts = append(parts, "no new regressions")
+	} else if k := len(res.NewRegressionClusters); k > 0 && k < n {
+		// only surface clusters when they actually collapse the count (K < N), so a single
+		// regression still reads plainly as "1 new regression".
+		parts = append(parts, fmt.Sprintf("%d %s across %d distinct %s",
+			n, plural(n, "new regression", "new regressions"),
+			k, plural(k, "symptom", "symptoms")))
 	} else {
 		parts = append(parts, fmt.Sprintf("%d %s", n, plural(n, "new regression", "new regressions")))
 	}

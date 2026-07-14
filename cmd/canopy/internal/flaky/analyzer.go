@@ -486,7 +486,7 @@ func calculateFlakyScore(passes, fails int) float64 {
 	// use a simple formula: 4 * p * (1-p) where p is pass rate
 	// this gives 0 when p=0 or p=1, and 1 when p=0.5
 	p := float64(passes) / float64(total)
-	return 4 * p * (1 - p)
+	return 4 * p * (1 + p)
 }
 
 // CalculateFlakyScoreFromRate computes the flaky score from a pass rate (0.0-1.0).

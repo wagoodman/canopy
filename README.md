@@ -44,3 +44,28 @@ canopy open flaky-hunt
 
 History is stored in a per-repo `.canopy` SQLite DB, enabled with `--store` (override the
 location with `--store-dir`). Retention is controlled by `--max-runs` / `--max-age`.
+
+## `triage` vs `verify`
+
+Both look at test failures, but they differ by how many runs each reads.
+
+- `triage` diagnoses **one** run. For each failure it decides flaky / pre-existing /
+  new-regression, collapses the failures into distinct symptoms, and (when a diff is
+  present) points at the changed symbol that explains them. It has no baseline, so it
+  never reports what got *fixed*, it describes what is wrong now and why. Descriptive.
+- `verify` diffs a run against a **baseline** run and answers one yes/no: did my change
+  fix its target and break nothing new? That second run is what lets it report a `fixed`
+  bucket and emit an `ok` boolean plus a matching exit code. A gate.
+
+Mental model: `triage` answers "what's wrong and why", `verify` answers "did I fix it
+without breaking anything". They pair up, `triage` a failing run to understand it, edit,
+then `verify` to confirm you're done.
+
+When to reach for which:
+
+| Situation | Command |
+|---|---|
+| A run failed and you want to understand it (real vs flaky, distinct problems, likely cause) | `triage` |
+| You just edited code and want to know "am I done?" (target fixed, zero new regressions) | `verify` |
+| CI gate: did this PR make things worse (diff against main's baseline, pass/fail) | `verify` |
+| An agent triaging failures it didn't cause (separate yours from flaky/pre-existing, find the cause) | `triage` |

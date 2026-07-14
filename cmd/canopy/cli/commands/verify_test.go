@@ -231,6 +231,9 @@ func TestBuildVerifyResult(t *testing.T) {
 				NewRegressions: []verifyRegressionJSON{
 					{Reference: pkg + "/TestToken", Fingerprint: "fp-new", Repro: "go test pkg/auth -run '^TestToken$'"},
 				},
+				NewRegressionClusters: []clusterJSON{
+					{Symptom: "failure", Count: 1, References: []string{pkg + "/TestToken"}, SampleRepro: "go test pkg/auth -run '^TestToken$'"},
+				},
 				StillFailing: []verifyStillJSON{},
 				FlakyIgnored: []string{},
 				Summary:      "target fixed; 1 new regression",
@@ -307,6 +310,9 @@ func TestBuildVerifyResult(t *testing.T) {
 				Targets: []verifyTargetJSON{},
 				NewRegressions: []verifyRegressionJSON{
 					{Reference: pkg + "/TestToken", Fingerprint: "fp-new", Repro: "go test pkg/auth -run '^TestToken$'"},
+				},
+				NewRegressionClusters: []clusterJSON{
+					{Symptom: "failure", Count: 1, References: []string{pkg + "/TestToken"}, SampleRepro: "go test pkg/auth -run '^TestToken$'"},
 				},
 				StillFailing: []verifyStillJSON{},
 				FlakyIgnored: []string{},

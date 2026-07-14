@@ -17,7 +17,9 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/flaky"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/failure"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/localize"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/source"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/test"
 
 	"github.com/anchore/clio"
@@ -56,12 +58,18 @@ type triageOpts struct {
 	Run        string `yaml:"run" json:"run" mapstructure:"run"`
 	Reference  string `yaml:"reference" json:"reference" mapstructure:"reference"`
 	ShowRepros bool   `yaml:"show-repros" json:"show-repros" mapstructure:"show-repros"`
+	Cluster    bool   `yaml:"cluster" json:"cluster" mapstructure:"cluster"`
+	Since      string `yaml:"since" json:"since" mapstructure:"since"`
 }
 
 func (o *triageOpts) AddFlags(flags fangs.FlagSet) {
 	flags.StringVarP(&o.Run, "run", "", "run ID to triage (default: the last run)")
 	flags.StringVarP(&o.Reference, "reference", "", "triage only this reference (pkg/TestName)")
 	flags.BoolVarP(&o.ShowRepros, "show-repros", "", "show the `go test` repro command under each failure")
+	// ponytail: --cluster is now the default (and only) view; kept as a no-op alias so existing
+	// `triage --cluster` invocations keep working. drop it on the next flag-breaking release.
+	flags.BoolVarP(&o.Cluster, "cluster", "", "deprecated: symptom clustering is always on now (no-op)")
+	flags.StringVarP(&o.Since, "since", "", "git ref to scope the root-cause change set against (default: the dirty working tree)")
 }
 
 type triageConfig struct {
@@ -85,14 +93,24 @@ func Triage(app clio.Application) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "triage",
-		Short: "classify the failures in a run as flaky, pre-existing, or new-regression",
-		Long: `Emit a verdict for each failure in a test run so an agent (or human) knows
-which failures are worth acting on.
+		Short: "fuse a run's failures into symptoms, verdicts, and root causes",
+		Long: `Produce one holistic report for a test run: X failures grouped into Y distinct
+symptoms, each pointing to Z changed root causes, with every symptom showing its
+verdict and its root cause side by side.
 
-For each failed test in the target run, the verdict is one of:
+For each failed test, the verdict is one of:
   flaky          - the test intermittently passes and fails; don't chase it
   pre-existing   - this failure predates the target run; you likely didn't cause it
   new-regression - a new failure unique to this run; most likely worth fixing
+
+Failures are grouped by symptom and, when a diff is available, every failure is
+localized to the changed symbols that statically explain it, regardless of verdict.
+A flaky failure that still reaches a changed symbol keeps its flaky label but also
+shows the diff-based root cause ("flaky per history, but explained by your diff").
+
+triage reads ONE run (this run plus its history and the diff), so it describes what
+is wrong now and why, never what got fixed. To gate a change against a baseline run
+(did I fix the target and break nothing new), see 'verify'.
 
 Examples:
   # triage the last run
@@ -103,6 +121,9 @@ Examples:
 
   # triage a single test
   canopy triage --reference 'github.com/org/repo/pkg/TestUserLogin'
+
+  # scope the root-cause change set against a git ref (default: the dirty working tree)
+  canopy triage --since main
 
   # emit machine-readable JSON
   canopy triage --output json`,
@@ -191,31 +212,105 @@ func runTriage(cfg triageConfig) error {
 		ExcludePatterns: cfg.ExcludePatterns,
 	})
 
-	results, err := triageFailures(analyzer, failures, cfg.Triage.Reference, runInfo.Started)
+	selected := selectFailures(failures, cfg.Triage.Reference)
+
+	// the holistic report fuses three layers over the same failures: group by symptom, verdict each
+	// failure by its history, and localize EVERY failure to the changed symbols that explain it.
+	// localization runs regardless of verdict: a flaky failure that still reaches a changed symbol
+	// keeps its flaky label but also shows the diff-based root cause, so "flaky per history, but
+	// explained by your diff" is visible instead of hidden. the --cluster flag is now the default
+	// view (kept as a harmless alias); both paths converge on this one report.
+	clusters := clusterFailures(selected)
+
+	results, err := triageResults(analyzer, selected, runInfo.Started)
 	if err != nil {
 		return err
 	}
+	verdictByRef := make(map[string]Verdict, len(results))
+	for _, r := range results {
+		verdictByRef[r.Reference] = r.Verdict
+	}
+
+	// localize is enrichment, not a gate: it engages only when a diff is available and any
+	// localization failure degrades to the plain symptom-grouped report rather than sinking triage.
+	loc := localizeFailures(cfg.Triage.Since, allReferences(selected))
+
+	groups := fuseGroups(clusters, verdictByRef, loc)
+	distinct := distinctTopCauses(groups)
 
 	if cfg.Output == formatJSON {
-		return displayTriageJSON(results)
+		return displayTriageReportJSON(groups, len(selected), len(groups), len(distinct), loc)
 	}
-	displayTriageSummary(results, runID.String(), cfg.Triage.ShowRepros)
+	displayTriageReport(groups, fusedSummary(clusters.Summary, distinct), runID.String(), abbrevRefs(selected), cfg.Triage.ShowRepros)
 	return nil
 }
 
-// triageFailures selects the failures to report (optionally narrowed to a single
-// reference), analyzes their history in ONE pass over the store, and returns results
-// sorted most-actionable first. analyzing per-ref would re-scan the whole store for
-// each failure, so refs are batched through AnalyzeRefs.
-func triageFailures(analyzer *flaky.Analyzer, failures []runFailure, only string, targetStart time.Time) ([]triageResultJSON, error) {
-	selected := failures[:0:0]
-	for _, f := range failures {
-		if only != "" && f.ref.String(false) != only && f.ref.String(true) != only {
-			continue
-		}
-		selected = append(selected, f)
+// allReferences returns every selected failure's reference (the localization input). all failures
+// are localized regardless of verdict: reachability to a changed symbol is evidence worth showing
+// even for a flaky failure, so the reader sees "flaky per history, but explained by your diff"
+// rather than having the flaky verdict mask a real diff-based cause.
+func allReferences(selected []runFailure) []gotest.Reference {
+	out := make([]gotest.Reference, len(selected))
+	for i, f := range selected {
+		out[i] = f.ref
+	}
+	return out
+}
+
+// localizeFailures resolves the change set (the dirty working tree, or --since <ref>), extracts
+// its changed symbols, scopes a call graph to the affected packages, and ranks the changed symbols
+// by how many failures reach them. Returns nil (no annotation) when there is no diff, no changed
+// symbols, or nothing to attribute, in which case triage reads as plain symptom-grouped verdicts. Errors
+// are logged and swallowed: localization is a best-effort layer, never a reason to fail the report.
+func localizeFailures(since string, failures []gotest.Reference) *localize.Result {
+	if len(failures) == 0 {
+		return nil
 	}
 
+	var (
+		changedFiles []string
+		err          error
+	)
+	if since != "" {
+		changedFiles, err = source.ChangedGoFilesSince(".", since)
+	} else {
+		changedFiles, err = source.ChangedGoFiles(".")
+	}
+	if err != nil {
+		log.WithFields("error", err).Debug("root-cause localization skipped: unable to resolve changed files")
+		return nil
+	}
+	if len(changedFiles) == 0 {
+		return nil
+	}
+
+	changed, err := localize.ChangedSymbols(changedFiles)
+	if err != nil {
+		log.WithFields("error", err).Debug("root-cause localization skipped: unable to extract changed symbols")
+		return nil
+	}
+	if len(changed) == 0 {
+		return nil
+	}
+
+	affected, err := affectedImportPathsFromFiles([]string{options.DefaultPackageSpecifier}, changedFiles)
+	if err != nil {
+		log.WithFields("error", err).Debug("root-cause localization skipped: unable to compute affected packages")
+		return nil
+	}
+
+	res, err := localize.Localize(affected.List(), changed, failures)
+	if err != nil {
+		log.WithFields("error", err).Warn("root-cause localization failed; reporting symptom-grouped verdicts only")
+		return nil
+	}
+	return res
+}
+
+// triageResults analyzes the selected failures' history in ONE pass over the store and returns
+// results sorted most-actionable first. analyzing per-ref would re-scan the whole store for each
+// failure, so refs are batched through AnalyzeRefs.
+func triageResults(analyzer *flaky.Analyzer, selected []runFailure, targetStart time.Time) ([]triageResultJSON, error) {
 	refs := make([]gotest.Reference, len(selected))
 	for i, f := range selected {
 		refs[i] = f.ref
@@ -238,6 +333,21 @@ func triageFailures(analyzer *flaky.Analyzer, failures []runFailure, only string
 		return results[i].Reference < results[j].Reference
 	})
 	return results, nil
+}
+
+// selectFailures narrows failures to a single reference (matched against both raw and cleaned
+// forms) when only is set, else returns all. shared by the triage and cluster paths.
+func selectFailures(failures []runFailure, only string) []runFailure {
+	if only == "" {
+		return failures
+	}
+	out := failures[:0:0]
+	for _, f := range failures {
+		if f.ref.String(false) == only || f.ref.String(true) == only {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // buildResult produces a single per-failure result. the flaky determination and history
@@ -324,7 +434,13 @@ func buildRepro(ref gotest.Reference) string {
 	if ref.TRunName != "" {
 		pattern = ref.FuncName + "/" + ref.SubTestName(true)
 	}
-	return fmt.Sprintf("go test %s -run '^%s$'", ref.Package, pattern)
+	return reproCommand(ref.Package, pattern)
+}
+
+// reproCommand renders a `go test` invocation anchoring pattern as a full-match -run regex. shared
+// by the single-failure and cluster repros so the anchoring/quoting lives in one place.
+func reproCommand(pkg, pattern string) string {
+	return fmt.Sprintf("go test %s -run '^%s$'", pkg, pattern)
 }
 
 // collectRunFailures returns the individual (non-package) test failures of a run, paired
@@ -363,7 +479,70 @@ func collectRunFailures(mgr *test.Manager, runID uuid.UUID) ([]runFailure, error
 		}
 		out = append(out, runFailure{ref: e.Reference, detail: *detail})
 	}
-	return out, nil
+	return dropRedundantParents(out), nil
+}
+
+// dropRedundantParents removes a failing test's own failure when BOTH a subtest descendant in the
+// same run also failed AND this failure carries no independent detail (a pure "subtests failed"
+// aggregate). go reports a parent as failed whenever any subtest fails, so without this the parent
+// shows up as a phantom failure alongside its real subtest causes. shared collection point, so
+// triage, verify, and cluster all benefit.
+//
+// ponytail: aggregate-detection is a heuristic (generic type + no assertion + no location), not
+// explicit event linkage. a parent that ran its own t.Error before spawning subtests keeps a real
+// assertion, so it is NOT a pure aggregate and is preserved. upgrade path if the heuristic proves
+// too coarse: join parent/child by explicit go-test event parentage.
+func dropRedundantParents(failures []runFailure) []runFailure {
+	out := failures[:0:0]
+	for i, f := range failures {
+		if isPureAggregate(f.detail) && hasFailingDescendant(f.ref, failures, i) {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+// isPureAggregate reports whether a failure carries no independent detail of its own: a generic
+// (non-structured) type with no assertion expected/actual and no source location. such a failure is
+// just "a child failed", not a parent-level assertion.
+func isPureAggregate(detail db.FailedTestDetails) bool {
+	switch failure.Type(detail.Type) {
+	case failure.AssertionFailure, failure.PanicFailure, failure.DiffFailure, failure.TimeoutFailure:
+		return false
+	}
+	f := buildFailure(detail)
+	return f.Location == "" && f.Expected == "" && f.Actual == ""
+}
+
+// hasFailingDescendant reports whether any other failure (skipping index self) is a subtest
+// descendant of ancestor within the same run.
+func hasFailingDescendant(ancestor gotest.Reference, failures []runFailure, self int) bool {
+	for j, other := range failures {
+		if j == self {
+			continue
+		}
+		if isSubtestDescendant(ancestor, other.ref) {
+			return true
+		}
+	}
+	return false
+}
+
+// isSubtestDescendant reports whether descendant is a subtest nested under ancestor: same package,
+// same top-level function, and a subtest path that extends the ancestor's. a func-level ancestor
+// (no TRunName) owns any subtest of that function; an intermediate subtest A/B owns A/B/C.
+func isSubtestDescendant(ancestor, descendant gotest.Reference) bool {
+	if ancestor.Package != descendant.Package || ancestor.FuncName != descendant.FuncName {
+		return false
+	}
+	if ancestor.TRunName == descendant.TRunName {
+		return false
+	}
+	if ancestor.TRunName == "" {
+		return descendant.TRunName != ""
+	}
+	return strings.HasPrefix(descendant.TRunName, ancestor.TRunName+"/")
 }
 
 func verdictRank(v Verdict) int {
@@ -379,10 +558,154 @@ func verdictRank(v Verdict) int {
 	}
 }
 
-func displayTriageJSON(results []triageResultJSON) error {
+// triageGroup fuses one symptom cluster with its members' verdicts and the root-cause candidates
+// reachable from those members (in localize's global rank order, top first). pure intermediate
+// shared by the table and JSON renderers.
+type triageGroup struct {
+	cluster    clusterJSON
+	verdicts   []Verdict
+	candidates []localize.Candidate
+}
+
+// fuseGroups correlates the three layers of the holistic report: it takes the symptom clusters,
+// the per-failure verdicts, and the localization candidates, and attaches to each symptom group
+// its members' distinct verdicts and every changed symbol reachable from a member (globally ranked
+// so the symbol explaining the most failures leads). pure so the correlation is unit-testable.
+func fuseGroups(clusters clusterResultJSON, verdictByRef map[string]Verdict, loc *localize.Result) []triageGroup {
+	groups := make([]triageGroup, 0, len(clusters.Clusters))
+	for _, c := range clusters.Clusters {
+		groups = append(groups, triageGroup{
+			cluster:    c,
+			verdicts:   distinctVerdicts(c.References, verdictByRef),
+			candidates: candidatesForGroup(c.References, loc),
+		})
+	}
+	return groups
+}
+
+// distinctVerdicts returns the distinct verdicts across a group's members, most-actionable first.
+// a symptom cluster usually shares one verdict, but distinct histories can split it; showing all
+// present verdicts keeps the label honest.
+func distinctVerdicts(refs []string, verdictByRef map[string]Verdict) []Verdict {
+	seen := map[Verdict]bool{}
+	var out []Verdict
+	for _, ref := range refs {
+		v, ok := verdictByRef[ref]
+		if !ok || seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return verdictRank(out[i]) < verdictRank(out[j]) })
+	return out
+}
+
+// candidatesForGroup returns the changed symbols reachable from any of the group's members, keeping
+// localize's global rank order (reached_by desc) so the symbol explaining the most failures across
+// the whole run leads even within a single-member group. each candidate's references are narrowed
+// to the members it actually reaches so the per-group reached_by is honest to the symptom.
+func candidatesForGroup(refs []string, loc *localize.Result) []localize.Candidate {
+	if loc == nil {
+		return nil
+	}
+	member := make(map[string]bool, len(refs))
+	for _, r := range refs {
+		member[r] = true
+	}
+	var out []localize.Candidate
+	for _, c := range loc.Candidates {
+		var hit []string
+		for _, r := range c.References {
+			if member[r] {
+				hit = append(hit, r)
+			}
+		}
+		if len(hit) == 0 {
+			continue
+		}
+		out = append(out, localize.Candidate{
+			Symbol:     c.Symbol,
+			Location:   c.Location,
+			ReachedBy:  len(hit),
+			References: hit,
+		})
+	}
+	return out
+}
+
+// distinctTopCauses returns the distinct top-of-group root causes across all groups (first-seen
+// order), the Z in "X failures across Y symptoms → Z root causes". a symptom's top cause is the
+// globally-highest-ranked changed symbol reaching it; distinct symbols across groups are the
+// separate things a reader would actually go fix, so two symptoms sharing one cause count as Z=1.
+func distinctTopCauses(groups []triageGroup) []localize.Candidate {
+	seen := map[string]bool{}
+	var out []localize.Candidate
+	for _, g := range groups {
+		if len(g.candidates) == 0 {
+			continue
+		}
+		top := g.candidates[0]
+		if seen[top.Symbol] {
+			continue
+		}
+		seen[top.Symbol] = true
+		out = append(out, top)
+	}
+	return out
+}
+
+// triageGroupJSON is one symptom group in the holistic report: the clustered failures, their
+// verdict(s), and the root-cause candidates reachable from the group's members.
+type triageGroupJSON struct {
+	Symptom             string               `json:"symptom"`
+	Location            string               `json:"location,omitempty"`
+	Count               int                  `json:"count"`
+	References          []string             `json:"references"`
+	Verdicts            []Verdict            `json:"verdicts"`
+	RootCauseCandidates []localize.Candidate `json:"root_cause_candidates,omitempty"`
+	SampleRepro         string               `json:"sample_repro"`
+}
+
+// triageReportJSON is the holistic triage report: X failures across Y symptoms → Z root causes,
+// each symptom carrying its verdict(s) and root-cause candidates side by side. call_graph /
+// localization_summary are omitted when no diff is present, so the report degrades to
+// symptom-grouped verdicts.
+type triageReportJSON struct {
+	Failures            int               `json:"failures"`
+	Symptoms            int               `json:"symptoms"`
+	RootCauses          int               `json:"root_causes"`
+	Groups              []triageGroupJSON `json:"groups"`
+	CallGraph           string            `json:"call_graph,omitempty"`
+	LocalizationSummary string            `json:"localization_summary,omitempty"`
+}
+
+func displayTriageReportJSON(groups []triageGroup, failures, symptoms, rootCauses int, loc *localize.Result) error {
+	report := triageReportJSON{
+		Failures:   failures,
+		Symptoms:   symptoms,
+		RootCauses: rootCauses,
+		Groups:     make([]triageGroupJSON, 0, len(groups)),
+	}
+	for _, g := range groups {
+		report.Groups = append(report.Groups, triageGroupJSON{
+			Symptom:             g.cluster.Symptom,
+			Location:            g.cluster.Location,
+			Count:               g.cluster.Count,
+			References:          g.cluster.References,
+			Verdicts:            g.verdicts,
+			RootCauseCandidates: g.candidates,
+			SampleRepro:         g.cluster.SampleRepro,
+		})
+	}
+	if loc != nil {
+		report.CallGraph = loc.CallGraph
+		report.LocalizationSummary = loc.Summary
+	}
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
-	return encoder.Encode(results)
+	encoder.SetEscapeHTML(false)
+	return encoder.Encode(report)
 }
 
 // verdictStyle maps each verdict to a shared output style (see the style vars in affected.go)
@@ -401,60 +724,92 @@ func verdictStyle(v Verdict) lipgloss.Style {
 	}
 }
 
-// triageBreakdown renders the aux rollup, listing only the non-zero verdict categories:
-//
-//	"55 failures (all pre-existing)" when one category covers everything,
-//	"55 failures (54 pre-existing, 1 flaky)" otherwise.
-func triageBreakdown(total int, counts [4]int) string {
-	labels := [3]Verdict{VerdictNewRegression, VerdictPreExisting, VerdictFlaky}
-	var parts []string
-	var lastName string
-	for i, label := range labels {
-		if counts[i] > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", counts[i], label))
-			lastName = string(label)
-		}
-	}
-
-	noun := "failures"
-	if total == 1 {
-		noun = "failure"
-	}
-
-	switch len(parts) {
+// fusedSummary appends the localization layer to the symptom-grouping summary: "→ 1 root cause:
+// <symbol>" when one changed symbol explains the symptoms, "→ N root causes" for several, and an
+// honest "→ no root cause in the diff" when nothing in the change set is reachable.
+func fusedSummary(clusterSummary string, distinct []localize.Candidate) string {
+	switch len(distinct) {
 	case 0:
-		return fmt.Sprintf("%d %s", total, noun)
+		return clusterSummary + " → no root cause in the diff"
 	case 1:
-		return fmt.Sprintf("%d %s (all %s)", total, noun, lastName)
+		return clusterSummary + " → 1 root cause: " + causeLabel(distinct[0])
 	default:
-		return fmt.Sprintf("%d %s (%s)", total, noun, strings.Join(parts, ", "))
+		return fmt.Sprintf("%s → %d root causes", clusterSummary, len(distinct))
 	}
 }
 
-func displayTriageSummary(results []triageResultJSON, runID string, showRepros bool) {
-	if len(results) == 0 {
+// causeLabel renders a candidate for a one-line display, abbreviating the symbol and location to
+// their last path segment (…/internal/flaky.calculateFlakyScore → flaky.calculateFlakyScore,
+// cmd/…/analyzer.go:475 → analyzer.go:475). the JSON keeps the fully-qualified forms.
+func causeLabel(c localize.Candidate) string {
+	return fmt.Sprintf("%s (%s)", lastSegment(c.Symbol), lastSegment(c.Location))
+}
+
+func lastSegment(s string) string {
+	if i := strings.LastIndex(s, "/"); i >= 0 {
+		return s[i+1:]
+	}
+	return s
+}
+
+// displayTriageReport renders the holistic report: one line per symptom (count + symptom +
+// location + verdict + root cause, side by side) with the member references indented beneath it,
+// then the X/Y/Z summary. this is the same layout as the cluster view, fused with the verdict and
+// root-cause pieces so all three layers appear together.
+func displayTriageReport(groups []triageGroup, summary, runID string, abbrevByRef map[string]string, showRepros bool) {
+	if len(groups) == 0 {
 		fmt.Printf("No failures in run %s.\n", runID)
 		return
 	}
-
-	var counts [4]int
-	for _, r := range results {
-		counts[verdictRank(r.Verdict)]++
-	}
-
-	for _, r := range results {
-		// Width pads to align refs by visible width, ignoring ANSI escapes
-		label := verdictStyle(r.Verdict).Width(15).Render(string(r.Verdict))
-		fmt.Printf("%s %s\n", label, r.Reference)
+	for _, g := range groups {
+		head := fmt.Sprintf("%s %s", styleChange.Render(fmt.Sprintf("×%d", g.cluster.Count)), g.cluster.Symptom)
+		if g.cluster.Location != "" {
+			// abbreviate to the basename for display (matching the root-cause location); the JSON
+			// keeps the full stored path.
+			head += " " + styleAux.Render("("+lastSegment(g.cluster.Location)+")")
+		}
+		if len(g.verdicts) > 0 {
+			head += "  " + verdictLabel(g.verdicts)
+		}
+		if len(g.candidates) > 0 {
+			head += "  " + styleAux.Render("↳ root cause: "+causeLabel(g.candidates[0]))
+		}
+		fmt.Println(head)
+		for _, ref := range g.cluster.References {
+			display := ref
+			if a, ok := abbrevByRef[ref]; ok {
+				display = a
+			}
+			fmt.Printf("  %s\n", display)
+		}
 		if showRepros {
-			fmt.Printf("%-15s %s\n", "", styleAux.Render(r.Repro))
+			fmt.Printf("  %s\n", styleAux.Render(g.cluster.SampleRepro))
 		}
 	}
 
-	// rollup footer (stats + hints) is aux: grey, and to stderr so stdout stays the pure report
-	fmt.Fprintf(os.Stderr, "\n%s\n", styleAux.Render(triageBreakdown(len(results), counts)))
-
+	// footer (summary + hint) is aux and on stderr so stdout stays the pure report.
+	fmt.Fprintf(os.Stderr, "\n%s\n", styleAux.Render(summary))
 	if !showRepros {
-		fmt.Fprintln(os.Stderr, styleAux.Render("run with --show-repros to see a `go test` command per failure"))
+		fmt.Fprintln(os.Stderr, styleAux.Render("run with --show-repros to see a `go test` command per symptom"))
 	}
+}
+
+// verdictLabel renders a group's distinct verdicts as a bracketed, color-coded label ("[flaky]",
+// or "[new-regression, flaky]" when a symptom's members disagree).
+func verdictLabel(vs []Verdict) string {
+	parts := make([]string, len(vs))
+	for i, v := range vs {
+		parts[i] = verdictStyle(v).Render(string(v))
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
+}
+
+// abbrevRefs maps each selected failure's full reference to a compact display form (…/TestName),
+// dropping the package path so the member list under each symptom stays readable.
+func abbrevRefs(selected []runFailure) map[string]string {
+	out := make(map[string]string, len(selected))
+	for _, f := range selected {
+		out[f.ref.String(false)] = "…/" + f.ref.TestName(true)
+	}
+	return out
 }

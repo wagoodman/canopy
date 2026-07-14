@@ -79,6 +79,13 @@ func ComputeFingerprint(sf *StructuredFailure) string {
 	return hex.EncodeToString(hash[:16]) // use first 16 bytes (32 hex chars)
 }
 
+// Normalize strips transient data (addresses, timestamps, UUIDs, goroutine IDs) from a value so
+// semantically-identical failures compare equal. exported for within-run clustering, which keys
+// panics on their normalized message.
+func Normalize(s string) string {
+	return normalizeValue(s)
+}
+
 // normalizeValue strips transient data from a value to enable semantic comparison.
 // This removes memory addresses, timestamps, UUIDs, and other run-specific data.
 func normalizeValue(s string) string {

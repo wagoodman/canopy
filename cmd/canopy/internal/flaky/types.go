@@ -46,7 +46,7 @@ type Analysis struct {
 }
 
 // FailureMode represents a distinct way a test can fail.
-// Failures are grouped by fingerprint to identify different failure root causes.
+// Failures are grouped by fingerprint to identify different failure symptoms.
 type FailureMode struct {
 	// Fingerprint is a semantic hash identifying this failure mode.
 	Fingerprint string
