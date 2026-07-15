@@ -57,6 +57,13 @@ func New(dbFilePath string) (*Store, error) {
 		return nil, err
 	}
 
+	// collapse any duplicate references before AutoMigrate adds the idx_ref_identity unique
+	// index, otherwise index creation fails on DBs that a pre-uniqueIndex schema (or a
+	// FirstOrCreate race) left with duplicate reference rows.
+	if err := dedupeReferences(db); err != nil {
+		return nil, fmt.Errorf("unable to dedupe references: %w", err)
+	}
+
 	ms := models()
 	for i := range ms {
 		model := ms[i]
@@ -309,10 +316,54 @@ func (s Store) GetSessionTestRuns(sessionID uuid.UUID, infoOnly bool) ([]TestRun
 	return runs, nil
 }
 
+// dedupeReferences collapses duplicate reference rows sharing the same identity tuple
+// (package, function, t_run_name), repointing their events onto the surviving (lowest-id)
+// row and deleting the extras. Runs before AutoMigrate so the idx_ref_identity unique index
+// can be added on an existing DB that predates the constraint. No-op on a fresh DB.
+func dedupeReferences(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&Reference{}) {
+		return nil
+	}
+
+	var refs []Reference
+	if err := db.Order("id ASC").Find(&refs).Error; err != nil {
+		return err
+	}
+
+	haveEvents := db.Migrator().HasTable(&TestEvent{})
+	keeper := make(map[string]int64, len(refs))
+	for _, r := range refs {
+		key := r.Package + "\x00" + r.FuncName + "\x00" + r.TRunName
+		keepID, seen := keeper[key]
+		if !seen {
+			keeper[key] = r.ID
+			continue
+		}
+		// r duplicates keepID: repoint its events, then drop it (repoint first to respect the FK)
+		if haveEvents {
+			if err := db.Model(&TestEvent{}).Where("reference_id = ?", r.ID).Update("reference_id", keepID).Error; err != nil {
+				return err
+			}
+		}
+		if err := db.Delete(&Reference{}, r.ID).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // GetOrCreateReference finds an existing test reference or creates a new one if it doesn't exist.
 // This ensures references are deduplicated across test runs for historical tracking.
 func (s Store) GetOrCreateReference(ref *Reference) error {
-	if err := s.db.Where("package = ? AND function = ? AND t_run_name = ?", ref.Package, ref.FuncName, ref.TRunName).FirstOrCreate(ref).Error; err != nil {
+	where := func() *gorm.DB {
+		return s.db.Where("package = ? AND function = ? AND t_run_name = ?", ref.Package, ref.FuncName, ref.TRunName)
+	}
+	if err := where().FirstOrCreate(ref).Error; err != nil {
+		// lost a create race against a concurrent writer (unique constraint on idx_ref_identity);
+		// the row now exists, so re-fetch it instead of failing.
+		if err2 := where().First(ref).Error; err2 == nil {
+			return nil
+		}
 		return fmt.Errorf("unable to get or create reference: %w", err)
 	}
 	return nil
@@ -322,6 +373,11 @@ func (s Store) GetOrCreateReference(ref *Reference) error {
 // This ensures annotations are deduplicated across test events.
 func (s Store) GetOrCreateAnnotation(annotation *Annotation) error {
 	if err := s.db.Where("value = ?", annotation.Value).FirstOrCreate(annotation).Error; err != nil {
+		// lost a create race against a concurrent writer (unique constraint on value);
+		// the row now exists, so re-fetch it instead of failing.
+		if err2 := s.db.Where("value = ?", annotation.Value).First(annotation).Error; err2 == nil {
+			return nil
+		}
 		return fmt.Errorf("unable to get or create annotation: %w", err)
 	}
 	return nil

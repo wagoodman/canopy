@@ -136,14 +136,17 @@ type Reference struct {
 	// ID is the primary key for database relationships.
 	ID int64 `gorm:"primaryKey" json:"-"`
 
+	// the tuple (package, function, t_run_name) is the test's identity and must be unique so
+	// GetOrCreateReference's FirstOrCreate is atomic and concurrent writers can't create
+	// duplicate references that split a test's history across two IDs.
 	// Package is the Go package path containing this test.
-	Package string `gorm:"column:package;index" json:"package"`
+	Package string `gorm:"column:package;uniqueIndex:idx_ref_identity,priority:1" json:"package"`
 
 	// FuncName is the test function name (e.g., "TestMyFunction").
-	FuncName string `gorm:"column:function;index" json:"function"`
+	FuncName string `gorm:"column:function;uniqueIndex:idx_ref_identity,priority:2" json:"function"`
 
 	// TRunName is the subtest name from t.Run() calls, empty for top-level tests.
-	TRunName string `gorm:"column:t_run_name;index" json:"t_run_name"`
+	TRunName string `gorm:"column:t_run_name;uniqueIndex:idx_ref_identity,priority:3" json:"t_run_name"`
 }
 
 // Annotation represents a metadata tag that can be attached to test events.
