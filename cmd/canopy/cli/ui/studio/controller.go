@@ -64,7 +64,7 @@ func (c controller) startTestReRun(ctx context.Context, all bool) tea.Cmd {
 	}
 
 	return func() tea.Msg {
-		r, _ := c.runner.StartTests(ctx, test.RunConfig{
+		r, errs := c.runner.StartTests(ctx, test.RunConfig{
 			LogTestFailuresAsErrors: false,
 			Runner:                  cfg,
 			Result: gotest.ResultConfig{
@@ -73,7 +73,18 @@ func (c controller) startTestReRun(ctx context.Context, all bool) tea.Cmd {
 			},
 		})
 
-		// debug.SetLine("starting testing...")
+		if r == nil {
+			// run creation failed (session/run insert error, runner failed to start); the
+			// error is on errs. surface it instead of forwarding a nil run that every
+			// SwitchTestRun consumer would panic dereferencing (mirrors the stored-run path).
+			err := <-errs
+			log.WithFields("error", err).Error("failed to start test re-run")
+			msg := "failed to start test run"
+			if err != nil {
+				msg += ": " + err.Error()
+			}
+			return event.ActionError{Message: msg}
+		}
 
 		return event.SwitchTestRun{
 			TestRun: r,
