@@ -122,6 +122,11 @@ func newSince(history []RunPoint, firstBad, lastGood int, dist CommitDistanceFun
 // classify turns a commit distance into a confidence. an unknown distance degrades to range
 // rather than claiming a single culprit, keeping the annotation honest about CI gaps.
 func classify(good, bad string, dist CommitDistanceFunc) Confidence {
+	if good == bad {
+		// the reference passed and failed on the SAME commit: environmental flakiness on
+		// unchanged code, so no commit is the culprit. don't assert an exact one.
+		return ConfidenceRange
+	}
 	if dist == nil {
 		return ConfidenceRange
 	}
