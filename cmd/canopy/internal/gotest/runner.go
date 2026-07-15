@@ -214,8 +214,34 @@ func (r *Runner) startEventStream(ctx context.Context) (<-chan JSONL, error) { /
 
 	go func() {
 		defer wg.Done()
-
 		jsonLFromReader(ctx, stdout, events)
+	}()
+
+	var sb strings.Builder
+	go func() {
+		defer wg.Done()
+
+		reader := bufio.NewReader(stderr)
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil && err != io.EOF {
+				log.WithFields("error", err).Warn("error reading test stderr")
+				return
+			}
+
+			if line == "" {
+				break
+			}
+
+			sb.WriteString(line + "\n")
+		}
+	}()
+
+	go func() {
+		// wait until BOTH pipes are fully drained before reaping: cmd.Wait closes the pipe
+		// fds, so calling it while the stderr goroutine is still reading (the old ordering)
+		// truncated stderr and surfaced a spurious "file already closed" error.
+		wg.Wait()
 
 		if err := cmd.Wait(); err != nil {
 			// handle exit gracefully (0 or non-0)
@@ -230,30 +256,6 @@ func (r *Runner) startEventStream(ctx context.Context) (<-chan JSONL, error) { /
 				send(JSONL{Index: math.MaxInt64, Error: fmt.Errorf("error running command: %v", err)})
 			}
 		}
-	}()
-
-	var sb strings.Builder
-	go func() {
-		defer wg.Done()
-
-		reader := bufio.NewReader(stderr)
-		for {
-			line, err := reader.ReadString('\n')
-			if err != nil && err != io.EOF {
-				fmt.Println(err)
-				return
-			}
-
-			if line == "" {
-				break
-			}
-
-			sb.WriteString(line + "\n")
-		}
-	}()
-
-	go func() {
-		wg.Wait()
 
 		if sb.Len() > 0 {
 			send(JSONL{Index: math.MaxInt64, Error: ErrRunStderr{Output: sb.String()}})
