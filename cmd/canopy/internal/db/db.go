@@ -821,6 +821,10 @@ func (s Store) CountRunsByAge(maxAge time.Duration) (int64, error) {
 
 // CountRunsBeyondKeep returns the number of test runs that would be removed to keep only N most recent.
 func (s Store) CountRunsBeyondKeep(keep int) (int64, error) {
+	// clamp identically to DeleteRunsKeepingLast so the count matches what a delete would remove
+	if keep < 0 {
+		keep = 0
+	}
 	var total int64
 	if err := s.db.Model(&TestRun{}).Count(&total).Error; err != nil {
 		return 0, fmt.Errorf("unable to count runs: %w", err)
