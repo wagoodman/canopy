@@ -57,8 +57,6 @@ func New(dbFilePath string) (*Store, error) {
 		return nil, err
 	}
 
-	db.Exec("PRAGMA foreign_keys = ON")
-
 	ms := models()
 	for i := range ms {
 		model := ms[i]
@@ -77,12 +75,9 @@ func New(dbFilePath string) (*Store, error) {
 		}
 	}
 
-	// durability pragmas (journal_mode=WAL, synchronous=NORMAL, busy_timeout) are set in the
-	// connection string so they apply to every pooled connection; see connectionString.
-	db.Exec("PRAGMA temp_store = MEMORY")
-	db.Exec("PRAGMA cache_size = 100000")
-	db.Exec("PRAGMA mmap_size = 268435456") // 256 MB
-	// db.Exec("PRAGMA auto_vacuum = NONE")
+	// all pragmas (foreign_keys, journal_mode=WAL, synchronous=NORMAL, busy_timeout, and the
+	// perf knobs) are set in the connection string so they apply to every pooled connection.
+	// a PRAGMA exec'd here would only bind to one connection out of the pool; see connectionString.
 
 	return &Store{
 		db:              db,
@@ -850,7 +845,9 @@ func connectionString(path string) (string, error) {
 	}
 	// WAL + synchronous=NORMAL keeps transaction rollback working and avoids the corruption
 	// risk of the old journal_mode=OFF/synchronous=OFF. busy_timeout lets concurrent writers
-	// wait for a lock instead of failing immediately. set via DSN so every pooled connection
-	// (not just the first) gets them.
-	return fmt.Sprintf("file:%s?cache=shared&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)", path), nil
+	// wait for a lock instead of failing immediately. foreign_keys(1) enforces the FK
+	// constraints AutoMigrate creates (the pragma is per-connection, so it must live here to
+	// bind every pooled connection, not just the first). temp_store/cache_size/mmap_size are
+	// perf knobs. all set via DSN so every pooled connection gets them.
+	return fmt.Sprintf("file:%s?cache=shared&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)&_pragma=temp_store(MEMORY)&_pragma=cache_size(100000)&_pragma=mmap_size(268435456)", path), nil
 }
