@@ -3,6 +3,38 @@
 An interactive test runner for Go that wraps `go test` with test selection, parallel
 execution, and a stored history you can browse.
 
+## Install
+
+```
+go install github.com/wagoodman/canopy/cmd/canopy@latest
+```
+
+## Quick start
+
+Point canopy at packages the way you would `go test`. It discovers the tests, drops you into
+an interactive picker to choose what to run, runs the selection, and shows the results:
+
+```
+canopy ./...
+```
+
+Add `--store` to persist the run, then reopen the session later to page through failures,
+output, and coverage without re-running:
+
+```
+canopy test ./... --store
+canopy open
+```
+
+There are two interactive surfaces:
+
+- the **selector** (a bare `canopy ./...`) is where you pick which tests to run
+- the **studio** (`canopy open`) browses a session's runs: navigate by package or function,
+  filter to just failures, read a test's output, and re-run a selection in place
+
+Everything below is optional depth: how runs are grouped, how to diagnose failures, and how to
+make a flaky failure reproducible.
+
 ## Sessions and runs
 
 A **run** is one execution of `go test` against a set of packages (its events, results, and
@@ -103,3 +135,18 @@ the same order, under the same flags.
 
 Use case: pin down a flaky or order-dependent failure. Shuffle until it fails, then the recorded
 seed turns that one-in-N failure into a command that fails on demand.
+
+## More commands
+
+Beyond selecting and running tests, canopy reads its stored history to answer questions about a
+codebase over time. All of these need `--store`d runs to draw from.
+
+- `canopy affected [GO-PKG-SPECIFIER...]`   report which tests are affected by a change, using
+  the static import graph (what to re-run after editing a symbol)
+- `canopy coverage [RUN-ID]`   show coverage for the last run (or a specific one)
+- `canopy trend flaky`         detect flaky tests across historical sessions
+- `canopy trend failures`      failure-rate trends over time
+- `canopy trend duration`      test duration trends
+- `canopy trend count`         test-suite size over time
+
+Run any command with `--help` for its flags.
