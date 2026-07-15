@@ -2,12 +2,37 @@ package commands
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/flaky"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/localize"
 )
+
+// priorView must count passes AND failures strictly before the target run. a test that fails at
+// the target and is only fixed (passes) afterwards must not read as flaky when triaging that
+// older run: the later passes are outside the window.
+func TestPriorView_ExcludesLaterPasses(t *testing.T) {
+	at := func(s int64) time.Time { return time.Unix(s, 0) }
+	target := at(10)
+
+	outcomes := []flaky.Outcome{
+		{Action: gotest.FailAction, Time: at(8), Failure: &flaky.FailureInfo{Fingerprint: "boom"}},
+		{Action: gotest.FailAction, Time: at(9), Failure: &flaky.FailureInfo{Fingerprint: "boom"}},
+		{Action: gotest.FailAction, Time: target, Failure: &flaky.FailureInfo{Fingerprint: "boom"}}, // the target run, excluded
+		{Action: gotest.PassAction, Time: at(11)},                                                   // fixed later, must not leak in
+		{Action: gotest.PassAction, Time: at(12)},
+	}
+
+	pass, fail, prints, lastFail := priorView(outcomes, target)
+	require.Equal(t, 0, pass, "later passes must be excluded")
+	require.Equal(t, 2, fail)
+	require.True(t, prints["boom"])
+	require.NotNil(t, lastFail)
+	require.Equal(t, at(9), *lastFail)
+}
 
 func TestDropRedundantParents(t *testing.T) {
 	// refs() extracts the surviving references in order for compact assertions.
