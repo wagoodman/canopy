@@ -142,15 +142,16 @@ func (s Store) GetTestSessionByName(name string) (*TestSession, error) {
 }
 
 // EndTestSession marks a test session as completed by setting its ended timestamp.
+// Targeted single-column update to avoid Save cascading redundant writes over the
+// session's preloaded has-many TestRuns (see SetRunCoverageDir for the same pattern).
 func (s Store) EndTestSession(sessionID uuid.UUID) error {
-	session, err := s.GetTestSession(sessionID)
-	if err != nil {
-		return err
-	}
 	n := time.Now()
-	session.Ended = &n
-	if err := s.db.Save(&session).Error; err != nil {
-		return fmt.Errorf("unable to end test session: %w", err)
+	result := s.db.Model(&TestSession{}).Where("uuid = ?", sessionID.String()).Update("ended", n)
+	if result.Error != nil {
+		return fmt.Errorf("unable to end test session: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("unable to end test session: no session with uuid %s", sessionID)
 	}
 	return nil
 }
