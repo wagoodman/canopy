@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -197,6 +198,10 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 	var runModel *run
 	var err error
 
+	// the run is assigned here on the manager goroutine but read by onEvent from the
+	// runner/replay goroutine; hand it across via an atomic pointer to avoid a data race.
+	var runPtr atomic.Pointer[gotest.Run]
+
 	if s.session == nil {
 		s.session, err = s.newSession()
 		if err != nil {
@@ -245,21 +250,25 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 	onEvent := func(event *gotest.Event) {
 		if event == nil {
 			// this is the end of the test run...
+			run := runPtr.Load()
 			var coverage *db.CoverageInput
-			cov, ok := r.Result.Coverage()
-			if ok {
-				coverage = &db.CoverageInput{
-					Percent:     cov,
-					CoverageDir: cfg.Runner.CoverageDir,
-					Packages:    r.PackageCoverage,
-					Functions:   r.FunctionCoverage,
+			if run != nil {
+				if cov, ok := run.Result.Coverage(); ok {
+					coverage = &db.CoverageInput{
+						Percent:     cov,
+						CoverageDir: cfg.Runner.CoverageDir,
+						Packages:    run.PackageCoverage,
+						Functions:   run.FunctionCoverage,
+					}
 				}
 			}
 			if err := runModel.end(coverage); err != nil {
 				log.WithFields("error", err).Error("unable to end test run")
 			}
 
-			publishTestRun(*r)
+			if run != nil {
+				publishTestRun(*run)
+			}
 			return
 		}
 
@@ -283,6 +292,7 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 		// replay json events from the reader
 		var evs <-chan *gotest.Event
 		r, evs = gotest.StartReplayRun(cfg.Reader, cfg.Runner, cfg.Result)
+		runPtr.Store(r) // publish before the consuming goroutine starts
 
 		// we don't expect any errors, but we're making this adapter for the caller, which in other modes can get errors
 		errsCtrl := make(chan error)
@@ -298,6 +308,7 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 	} else {
 		// run the test ourselves
 		r, errs = gotest.NewRunner(cfg.Runner).Start(ctx, cfg.Result, onEvent)
+		runPtr.Store(r) // publish for onEvent, which runs on the runner goroutine
 	}
 
 	if r == nil {
