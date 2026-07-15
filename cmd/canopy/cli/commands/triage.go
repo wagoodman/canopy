@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/blame"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/db"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/flaky"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
@@ -193,6 +194,7 @@ func runTriage(cfg triageConfig) error {
 	if err != nil {
 		return err
 	}
+	log.WithFields("run", runID).Debug("resolved target run")
 
 	runInfo, err := mgr.GetRunInfo(runID)
 	if err != nil {
@@ -203,6 +205,7 @@ func runTriage(cfg triageConfig) error {
 	if err != nil {
 		return fmt.Errorf("unable to collect run failures: %w", err)
 	}
+	log.WithFields("failures", len(failures)).Debug("collected run failures")
 
 	// reuse the flaky analyzer as the single history-walking engine; mirror its threshold
 	// and window knobs rather than inventing new ones.
@@ -232,16 +235,25 @@ func runTriage(cfg triageConfig) error {
 		return err
 	}
 	verdictByRef := make(map[string]Verdict, len(results))
+	verdictCounts := map[Verdict]int{}
 	for _, r := range results {
 		verdictByRef[r.Reference] = r.Verdict
+		verdictCounts[r.Verdict]++
 	}
+	log.WithFields("new-regression", verdictCounts[VerdictNewRegression], "pre-existing", verdictCounts[VerdictPreExisting], "flaky", verdictCounts[VerdictFlaky]).Debug("classified failures by verdict")
 
 	// localize is enrichment, not a gate: it engages only when a diff is available and any
 	// localization failure degrades to the plain symptom-grouped report rather than sinking triage.
 	loc := localizeFailures(cfg.Triage.Since, allReferences(selected))
 
-	groups := fuseGroups(clusters, verdictByRef, loc)
+	// since/first-seen enrichment: for pre-existing and flaky verdicts, bisect the stored
+	// per-commit history to the commit where the failure first appeared. best-effort and silently
+	// absent when there is no supporting history.
+	sinceByRef := computeSinceByRef(mgr, analyzer, selected, verdictByRef)
+
+	groups := fuseGroups(clusters, verdictByRef, loc, sinceByRef)
 	distinct := distinctTopCauses(groups)
+	log.WithFields("failures", len(selected), "symptoms", len(groups), "root-causes", len(distinct)).Info("triage complete")
 
 	if cfg.Output == formatJSON {
 		return displayTriageReportJSON(groups, len(selected), len(groups), len(distinct), loc)
@@ -276,7 +288,9 @@ func localizeFailures(since string, failures []gotest.Reference) *localize.Resul
 		changedFiles []string
 		err          error
 	)
+	scope := "working tree"
 	if since != "" {
+		scope = "since " + since
 		changedFiles, err = source.ChangedGoFilesSince(".", since)
 	} else {
 		changedFiles, err = source.ChangedGoFiles(".")
@@ -285,6 +299,7 @@ func localizeFailures(since string, failures []gotest.Reference) *localize.Resul
 		log.WithFields("error", err).Debug("root-cause localization skipped: unable to resolve changed files")
 		return nil
 	}
+	log.WithFields("scope", scope, "files", len(changedFiles)).Debug("resolved changed files for root-cause localization")
 	if len(changedFiles) == 0 {
 		return nil
 	}
@@ -655,19 +670,21 @@ type triageGroup struct {
 	cluster    clusterJSON
 	verdicts   []Verdict
 	candidates []localize.Candidate
+	since      *sinceJSON
 }
 
 // fuseGroups correlates the three layers of the holistic report: it takes the symptom clusters,
 // the per-failure verdicts, and the localization candidates, and attaches to each symptom group
 // its members' distinct verdicts and every changed symbol reachable from a member (globally ranked
 // so the symbol explaining the most failures leads). pure so the correlation is unit-testable.
-func fuseGroups(clusters clusterResultJSON, verdictByRef map[string]Verdict, loc *localize.Result) []triageGroup {
+func fuseGroups(clusters clusterResultJSON, verdictByRef map[string]Verdict, loc *localize.Result, sinceByRef map[string]*sinceJSON) []triageGroup {
 	groups := make([]triageGroup, 0, len(clusters.Clusters))
 	for _, c := range clusters.Clusters {
 		groups = append(groups, triageGroup{
 			cluster:    c,
 			verdicts:   distinctVerdicts(c.References, verdictByRef),
 			candidates: candidatesForGroup(c.References, loc),
+			since:      sinceForGroup(c.References, sinceByRef),
 		})
 	}
 	return groups
@@ -753,6 +770,7 @@ type triageGroupJSON struct {
 	Count               int                  `json:"count"`
 	References          []string             `json:"references"`
 	Verdicts            []Verdict            `json:"verdicts"`
+	Since               *sinceJSON           `json:"since,omitempty"`
 	RootCauseCandidates []localize.Candidate `json:"root_cause_candidates,omitempty"`
 	SampleRepro         string               `json:"sample_repro"`
 }
@@ -784,6 +802,7 @@ func displayTriageReportJSON(groups []triageGroup, failures, symptoms, rootCause
 			Count:               g.cluster.Count,
 			References:          g.cluster.References,
 			Verdicts:            g.verdicts,
+			Since:               g.since,
 			RootCauseCandidates: g.candidates,
 			SampleRepro:         g.cluster.SampleRepro,
 		})
@@ -859,7 +878,7 @@ func displayTriageReport(groups []triageGroup, summary, runID string, abbrevByRe
 			head += " " + styleAux.Render("("+lastSegment(g.cluster.Location)+")")
 		}
 		if len(g.verdicts) > 0 {
-			head += "  " + verdictLabel(g.verdicts)
+			head += "  " + verdictLabel(g.verdicts, g.since)
 		}
 		if len(g.candidates) > 0 {
 			head += "  " + styleAux.Render("↳ root cause: "+causeLabel(g.candidates[0]))
@@ -885,13 +904,46 @@ func displayTriageReport(groups []triageGroup, summary, runID string, abbrevByRe
 }
 
 // verdictLabel renders a group's distinct verdicts as a bracketed, color-coded label ("[flaky]",
-// or "[new-regression, flaky]" when a symptom's members disagree).
-func verdictLabel(vs []Verdict) string {
+// or "[new-regression, flaky]" when a symptom's members disagree). when a since annotation
+// applies to one of the verdicts it folds inline, e.g. "[pre-existing since abc1234 (handler.go)]".
+func verdictLabel(vs []Verdict, since *sinceJSON) string {
 	parts := make([]string, len(vs))
 	for i, v := range vs {
-		parts[i] = verdictStyle(v).Render(string(v))
+		text := string(v)
+		if since != nil && since.Verdict == v {
+			text += " " + sinceText(since)
+		}
+		parts[i] = verdictStyle(v).Render(text)
 	}
 	return "[" + strings.Join(parts, ", ") + "]"
+}
+
+// sinceText renders the since annotation: "since abc1234" for an exact/unknown onset, the
+// honest "since def4567..abc1234" range when commits ran in between with no data, and a trailing
+// "(file, file)" of the changed files when present (pre-existing only).
+func sinceText(s *sinceJSON) string {
+	ref := shortCommit(s.Commit)
+	if s.Confidence == string(blame.ConfidenceRange) && s.LastGood != "" {
+		ref = shortCommit(s.LastGood) + ".." + shortCommit(s.Commit)
+	}
+	label := "since " + ref
+	if len(s.ChangedFiles) > 0 {
+		bases := make([]string, len(s.ChangedFiles))
+		for i, f := range s.ChangedFiles {
+			bases[i] = lastSegment(f)
+		}
+		label += " (" + strings.Join(bases, ", ") + ")"
+	}
+	return label
+}
+
+// shortCommit abbreviates a full SHA to its first 7 characters for display; the JSON keeps the
+// full hash.
+func shortCommit(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
 }
 
 // abbrevRefs maps each selected failure's full reference to a compact display form (…/TestName),

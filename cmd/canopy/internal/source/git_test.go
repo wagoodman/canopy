@@ -96,6 +96,60 @@ func TestMergeBase(t *testing.T) {
 	})
 }
 
+func TestFilesChangedInCommit(t *testing.T) {
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+
+	root := writeCommit(t, repo, dir, "handler.go", "package main\n", "root")
+	second := writeCommit(t, repo, dir, "token.go", "package main\n", "add token")
+
+	t.Run("root commit reports its added file", func(t *testing.T) {
+		files, err := FilesChangedInCommit(dir, root.String())
+		require.NoError(t, err)
+		require.Equal(t, []string{"handler.go"}, files)
+	})
+
+	t.Run("child commit reports only its diff against the parent", func(t *testing.T) {
+		files, err := FilesChangedInCommit(dir, second.String())
+		require.NoError(t, err)
+		require.Equal(t, []string{"token.go"}, files)
+	})
+
+	t.Run("not a repo errors", func(t *testing.T) {
+		_, err := FilesChangedInCommit(t.TempDir(), root.String())
+		require.Error(t, err)
+	})
+}
+
+func TestCommitsBetween(t *testing.T) {
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+
+	c1 := writeCommit(t, repo, dir, "a.go", "package main\n", "c1")
+	c2 := writeCommit(t, repo, dir, "b.go", "package main\n", "c2")
+	c3 := writeCommit(t, repo, dir, "c.go", "package main\n", "c3")
+
+	t.Run("adjacent commits have distance zero", func(t *testing.T) {
+		d, err := CommitsBetween(dir, c1.String(), c2.String())
+		require.NoError(t, err)
+		require.Equal(t, 0, d)
+	})
+
+	t.Run("a gap counts the commits in between", func(t *testing.T) {
+		d, err := CommitsBetween(dir, c1.String(), c3.String())
+		require.NoError(t, err)
+		require.Equal(t, 1, d)
+	})
+
+	t.Run("good not an ancestor of bad is unknown", func(t *testing.T) {
+		d, err := CommitsBetween(dir, c3.String(), c1.String())
+		require.NoError(t, err)
+		require.Equal(t, -1, d)
+	})
+}
+
 // note: the "@auto" working-tree-vs-branch decision now lives in the verify command
 // (resolveTargetFiles) so it can report the diff basis; see the commands package tests.
 

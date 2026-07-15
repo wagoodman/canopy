@@ -9,7 +9,9 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/scylladb/go-set/strset"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 )
 
 type gitInfo struct {
@@ -269,6 +271,106 @@ func MergeBase(dir, baseRef string) (string, error) {
 		return "", fmt.Errorf("no common ancestor between %q and HEAD", baseRef)
 	}
 	return bases[0].Hash.String(), nil
+}
+
+// FilesChangedInCommit returns the repo-relative .go paths changed by the given commit,
+// diffing it against its first parent (against the empty tree for a root commit). This names
+// the likely culprit files for a blame annotation. Reuses the same go-git tree diff the
+// since-ref path uses rather than shelling out.
+func FilesChangedInCommit(dir, commitSHA string) ([]string, error) {
+	log.WithFields("commit", commitSHA).Trace("resolving files changed in commit")
+	repo, err := openRepo(dir)
+	if err != nil {
+		return nil, err
+	}
+	if repo == nil {
+		return nil, fmt.Errorf("%s is not within a git repository", dir)
+	}
+
+	commit, err := repo.CommitObject(plumbing.NewHash(commitSHA))
+	if err != nil {
+		return nil, fmt.Errorf("unable to load commit %q: %w", commitSHA, err)
+	}
+	commitTree, err := commit.Tree()
+	if err != nil {
+		return nil, err
+	}
+
+	// a root commit has no parent, so diff against an empty tree (every file is "added").
+	var parentTree *object.Tree
+	if commit.NumParents() > 0 {
+		parent, err := commit.Parent(0)
+		if err != nil {
+			return nil, err
+		}
+		parentTree, err = parent.Tree()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	changes, err := parentTree.Diff(commitTree)
+	if err != nil {
+		return nil, err
+	}
+
+	set := strset.New()
+	for _, c := range changes {
+		for _, name := range []string{c.From.Name, c.To.Name} {
+			if strings.HasSuffix(name, ".go") {
+				set.Add(name)
+			}
+		}
+	}
+	paths := set.List()
+	sort.Strings(paths)
+	return paths, nil
+}
+
+// CommitsBetween returns the number of commits strictly between the good and bad commits
+// following the first-parent chain from bad (0 when bad is the immediate child of good).
+// Returns -1 when good is not an ancestor of bad within the walk cap, so the caller can treat
+// the distance as unknown (and report a range) rather than fabricating adjacency.
+//
+// ponytail: first-parent walk with a cap, not a full ancestry graph. merge commits off the
+// first-parent line are not traversed, so a bad reachable from good only through a side branch
+// reads as unknown (-1). that is the honest, conservative answer for confidence; upgrade to a
+// full rev-list walk if merge-heavy histories need tighter exact/range calls.
+func CommitsBetween(dir, goodSHA, badSHA string) (int, error) {
+	log.WithFields("good", goodSHA, "bad", badSHA).Trace("counting commits between good and bad")
+	repo, err := openRepo(dir)
+	if err != nil {
+		return -1, err
+	}
+	if repo == nil {
+		return -1, fmt.Errorf("%s is not within a git repository", dir)
+	}
+
+	good := plumbing.NewHash(goodSHA)
+	if good == plumbing.NewHash(badSHA) {
+		return 0, nil
+	}
+
+	commit, err := repo.CommitObject(plumbing.NewHash(badSHA))
+	if err != nil {
+		return -1, fmt.Errorf("unable to load commit %q: %w", badSHA, err)
+	}
+
+	const maxSteps = 5000
+	for steps := 0; steps < maxSteps; steps++ {
+		if commit.NumParents() == 0 {
+			return -1, nil // reached a root without finding good
+		}
+		parent, err := commit.Parent(0)
+		if err != nil {
+			return -1, err
+		}
+		if parent.Hash == good {
+			return steps, nil
+		}
+		commit = parent
+	}
+	return -1, nil
 }
 
 // toAbs joins each repo-relative path to root.

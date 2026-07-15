@@ -98,6 +98,30 @@ func (a *Analyzer) AnalyzeRefs(refs []gotest.Reference) (map[gotest.Reference]*A
 	return result, nil
 }
 
+// OutcomesForRefs returns each reference's per-run outcomes (action, time, run, failure
+// fingerprint) in chronological order, reusing the same single store walk the flaky analysis
+// does. blame joins these to each run's commit; exposing the walk avoids a second history
+// traversal. references with no recorded outcomes are absent from the result.
+func (a *Analyzer) OutcomesForRefs(refs []gotest.Reference) (map[gotest.Reference][]Outcome, error) {
+	outcomes, err := a.collectOutcomes()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[gotest.Reference][]Outcome, len(refs))
+	for _, ref := range refs {
+		outs, ok := outcomes[ref]
+		if !ok {
+			continue
+		}
+		sorted := make([]Outcome, len(outs))
+		copy(sorted, outs)
+		sort.Slice(sorted, func(i, j int) bool { return sorted[i].Time.Before(sorted[j].Time) })
+		result[ref] = sorted
+	}
+	return result, nil
+}
+
 // Analyze analyzes a specific test reference for flakiness.
 func (a *Analyzer) Analyze(ref gotest.Reference) (*Analysis, error) {
 	outcomes, err := a.collectOutcomes()

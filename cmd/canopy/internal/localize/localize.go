@@ -36,6 +36,7 @@ func rtaResolver(_ *ssa.Program, roots []*ssa.Function) (*callgraph.Graph, strin
 		// rta.Analyze returns nil for empty roots (the failing tests' package was not in the
 		// loaded/scoped set, so no entrypoint resolved). Degrade to a nil graph so every failure
 		// lands unattributed instead of dereferencing nil.
+		log.Debug("no resolvable test entrypoints for localization; no root-cause candidates")
 		return nil, callGraphRTA
 	}
 	return rta.Analyze(roots, true).CallGraph, callGraphRTA
@@ -91,6 +92,7 @@ func localizeWith(resolve resolver, loadPatterns []string, changed []Symbol, fai
 	}
 
 	cg, resolverName := resolve(prog, roots)
+	log.WithFields("packages", len(loadPatterns), "roots", len(roots), "resolver", resolverName).Debug("built call graph for root-cause localization")
 	edges, symbolByNode, infos := indexGraph(prog, cg, changed)
 
 	var rootIDs []string

@@ -208,8 +208,8 @@ func Test(app clio.Application) *cobra.Command {
 	var logTestFailuresAsErrors bool
 	var runErr error
 	cmd := &cobra.Command{
-		Use:     "test GO-PKG-SPECIFIER...",
-		Short:   "run the tests for the given package(s)",
+		Use:   "test GO-PKG-SPECIFIER...",
+		Short: "run the tests for the given package(s)",
 		Long: "This is a wrapper around the 'go test' command that provides additional value. See 'go help test' and 'go help build' for detailed flag information.\n\n" +
 			"With --store, each run records an execution fingerprint (shuffle seed, -race, -count, -tags, toolchain, and allowlisted env) so 'triage' and 'verify' can emit a 'go test' command that reproduces a given failure exactly. Add --shuffle to randomize order under a recorded seed and turn a flaky, order-dependent failure into one you can replay on demand.",
 		Example: fmt.Sprintf("%s test ./... --no-cache --covermin 80 --exclude 'github.com/me/my/other/pkg/**'", app.ID().Name),

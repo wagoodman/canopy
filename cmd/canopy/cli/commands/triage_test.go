@@ -174,7 +174,7 @@ func TestFuseGroups_Correlation(t *testing.T) {
 		},
 	}
 
-	groups := fuseGroups(clusters, verdictByRef, loc)
+	groups := fuseGroups(clusters, verdictByRef, loc, nil)
 
 	require.Len(t, groups, 2)
 
@@ -220,7 +220,7 @@ func TestFuseGroups_NoReachingCandidate(t *testing.T) {
 		},
 	}
 
-	groups := fuseGroups(clusters, map[string]Verdict{"pkg/TestX": VerdictNewRegression}, loc)
+	groups := fuseGroups(clusters, map[string]Verdict{"pkg/TestX": VerdictNewRegression}, loc, nil)
 
 	require.Len(t, groups, 1)
 	require.Empty(t, groups[0].candidates)
@@ -239,6 +239,49 @@ func TestFusedSummary_MultipleRootCauses(t *testing.T) {
 	}
 	require.Equal(t, "5 failures across 3 distinct symptoms → 2 root causes",
 		fusedSummary("5 failures across 3 distinct symptoms", distinct))
+}
+
+func TestSinceText(t *testing.T) {
+	tests := []struct {
+		name  string
+		since *sinceJSON
+		want  string
+	}{
+		{
+			name:  "pre-existing exact with changed files",
+			since: &sinceJSON{Verdict: VerdictPreExisting, Commit: "abc1234def", ChangedFiles: []string{"pkg/handler/handler.go", "pkg/auth/token.go"}, Confidence: "exact"},
+			want:  "since abc1234 (handler.go, token.go)",
+		},
+		{
+			name:  "range folds the good..bad bracket honestly",
+			since: &sinceJSON{Verdict: VerdictPreExisting, Commit: "abc1234def", LastGood: "def4567abc", ChangedFiles: []string{"pkg/handler.go"}, Confidence: "range"},
+			want:  "since def4567..abc1234 (handler.go)",
+		},
+		{
+			name:  "flaky is just the commit, no files",
+			since: &sinceJSON{Verdict: VerdictFlaky, Commit: "abc1234def", LastGood: "def4567abc", Confidence: "exact"},
+			want:  "since abc1234",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, sinceText(tt.since))
+		})
+	}
+}
+
+func TestSinceForGroup(t *testing.T) {
+	sinceByRef := map[string]*sinceJSON{
+		"pkg/TestB": {Verdict: VerdictPreExisting, Commit: "abc1234"},
+	}
+	// the first member with a since represents the group.
+	got := sinceForGroup([]string{"pkg/TestA", "pkg/TestB"}, sinceByRef)
+	require.NotNil(t, got)
+	require.Equal(t, "abc1234", got.Commit)
+
+	// no member has a since -> nil (silently absent).
+	require.Nil(t, sinceForGroup([]string{"pkg/TestA"}, sinceByRef))
+	require.Nil(t, sinceForGroup([]string{"pkg/TestA"}, nil))
 }
 
 func TestDistinctVerdicts_MixedMostActionableFirst(t *testing.T) {
