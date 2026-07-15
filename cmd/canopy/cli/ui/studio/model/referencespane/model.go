@@ -220,6 +220,12 @@ func (m *Model) refreshRun() tea.Cmd {
 }
 
 func (m *Model) onSwitchTestRun(run state.RunViewer) tea.Cmd {
+	if run == nil {
+		// no run loaded yet (e.g. a session with zero runs). every status-toggle and
+		// package/func-nav key funnels through refreshRun -> here, so one guard keeps them
+		// all from dereferencing a nil RunViewer via run.References().
+		return nil
+	}
 	// TODO: we need to add and remove the difference of the new refs and the old refs
 	// then update the viewport selected indexes and cursor position
 	m.currentTestRun = run
