@@ -62,3 +62,49 @@ func TestBuildBlameHistory_JoinsCommits(t *testing.T) {
 	// a nil distance func cannot prove adjacency, so the honest confidence is a range.
 	require.Equal(t, blame.ConfidenceRange, since.Confidence)
 }
+
+// confirms a skip outcome is dropped from blame history so a t.Skip() run between passes and
+// the real failure cannot masquerade as the onset.
+func TestBuildBlameHistory_DropsSkips(t *testing.T) {
+	store, err := db.New(filepath.Join(t.TempDir(), "canopy.db"))
+	require.NoError(t, err)
+
+	sessionID, err := store.StartTestSession()
+	require.NoError(t, err)
+
+	seeds := []struct {
+		commit string
+		action gotest.Action
+		fp     string
+	}{
+		{"c1", gotest.PassAction, ""},
+		{"c2", gotest.SkipAction, ""}, // must not be treated as a failure
+		{"c3", gotest.PassAction, ""},
+		{"c4", gotest.FailAction, "boom"}, // the real onset
+	}
+
+	var outcomes []flaky.Outcome
+	for i, s := range seeds {
+		runID, err := store.StartTestRun(sessionID, gotest.RunnerConfig{})
+		require.NoError(t, err)
+		require.NoError(t, store.AddSourceState(runID, &db.SourceStateInput{Commit: s.commit, Branch: "main"}))
+
+		o := flaky.Outcome{RunID: runID, Time: time.Unix(int64(i), 0), Action: s.action}
+		if s.action == gotest.FailAction {
+			o.Failure = &flaky.FailureInfo{Fingerprint: s.fp}
+		}
+		outcomes = append(outcomes, o)
+	}
+
+	history := buildBlameHistory(store, outcomes, map[uuid.UUID]*db.SourceState{})
+	// the skip at c2 is excluded: only the two passes and the failure survive
+	require.Len(t, history, 3)
+	for _, rp := range history {
+		require.NotEqual(t, "c2", rp.Commit)
+	}
+
+	since := blame.DetectPreExisting(history, "boom", nil)
+	require.NotNil(t, since)
+	require.Equal(t, "c4", since.Commit)
+	require.Equal(t, "c3", since.LastGoodCommit)
+}

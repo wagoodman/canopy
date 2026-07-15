@@ -122,6 +122,11 @@ func buildBlameHistory(store *db.Store, outcomes []flaky.Outcome, cache map[uuid
 	var history []blame.RunPoint
 	for i := range outcomes {
 		o := outcomes[i]
+		if o.Action == gotest.SkipAction {
+			// a skip is neither pass nor fail evidence; including it as Passed:false would let a
+			// t.Skip() run masquerade as the flaky/pre-existing onset and blame the wrong commit.
+			continue
+		}
 		ss, ok := cache[o.RunID]
 		if !ok {
 			ss, _ = store.GetSourceState(o.RunID) // best-effort; nil when absent
