@@ -116,7 +116,12 @@ func (a *Analyzer) OutcomesForRefs(refs []gotest.Reference) (map[gotest.Referenc
 		}
 		sorted := make([]Outcome, len(outs))
 		copy(sorted, outs)
-		sort.Slice(sorted, func(i, j int) bool { return sorted[i].Time.Before(sorted[j].Time) })
+		sort.Slice(sorted, func(i, j int) bool {
+			if !sorted[i].Time.Equal(sorted[j].Time) {
+				return sorted[i].Time.Before(sorted[j].Time)
+			}
+			return sorted[i].RunID.String() < sorted[j].RunID.String() // stable tiebreak on equal timestamps
+		})
 		result[ref] = sorted
 	}
 	return result, nil
@@ -365,9 +370,13 @@ func (a *Analyzer) analyze(ref gotest.Reference, outcomes []Outcome) Analysis {
 		return analysis
 	}
 
-	// sort outcomes by time for flip detection
+	// sort outcomes by time for flip detection (tiebreak on RunID so onset attribution is
+	// deterministic when two runs share a timestamp)
 	sort.Slice(outcomes, func(i, j int) bool {
-		return outcomes[i].Time.Before(outcomes[j].Time)
+		if !outcomes[i].Time.Equal(outcomes[j].Time) {
+			return outcomes[i].Time.Before(outcomes[j].Time)
+		}
+		return outcomes[i].RunID.String() < outcomes[j].RunID.String()
 	})
 
 	analysis.FirstRun = RunInfo{ID: outcomes[0].RunID, Time: outcomes[0].Time}

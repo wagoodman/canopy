@@ -47,7 +47,10 @@ func FailureRates(records map[gotest.Reference][]Record) []FailureResult {
 		ordered := make([]Record, len(recs))
 		copy(ordered, recs)
 		sort.Slice(ordered, func(i, j int) bool {
-			return ordered[i].Time.Before(ordered[j].Time)
+			if !ordered[i].Time.Equal(ordered[j].Time) {
+				return ordered[i].Time.Before(ordered[j].Time)
+			}
+			return ordered[i].RunID.String() < ordered[j].RunID.String() // stable order on ties
 		})
 
 		var pass, fail, skip int

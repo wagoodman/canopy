@@ -46,7 +46,10 @@ func Durations(records map[gotest.Reference][]Record) []DurationResult {
 		// order oldest first so "first" and "latest" are unambiguous
 		ordered := append([]Record(nil), recs...)
 		sort.Slice(ordered, func(i, j int) bool {
-			return ordered[i].Time.Before(ordered[j].Time)
+			if !ordered[i].Time.Equal(ordered[j].Time) {
+				return ordered[i].Time.Before(ordered[j].Time)
+			}
+			return ordered[i].RunID.String() < ordered[j].RunID.String() // stable first/latest on ties
 		})
 
 		series := make([]float64, len(ordered))
