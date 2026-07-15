@@ -557,34 +557,37 @@ func (s Store) AddSourceState(runID uuid.UUID, state *SourceStateInput) error {
 		return err
 	}
 
-	ss := SourceState{
-		RunID:  run.ID,
-		Commit: state.Commit,
-		Branch: state.Branch,
-		Dirty:  state.Dirty,
-	}
+	// wrap both writes so a mid-way failure can't leave dirty=true with no dirty-file rows
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		ss := SourceState{
+			RunID:  run.ID,
+			Commit: state.Commit,
+			Branch: state.Branch,
+			Dirty:  state.Dirty,
+		}
 
-	if err := s.db.Create(&ss).Error; err != nil {
-		return fmt.Errorf("unable to create source state: %w", err)
-	}
+		if err := tx.Create(&ss).Error; err != nil {
+			return fmt.Errorf("unable to create source state: %w", err)
+		}
 
-	if len(state.DirtyFiles) > 0 {
-		files := make([]FileState, len(state.DirtyFiles))
-		for i, f := range state.DirtyFiles {
-			files[i] = FileState{
-				SourceStateID: ss.ID,
-				Path:          f.Path,
-				ContentHash:   f.ContentHash,
-				ModTime:       f.ModTime,
+		if len(state.DirtyFiles) > 0 {
+			files := make([]FileState, len(state.DirtyFiles))
+			for i, f := range state.DirtyFiles {
+				files[i] = FileState{
+					SourceStateID: ss.ID,
+					Path:          f.Path,
+					ContentHash:   f.ContentHash,
+					ModTime:       f.ModTime,
+				}
+			}
+
+			if err := tx.CreateInBatches(files, 500).Error; err != nil {
+				return fmt.Errorf("unable to create file states: %w", err)
 			}
 		}
 
-		if err := s.db.CreateInBatches(files, 500).Error; err != nil {
-			return fmt.Errorf("unable to create file states: %w", err)
-		}
-	}
-
-	return nil
+		return nil
+	})
 }
 
 // GetSourceState retrieves source state data for a test run, including dirty files.
