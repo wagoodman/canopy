@@ -55,9 +55,17 @@ func NewEvent(runID uuid.UUID, jsonl JSONL, pkgs *golist.PackageCollection) *Eve
 
 	timestamp, err := time.Parse(time.RFC3339Nano, jsonl.Time)
 
+	// build-output/build-fail events (Go 1.24+) carry the package in ImportPath, not Package;
+	// fall back to it so compiler-error output is attributed to its package instead of an empty
+	// reference that every build failure would collapse into.
+	pkg := jsonl.Package
+	if pkg == "" {
+		pkg = jsonl.ImportPath
+	}
+
 	var dir string
 	if pkgs != nil {
-		dir = pkgs.GetDir(jsonl.Package)
+		dir = pkgs.GetDir(pkg)
 	}
 
 	var elapsed *float64
@@ -71,7 +79,7 @@ func NewEvent(runID uuid.UUID, jsonl JSONL, pkgs *golist.PackageCollection) *Eve
 		JSONL:          jsonl.Raw,
 		Time:           timestamp,
 		PackageDirPath: dir,
-		Reference:      NewReference(jsonl.Package, jsonl.Test),
+		Reference:      NewReference(pkg, jsonl.Test),
 		Action:         ParseAction(jsonl.Action),
 		Annotations:    ExtractAnnotations(jsonl.Output),
 		Output:         jsonl.Output,
