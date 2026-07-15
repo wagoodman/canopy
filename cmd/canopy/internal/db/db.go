@@ -784,10 +784,13 @@ func (s Store) DeleteAllRuns() (int, error) {
 	return s.DeleteRuns(ids)
 }
 
-// DeleteOrphanedSessions removes sessions that have no remaining test runs.
+// DeleteOrphanedSessions removes anonymous sessions that have no remaining test runs.
+// Named sessions are durable find-or-create targets (see getOrCreateSession), so they are
+// preserved even when retention prunes all their runs, otherwise reusing "--session ci"
+// would silently mint a new session and lose the original's identity/continuity.
 func (s Store) DeleteOrphanedSessions() (int, error) {
 	activeSessionIDs := s.db.Model(&TestRun{}).Select("DISTINCT session_id")
-	result := s.db.Where("id NOT IN (?)", activeSessionIDs).Delete(&TestSession{})
+	result := s.db.Where("name = ?", "").Where("id NOT IN (?)", activeSessionIDs).Delete(&TestSession{})
 	if result.Error != nil {
 		return 0, fmt.Errorf("unable to delete orphaned sessions: %w", result.Error)
 	}
