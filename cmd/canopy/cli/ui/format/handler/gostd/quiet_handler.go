@@ -236,8 +236,9 @@ func (h *quietHandler) outputPackageToWriter(pkgRef gotest.Reference, writer io.
 	// output package conclusions
 	outputEvents := h.result.ReferenceEvents(pkgRef)
 	for _, e := range outputEvents {
-		if output.HasAny(output.HasPackagePassMarking, output.HasPackageCoverageMarking)(e.Output) {
-			// if the package passed or there is a final coverage line, we don't need to output anything
+		if output.HasAny(output.HasPackagePassMarking, output.HasPackageCoverageMarking, output.HasShuffleSeedMarking)(e.Output) {
+			// if the package passed or there is a final coverage line, we don't need to output anything.
+			// The shuffle-seed line is dropped too since go echoes it once per package (all identical).
 			continue
 		}
 		if !render(e) {

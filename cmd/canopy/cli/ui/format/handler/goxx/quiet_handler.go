@@ -205,6 +205,10 @@ func (h *QuietPackage) render(writer io.Writer) { //nolint:gocognit
 				// skip "coverage:" lines
 				continue
 			}
+			if output.HasShuffleSeedMarking(e.Output) {
+				// go echoes "-test.shuffle <seed>" once per package (all identical), drop it
+				continue
+			}
 			if strings.TrimSpace(e.Output) == "" {
 				continue
 			}

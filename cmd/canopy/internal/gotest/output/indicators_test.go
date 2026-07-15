@@ -27,6 +27,28 @@ func TestHasTestPassMarking(t *testing.T) {
 	}
 }
 
+func TestHasShuffleSeedMarking(t *testing.T) {
+	tests := []struct {
+		output   string
+		expected bool
+	}{
+		{"-test.shuffle 42", true},
+		{"-test.shuffle 1784084924287870000\n", true},
+		{"   -test.shuffle 42\n", true},
+		{"-test.shufflefoo", false}, // no space delimiter, not the seed line
+		{"ok      cmd/canopy/cli/commands   0.978s", false},
+		{"--- FAIL: TestExample", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.output, func(t *testing.T) {
+			result := HasShuffleSeedMarking(tt.output)
+			assert.Equal(t, tt.expected, result, "Output: %q", tt.output)
+		})
+	}
+}
+
 func TestHasPackageCoverageMarking(t *testing.T) {
 	tests := []struct {
 		output   string

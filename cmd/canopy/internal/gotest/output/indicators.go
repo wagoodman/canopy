@@ -156,6 +156,14 @@ func HasPanicMarking(output string) bool {
 	return strings.HasPrefix(output, "panic:")
 }
 
+// HasShuffleSeedMarking returns true if the output is the "-test.shuffle <seed>" line.
+// go test echoes this line once per package binary when shuffling is on. Canopy generates a
+// single seed and passes it to every package, so this repeats identically per package while
+// adding nothing (the seed is already recorded in the run fingerprint).
+func HasShuffleSeedMarking(output string) bool {
+	return strings.HasPrefix(strings.TrimSpace(output), "-test.shuffle ")
+}
+
 // HasTimeMarker returns true if the output contains a time duration marker.
 func HasTimeMarker(output string) bool {
 	return timePattern.MatchString(strings.TrimSpace(output))

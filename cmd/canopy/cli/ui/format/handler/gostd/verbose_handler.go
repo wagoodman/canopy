@@ -288,7 +288,8 @@ func (h *verboseHandler) outputPackageToWriter(pkgRef gotest.Reference, writer i
 
 	// output package-level conclusions (FAIL line, etc.)
 	for _, e := range h.result.ReferenceEvents(pkgRef) {
-		if output.HasAny(output.HasPackagePassMarking, output.HasPackageCoverageMarking)(e.Output) {
+		if output.HasAny(output.HasPackagePassMarking, output.HasPackageCoverageMarking, output.HasShuffleSeedMarking)(e.Output) {
+			// the shuffle-seed line is framework noise: go echoes it once per package, all identical.
 			continue
 		}
 		h.writeEvent(e, writer)
