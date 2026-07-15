@@ -33,6 +33,10 @@ type RunnerConfig struct {
 	NoCache     bool
 	UserArgs    []string
 	OnlyRefs    []Reference
+	// Fingerprint captures the execution conditions (seed, race, tags, toolchain, env) so a repro
+	// can recreate them. persisted as part of this config's JSON blob; nil on runs recorded before
+	// fingerprinting existed.
+	Fingerprint *ExecFingerprint `json:"Fingerprint,omitempty"`
 }
 
 // Runner coordinates test execution by spawning `go test` subprocesses and processing

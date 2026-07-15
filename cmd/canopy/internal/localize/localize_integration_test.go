@@ -34,6 +34,35 @@ func fixtureFailures() []gotest.Reference {
 	}
 }
 
+// TestLocalize_UnresolvableRootDegrades guards the nil-root crash: when a failing test's package is
+// not in the loaded/scoped set, no SSA entrypoint resolves, so rta.Analyze gets empty roots and
+// returns a nil call graph. localize must degrade to an all-unattributed result instead of
+// dereferencing that nil. Panics before the rtaResolver/indexGraph nil-guards.
+func TestLocalize_UnresolvableRootDegrades(t *testing.T) {
+	if testing.Short() {
+		t.Skip("loads real packages and builds SSA; skipped in -short")
+	}
+
+	abs, err := filepath.Abs("../flaky/analyzer.go")
+	require.NoError(t, err)
+	changed, err := ChangedSymbols([]string{abs})
+	require.NoError(t, err)
+	require.NotEmpty(t, changed)
+
+	// the failure lives in a package flakyPkg does not import, so its entrypoint is absent from the
+	// loaded set and no root resolves.
+	failures := []gotest.Reference{
+		{Package: "github.com/wagoodman/canopy/internal/test-fixtures/simple", FuncName: "TestFail"},
+	}
+
+	res, err := localizeWith(rtaResolver, []string{flakyPkg}, changed, failures)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Empty(t, res.Candidates)
+	require.Len(t, res.Unattributed, 1)
+	require.Equal(t, failures[0].String(false), res.Unattributed[0].Reference)
+}
+
 // TestLocalize_FixtureRTARanksRootCause is the end-to-end guard for the demo and for the CHA->RTA
 // upgrade (plan verification item 3). Over the real fixture: RTA ranks calculateFlakyScore as the
 // UNIQUE top candidate reaching every failure, whereas CHA over-attributes so badly (every test

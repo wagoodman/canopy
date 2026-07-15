@@ -135,7 +135,8 @@ Examples:
   # diff against a specific baseline run
   canopy verify --baseline <run-id>
 
-  # machine-readable JSON for an agent loop
+  # machine-readable JSON for an agent loop (each regression carries a fingerprint-aware
+  # 'repro' command: recorded shuffle seed, -race, -tags, and allowlisted env)
   canopy verify --output json`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runVerify(*opts)
@@ -202,7 +203,15 @@ func runVerify(cfg verifyConfig) error {
 		"flaky", len(diff.Flaky),
 	).Debug("bucketed target failures against baseline")
 
-	result := buildVerifyResult(diff, res.Targets, res.Provenance, noBaselineReason, res.Reason)
+	// emit repros under the target run's recorded execution conditions (seed, race, tags, env).
+	var fp *gotest.ExecFingerprint
+	if info, err := mgr.GetRunInfo(targetRun); err == nil {
+		fp = info.Config.Fingerprint
+	} else {
+		log.WithFields("run", targetRun, "error", err).Debug("unable to load target run fingerprint for repros")
+	}
+
+	result := buildVerifyResult(diff, res.Targets, res.Provenance, noBaselineReason, res.Reason, fp)
 
 	if cfg.Verify.Output == formatJSON {
 		if err := displayVerifyJSON(result); err != nil {
@@ -661,7 +670,7 @@ type verifyStillJSON struct {
 
 // buildVerifyResult assembles the JSON verdict from the diff. ok = (every target fixed/passing OR
 // no targets resolved) AND no new regressions.
-func buildVerifyResult(d verifyDiff, targets []verifyTargetJSON, provenance targetProvenance, noBaselineReason, targetReason string) verifyResultJSON {
+func buildVerifyResult(d verifyDiff, targets []verifyTargetJSON, provenance targetProvenance, noBaselineReason, targetReason string, fp *gotest.ExecFingerprint) verifyResultJSON {
 	if targets == nil {
 		targets = []verifyTargetJSON{}
 	}
@@ -677,7 +686,7 @@ func buildVerifyResult(d verifyDiff, targets []verifyTargetJSON, provenance targ
 			Reference:   f.ref.String(false),
 			Fingerprint: f.detail.Fingerprint,
 			Failure:     buildFailure(f.detail),
-			Repro:       buildRepro(f.ref),
+			Repro:       buildRepro(f.ref, fp),
 		})
 	}
 	for _, f := range d.StillFailing {
@@ -692,7 +701,7 @@ func buildVerifyResult(d verifyDiff, targets []verifyTargetJSON, provenance targ
 	// fold in the clustered view of the new regressions (reusing triage's clustering) so the
 	// fan-out case reads as "K distinct symptoms" here too. left nil when there are none so JSON omits it.
 	if len(d.NewRegressions) > 0 {
-		res.NewRegressionClusters = clusterFailures(d.NewRegressions).Clusters
+		res.NewRegressionClusters = clusterFailures(d.NewRegressions, fp).Clusters
 	}
 
 	res.OK = targetsSatisfied(res.Targets) && len(res.NewRegressions) == 0

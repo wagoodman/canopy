@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
+	"time"
 
 	"github.com/gookit/color"
 	"github.com/hashicorp/go-multierror"
@@ -78,6 +80,12 @@ type testConfig struct {
 	AffectedSince string `yaml:"affected-since" json:"affected-since" mapstructure:"affected-since"`
 	// Session names the session to group runs under (or @branch, @module, @worktree).
 	Session string `yaml:"session" json:"session" mapstructure:"session"`
+	// Shuffle randomizes test/benchmark order. canopy generates the seed and records it so the run
+	// is reproducible by seed (see the execution fingerprint).
+	Shuffle bool `yaml:"shuffle" json:"shuffle" mapstructure:"shuffle"`
+	// ReproEnv names extra env var keys (comma-separated) to capture into the repro fingerprint,
+	// on top of the built-in allowlist. never captures the whole environment.
+	ReproEnv string `yaml:"repro-env" json:"repro-env" mapstructure:"repro-env"`
 
 	// post parse
 	Runtime testRuntimeConfig `yaml:"-" json:"-" mapstructure:"-"`
@@ -97,6 +105,8 @@ func (t *TestCoreConfig) AddFlags(flags fangs.FlagSet) {
 	flags.BoolVarP(&t.Test.Affected, "affected", "", "restrict the run to tests affected by local changes (static import graph)")
 	flags.StringVarP(&t.Test.AffectedSince, "affected-since", "", "with --affected, diff against this git ref (default: dirty working tree)")
 	flags.StringVarP(&t.Test.Session, "session", "", "session name to group runs under (or @branch, @module, @worktree)")
+	flags.BoolVarP(&t.Test.Shuffle, "shuffle", "", "randomize test/benchmark order under a generated, recorded seed (with --store, replay the seed to reproduce order-dependent or flaky failures)")
+	flags.StringVarP(&t.Test.ReproEnv, "repro-env", "", "extra env var keys (comma-separated) to fold into the repro fingerprint; only these plus the built-in allowlist are captured, never the whole env")
 }
 
 // selectTestPackages resolves the final package set for a run: it first narrows to affected
@@ -200,7 +210,8 @@ func Test(app clio.Application) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "test GO-PKG-SPECIFIER...",
 		Short:   "run the tests for the given package(s)",
-		Long:    "This is a wrapper around the 'go test' command that provides additional value. See 'go help test' and 'go help build' for detailed flag information.",
+		Long: "This is a wrapper around the 'go test' command that provides additional value. See 'go help test' and 'go help build' for detailed flag information.\n\n" +
+			"With --store, each run records an execution fingerprint (shuffle seed, -race, -count, -tags, toolchain, and allowlisted env) so 'triage' and 'verify' can emit a 'go test' command that reproduces a given failure exactly. Add --shuffle to randomize order under a recorded seed and turn a flaky, order-dependent failure into one you can replay on demand.",
 		Example: fmt.Sprintf("%s test ./... --no-cache --covermin 80 --exclude 'github.com/me/my/other/pkg/**'", app.ID().Name),
 		Args: func(_ *cobra.Command, args []string) error {
 			if len(args) > 0 {
@@ -266,18 +277,7 @@ func runTest(ctx context.Context, app clio.Application, coreCfg TestCoreConfig, 
 
 	log.WithFields("pkgs", cfg.Specifiers).Info("running test suite")
 
-	var args []string
-	args = append(args, cfg.Runtime.Packages.ImportPaths()...)
-	args = append(args, cfg.GoBuild.RenderedFlags...)
-	args = append(args, cfg.GoTest.RenderedFlags...)
-	args = append(args, cfg.ExtraFlags...)
-
-	runConfig := gotest.RunnerConfig{
-		Packages: coreCfg.Test.Runtime.Packages,
-		Coverage: cfg.Cover,
-		NoCache:  cfg.NoCache,
-		UserArgs: args,
-	}
+	runConfig := buildRunConfig(cfg)
 
 	s, err := test.NewManager(
 		test.Config{
@@ -556,6 +556,56 @@ func toSourceStateInput(s *source.State) *db.SourceStateInput {
 		Dirty:      s.Dirty,
 		DirtyFiles: files,
 	}
+}
+
+// buildRunConfig assembles the go test args and the execution fingerprint into the runner config.
+// race/count/tags are read from the parsed options rather than re-parsed out of the rendered args.
+//
+// generate-and-pass the seed rather than parsing the seed go prints: passing -shuffle=<seed> is
+// deterministic and the recorded value is authoritative under the same toolchain.
+func buildRunConfig(cfg testConfig) gotest.RunnerConfig {
+	var args []string
+	args = append(args, cfg.Runtime.Packages.ImportPaths()...)
+	args = append(args, cfg.GoBuild.RenderedFlags...)
+	args = append(args, cfg.GoTest.RenderedFlags...)
+	args = append(args, cfg.ExtraFlags...)
+
+	fp := &gotest.ExecFingerprint{
+		Race:      cfg.Race,
+		Count:     cfg.Count,
+		Tags:      cfg.Tags,
+		GoVersion: runtime.Version(),
+		GOOS:      runtime.GOOS,
+		GOARCH:    runtime.GOARCH,
+		Env:       gotest.CaptureReproEnv(splitCSV(cfg.ReproEnv)),
+	}
+	if cfg.Shuffle {
+		seed := time.Now().UnixNano()
+		fp.ShuffleSeed = &seed
+		args = append(args, fmt.Sprintf("-shuffle=%d", seed))
+	}
+
+	return gotest.RunnerConfig{
+		Packages:    cfg.Runtime.Packages,
+		Coverage:    cfg.Cover,
+		NoCache:     cfg.NoCache,
+		UserArgs:    args,
+		Fingerprint: fp,
+	}
+}
+
+// splitCSV splits a comma-separated flag value into trimmed, non-empty keys.
+func splitCSV(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func maxPkgNameLength(testPkgs []string, removePrefix string) int {

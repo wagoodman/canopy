@@ -9,7 +9,6 @@ import (
 
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
-
 	"golang.org/x/tools/go/callgraph"
 	"golang.org/x/tools/go/callgraph/rta"
 	"golang.org/x/tools/go/packages"
@@ -33,6 +32,12 @@ type resolver func(prog *ssa.Program, roots []*ssa.Function) (*callgraph.Graph, 
 // possible callee, which — through testify/`t.Run` func values — makes every test reach every
 // method, collapsing the ranking to a flat tie. See the ceiling note on Localize.
 func rtaResolver(_ *ssa.Program, roots []*ssa.Function) (*callgraph.Graph, string) {
+	if len(roots) == 0 {
+		// rta.Analyze returns nil for empty roots (the failing tests' package was not in the
+		// loaded/scoped set, so no entrypoint resolved). Degrade to a nil graph so every failure
+		// lands unattributed instead of dereferencing nil.
+		return nil, callGraphRTA
+	}
 	return rta.Analyze(roots, true).CallGraph, callGraphRTA
 }
 
@@ -151,6 +156,10 @@ func indexGraph(prog *ssa.Program, cg *callgraph.Graph, changed []Symbol) (edges
 	edges = map[string][]string{}
 	symbolByNode = map[string]string{}
 	infos = map[string]symbolInfo{}
+
+	if cg == nil {
+		return edges, symbolByNode, infos // no graph (no resolvable roots); nothing reaches anything
+	}
 
 	for fn, node := range cg.Nodes {
 		if fn == nil {

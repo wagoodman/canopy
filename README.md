@@ -69,3 +69,37 @@ When to reach for which:
 | You just edited code and want to know "am I done?" (target fixed, zero new regressions) | `verify` |
 | CI gate: did this PR make things worse (diff against main's baseline, pass/fail) | `verify` |
 | An agent triaging failures it didn't cause (separate yours from flaky/pre-existing, find the cause) | `triage` |
+
+## Reproducibility (`--shuffle` and repros)
+
+`canopy test --shuffle` randomizes test and benchmark order (Go's `-shuffle`). Instead of
+letting the toolchain pick a seed, canopy generates one, passes it, and records it with the
+run, so the recorded value is authoritative: replay it and the execution order is identical.
+
+With `--store`, every run captures an execution fingerprint alongside its results: the shuffle
+seed, `-race`, `-count`, build `-tags`, the Go version / GOOS / GOARCH, and an allowlisted slice
+of env (`GOFLAGS`, `CGO_ENABLED`, plus anything you name). `triage --show-repros` (and `verify`'s
+JSON) then emit a `go test` command per failure that recreates those conditions:
+
+```
+canopy test ./foo --shuffle --store
+canopy triage --show-repros
+#   …/TestThing
+#   go test ./foo -shuffle=on -test.shuffle=1784084485868271000 -run '^TestThing$'
+```
+
+Run that command yourself, or hand it to a teammate or an agent, and it fails the same way, in
+the same order, under the same flags.
+
+- a run with `--race` shows `-race` in the repro; a run without `--shuffle` emits a repro with no
+  seed; a run without `--store` persists no fingerprint and falls back to the plain
+  `go test ... -run` form.
+- `--repro-env KEY,KEY2` folds extra env keys into the fingerprint on top of the built-in
+  allowlist, so `MY_FLAG=xyz canopy test ./foo --repro-env MY_FLAG --store` yields a repro
+  prefixed `MY_FLAG=xyz go test ...`. Only named (and allowlisted) keys are captured, never your
+  whole environment.
+- a repro recorded under a different toolchain carries a trailing `# recorded under go1.x
+  linux/amd64` note, since a shuffle seed only reproduces under the same toolchain.
+
+Use case: pin down a flaky or order-dependent failure. Shuffle until it fails, then the recorded
+seed turns that one-in-N failure into a command that fails on demand.

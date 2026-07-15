@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -65,7 +66,7 @@ type triageOpts struct {
 func (o *triageOpts) AddFlags(flags fangs.FlagSet) {
 	flags.StringVarP(&o.Run, "run", "", "run ID to triage (default: the last run)")
 	flags.StringVarP(&o.Reference, "reference", "", "triage only this reference (pkg/TestName)")
-	flags.BoolVarP(&o.ShowRepros, "show-repros", "", "show the `go test` repro command under each failure")
+	flags.BoolVarP(&o.ShowRepros, "show-repros", "", "show a `go test` repro command under each failure, recreating the recorded shuffle seed, -race, -tags, and allowlisted env")
 	// ponytail: --cluster is now the default (and only) view; kept as a no-op alias so existing
 	// `triage --cluster` invocations keep working. drop it on the next flag-breaking release.
 	flags.BoolVarP(&o.Cluster, "cluster", "", "deprecated: symptom clustering is always on now (no-op)")
@@ -214,15 +215,19 @@ func runTriage(cfg triageConfig) error {
 
 	selected := selectFailures(failures, cfg.Triage.Reference)
 
+	// the target run's execution fingerprint makes every emitted repro reproduce the recorded
+	// conditions (seed, race, tags, env, toolchain); nil for pre-fingerprint runs.
+	fp := runInfo.Config.Fingerprint
+
 	// the holistic report fuses three layers over the same failures: group by symptom, verdict each
 	// failure by its history, and localize EVERY failure to the changed symbols that explain it.
 	// localization runs regardless of verdict: a flaky failure that still reaches a changed symbol
 	// keeps its flaky label but also shows the diff-based root cause, so "flaky per history, but
 	// explained by your diff" is visible instead of hidden. the --cluster flag is now the default
 	// view (kept as a harmless alias); both paths converge on this one report.
-	clusters := clusterFailures(selected)
+	clusters := clusterFailures(selected, fp)
 
-	results, err := triageResults(analyzer, selected, runInfo.Started)
+	results, err := triageResults(analyzer, selected, runInfo.Started, fp)
 	if err != nil {
 		return err
 	}
@@ -310,7 +315,7 @@ func localizeFailures(since string, failures []gotest.Reference) *localize.Resul
 // triageResults analyzes the selected failures' history in ONE pass over the store and returns
 // results sorted most-actionable first. analyzing per-ref would re-scan the whole store for each
 // failure, so refs are batched through AnalyzeRefs.
-func triageResults(analyzer *flaky.Analyzer, selected []runFailure, targetStart time.Time) ([]triageResultJSON, error) {
+func triageResults(analyzer *flaky.Analyzer, selected []runFailure, targetStart time.Time, fp *gotest.ExecFingerprint) ([]triageResultJSON, error) {
 	refs := make([]gotest.Reference, len(selected))
 	for i, f := range selected {
 		refs[i] = f.ref
@@ -322,7 +327,7 @@ func triageResults(analyzer *flaky.Analyzer, selected []runFailure, targetStart 
 
 	results := make([]triageResultJSON, 0, len(selected))
 	for _, f := range selected {
-		results = append(results, buildResult(f, analysisByRef[f.ref], targetStart))
+		results = append(results, buildResult(f, analysisByRef[f.ref], targetStart, fp))
 	}
 
 	// most-actionable first: new-regression, then pre-existing, then flaky.
@@ -353,7 +358,7 @@ func selectFailures(failures []runFailure, only string) []runFailure {
 // buildResult produces a single per-failure result. the flaky determination and history
 // use the PRIOR view (target run excluded) so a test that only ever passed before now
 // reads as a regression, not as flaky.
-func buildResult(f runFailure, analysis *flaky.Analysis, targetStart time.Time) triageResultJSON {
+func buildResult(f runFailure, analysis *flaky.Analysis, targetStart time.Time, fp *gotest.ExecFingerprint) triageResultJSON {
 	priorPass, priorFail, priorPrints, lastFailure := priorView(analysis, targetStart)
 
 	priorAnalysis := &flaky.Analysis{PassCount: priorPass, FailCount: priorFail}
@@ -376,7 +381,7 @@ func buildResult(f runFailure, analysis *flaky.Analysis, targetStart time.Time) 
 			LastFailure: lastFailure,
 		},
 		Failure: buildFailure(f.detail),
-		Repro:   buildRepro(f.ref),
+		Repro:   buildRepro(f.ref, fp),
 	}
 }
 
@@ -428,19 +433,104 @@ func buildFailure(detail db.FailedTestDetails) triageFailureJSON {
 	return f
 }
 
-// buildRepro renders the `go test` command that reproduces just this failure.
-func buildRepro(ref gotest.Reference) string {
+// buildRepro renders the `go test` command that reproduces just this failure under the recorded
+// execution conditions. fp is the target run's fingerprint (nil for runs recorded before
+// fingerprinting, which fall back to the plain command).
+func buildRepro(ref gotest.Reference, fp *gotest.ExecFingerprint) string {
 	pattern := ref.FuncName
 	if ref.TRunName != "" {
 		pattern = ref.FuncName + "/" + ref.SubTestName(true)
 	}
-	return reproCommand(ref.Package, pattern)
+	return reproCommand(ref.Package, pattern, fp)
 }
 
-// reproCommand renders a `go test` invocation anchoring pattern as a full-match -run regex. shared
-// by the single-failure and cluster repros so the anchoring/quoting lives in one place.
-func reproCommand(pkg, pattern string) string {
-	return fmt.Sprintf("go test %s -run '^%s$'", pkg, pattern)
+// reproCommand renders a `go test` invocation anchoring pattern as a full-match -run regex, prefixed
+// and flagged from the execution fingerprint so it recreates the recorded conditions. shared by the
+// single-failure and cluster repros so the anchoring/quoting lives in one place.
+func reproCommand(pkg, pattern string, fp *gotest.ExecFingerprint) string {
+	var b strings.Builder
+	if fp != nil {
+		b.WriteString(reproEnvPrefix(fp.Env))
+	}
+	fmt.Fprintf(&b, "go test %s", pkg)
+	if fp != nil {
+		if fp.Race {
+			b.WriteString(" -race")
+		}
+		if fp.Count != 0 {
+			fmt.Fprintf(&b, " -count=%d", fp.Count)
+		}
+		if fp.Tags != "" {
+			fmt.Fprintf(&b, " -tags=%s", fp.Tags)
+		}
+		// -shuffle=on with an explicit -test.shuffle seed reproduces the recorded ordering; the seed
+		// is only meaningful under the same toolchain, hence the trailing note below.
+		if fp.ShuffleSeed != nil {
+			fmt.Fprintf(&b, " -shuffle=on -test.shuffle=%d", *fp.ShuffleSeed)
+		}
+	}
+	fmt.Fprintf(&b, " -run '^%s$'", pattern)
+	if fp != nil {
+		if note := toolchainNote(fp); note != "" {
+			b.WriteString(" " + note)
+		}
+	}
+	return b.String()
+}
+
+// reproEnvPrefix renders the captured env vars as a leading `KEY=value ` prefix (sorted for a stable
+// command), single-quoting values that need it. empty when nothing was captured.
+func reproEnvPrefix(env map[string]string) string {
+	if len(env) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		fmt.Fprintf(&b, "%s=%s ", k, shellQuote(env[k]))
+	}
+	return b.String()
+}
+
+// shellQuote single-quotes a value when it contains characters unsafe to leave bare in a shell.
+func shellQuote(v string) string {
+	if v == "" {
+		return "''"
+	}
+	if isBareShellSafe(v) {
+		return v
+	}
+	// escape any embedded single quotes, then wrap.
+	return "'" + strings.ReplaceAll(v, "'", `'\''`) + "'"
+}
+
+// isBareShellSafe reports whether v is composed only of characters safe to leave unquoted in a shell.
+func isBareShellSafe(v string) bool {
+	for _, r := range v {
+		safe := r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' ||
+			strings.ContainsRune("_./=:+-", r)
+		if !safe {
+			return false
+		}
+	}
+	return true
+}
+
+// toolchainNote returns a trailing `# recorded under <go version> <goos>/<goarch>` comment when the
+// run's toolchain differs from the caller's, since a shuffle seed only reproduces under the same
+// toolchain. empty when they match or the fingerprint carries no toolchain info.
+func toolchainNote(fp *gotest.ExecFingerprint) string {
+	if fp.GoVersion == "" {
+		return ""
+	}
+	if fp.GoVersion == runtime.Version() && fp.GOOS == runtime.GOOS && fp.GOARCH == runtime.GOARCH {
+		return ""
+	}
+	return fmt.Sprintf("# recorded under %s %s/%s", fp.GoVersion, fp.GOOS, fp.GOARCH)
 }
 
 // collectRunFailures returns the individual (non-package) test failures of a run, paired

@@ -49,7 +49,7 @@ func TestClusterFailures_FingerprintGrouping(t *testing.T) {
 	}
 	failures = append(failures, fail("pkg/handler", "TestLogin", "fp-other"))
 
-	res := clusterFailures(failures)
+	res := clusterFailures(failures, nil)
 
 	require.Len(t, res.Clusters, 2)
 	// sorted by count desc: the fan-out symptom first
@@ -75,7 +75,7 @@ func TestClusterFailures_Ordering(t *testing.T) {
 			failure.StackFrame{Function: "pkg/db.TestP2", File: "db/b_test.go", Line: 8, IsUser: true}),
 	}
 
-	got := clusterFailures(failures)
+	got := clusterFailures(failures, nil)
 
 	want := clusterResultJSON{
 		Clusters: []clusterJSON{
@@ -165,7 +165,7 @@ func TestBuildClusterRepro(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, buildClusterRepro(tt.refs)); diff != "" {
+			if diff := cmp.Diff(tt.want, buildClusterRepro(tt.refs, nil)); diff != "" {
 				t.Errorf("buildClusterRepro() mismatch (-want +got):\n%s", diff)
 			}
 		})

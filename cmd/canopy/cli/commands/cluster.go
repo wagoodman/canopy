@@ -100,7 +100,7 @@ func parsePanic(detail db.FailedTestDetails) (failure.PanicInfo, bool) {
 // stable. each cluster carries one representative symptom/location/repro (its first member in
 // reference order) and every member reference — not N copies. pure (no DB/IO) so it is trivially
 // testable.
-func clusterFailures(failures []runFailure) clusterResultJSON {
+func clusterFailures(failures []runFailure, fp *gotest.ExecFingerprint) clusterResultJSON {
 	groups := map[string][]runFailure{}
 	var keys []string
 	for _, f := range failures {
@@ -127,7 +127,7 @@ func clusterFailures(failures []runFailure) clusterResultJSON {
 			Location:    symptomLocation(rep.detail),
 			Count:       len(members),
 			References:  refs,
-			SampleRepro: buildClusterRepro(memberRefs),
+			SampleRepro: buildClusterRepro(memberRefs, fp),
 		})
 	}
 
@@ -147,7 +147,7 @@ func clusterFailures(failures []runFailure) clusterResultJSON {
 // parent becomes a single `-run '^TestParent$'`. a cluster spanning multiple packages cannot be run
 // by one `go test` invocation, so it emits one line per package joined by newlines — the honest
 // representation of a cross-package fan-out.
-func buildClusterRepro(refs []gotest.Reference) string {
+func buildClusterRepro(refs []gotest.Reference, fp *gotest.ExecFingerprint) string {
 	funcsByPkg := map[string]map[string]bool{}
 	var pkgs []string
 	for _, r := range refs {
@@ -170,7 +170,7 @@ func buildClusterRepro(refs []gotest.Reference) string {
 		if len(funcs) > 1 {
 			pattern = "(" + strings.Join(funcs, "|") + ")"
 		}
-		lines = append(lines, reproCommand(pkg, pattern))
+		lines = append(lines, reproCommand(pkg, pattern, fp))
 	}
 	return strings.Join(lines, "\n")
 }

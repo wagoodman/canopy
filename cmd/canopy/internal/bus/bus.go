@@ -69,7 +69,7 @@ func formatValue(v any) string {
 
 	rv := reflect.ValueOf(v)
 	// dereference pointers to get the underlying type
-	for rv.Kind() == reflect.Ptr {
+	for rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			return "<nil>"
 		}

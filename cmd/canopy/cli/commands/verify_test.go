@@ -337,7 +337,7 @@ func TestBuildVerifyResult(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := buildVerifyResult(tt.diff, tt.targets, targetProvenance{}, tt.noBaselineReason, tt.targetReason)
+			got := buildVerifyResult(tt.diff, tt.targets, targetProvenance{}, tt.noBaselineReason, tt.targetReason, nil)
 			// the Failure sub-struct is exercised by triage tests; compare everything else here
 			if diff := cmp.Diff(tt.want, got, cmp.Comparer(func(a, b triageFailureJSON) bool { return true })); diff != "" {
 				t.Errorf("buildVerifyResult() mismatch (-want +got):\n%s", diff)
