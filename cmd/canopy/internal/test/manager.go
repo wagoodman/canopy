@@ -300,6 +300,12 @@ func (s *Manager) StartTests(ctx context.Context, cfg RunConfig) (*gotest.Run, <
 		r, errs = gotest.NewRunner(cfg.Runner).Start(ctx, cfg.Result, onEvent)
 	}
 
+	if r == nil {
+		// the runner failed to start (e.g. go missing from PATH, pipe/fd exhaustion);
+		// errs already carries the error, so bail before dereferencing a nil run.
+		return nil, errs
+	}
+
 	publishTestRunRequest(r.ID, cfg.Runner)
 
 	return r, errs
