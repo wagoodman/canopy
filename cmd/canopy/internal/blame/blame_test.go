@@ -86,6 +86,13 @@ func TestDetectPreExisting(t *testing.T) {
 			dist:    adjacentDist,
 			want:    nil,
 		},
+		{
+			// passed and failed on the same commit: environmental flake, not an exact culprit
+			name:    "same commit good and bad is a range not exact",
+			history: []RunPoint{run("c2", true, ""), run("c2", false, fp)},
+			dist:    adjacentDist,
+			want:    &Since{Commit: "c2", Branch: "main", LastGoodCommit: "c2", Confidence: ConfidenceRange},
+		},
 	}
 
 	for _, tt := range tests {

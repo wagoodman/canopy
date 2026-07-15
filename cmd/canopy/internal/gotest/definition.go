@@ -326,18 +326,25 @@ func testNamesFromStructLiteral(lit *ast.CompositeLit, targetFieldName string) (
 	var testNames []string
 	count := len(lit.Elts)
 
-	// get the position of the field name in the struct literal
+	// the ordinal of the target field across ALL struct fields (not the index within one field's
+	// name list), so positional entries read the right column even when "name" isn't first.
 	fieldNamePos := -1
 	if arrayLit, ok := lit.Type.(*ast.ArrayType); ok {
 		if structLit, ok := arrayLit.Elt.(*ast.StructType); ok {
+			ordinal := 0
 		fields:
 			for _, field := range structLit.Fields.List {
-				for idx, fieldName := range field.Names {
+				if len(field.Names) == 0 {
+					ordinal++ // anonymous/embedded field still occupies one position
+					continue
+				}
+				for _, fieldName := range field.Names {
 					// TODO: look for multiple test field names, not just "name"
 					if fieldName.Name == targetFieldName {
-						fieldNamePos = idx
+						fieldNamePos = ordinal
 						break fields
 					}
+					ordinal++
 				}
 			}
 		}
@@ -353,12 +360,48 @@ func testNamesFromStructLiteral(lit *ast.CompositeLit, targetFieldName string) (
 
 	for _, elt := range lit.Elts {
 		// ELT are the struct literals within the array of structs
-		if comp, ok := elt.(*ast.CompositeLit); ok {
-			if basicLit, ok := comp.Elts[fieldNamePos].(*ast.BasicLit); ok {
-				testNames = append(testNames, strings.ReplaceAll(basicLit.Value, "\"", ""))
-			}
+		comp, ok := elt.(*ast.CompositeLit)
+		if !ok {
+			continue
+		}
+		if name, ok := structEntryName(comp, targetFieldName, fieldNamePos); ok {
+			testNames = append(testNames, name)
 		}
 	}
 
 	return count, testNames
+}
+
+// structEntryName extracts the target field's string value from one table entry, handling both
+// keyed literals ({name: "x", input: "y"}) and positional literals ({"y", "x"}). fieldPos is the
+// field's ordinal, used only for the positional form.
+func structEntryName(comp *ast.CompositeLit, targetFieldName string, fieldPos int) (string, bool) {
+	// keyed literal: match by field name, position is irrelevant
+	if len(comp.Elts) > 0 {
+		if _, keyed := comp.Elts[0].(*ast.KeyValueExpr); keyed {
+			for _, e := range comp.Elts {
+				kv, ok := e.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+				id, ok := kv.Key.(*ast.Ident)
+				if !ok || id.Name != targetFieldName {
+					continue
+				}
+				if bl, ok := kv.Value.(*ast.BasicLit); ok {
+					return strings.ReplaceAll(bl.Value, "\"", ""), true
+				}
+				return "", false
+			}
+			return "", false
+		}
+	}
+
+	// positional literal: guard the index (short/empty entries would otherwise panic)
+	if fieldPos >= 0 && fieldPos < len(comp.Elts) {
+		if bl, ok := comp.Elts[fieldPos].(*ast.BasicLit); ok {
+			return strings.ReplaceAll(bl.Value, "\"", ""), true
+		}
+	}
+	return "", false
 }

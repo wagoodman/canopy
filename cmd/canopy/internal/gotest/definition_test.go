@@ -1,6 +1,8 @@
 package gotest
 
 import (
+	"go/ast"
+	"go/parser"
 	"go/token"
 	"testing"
 
@@ -183,6 +185,57 @@ func TestDefinitions_References(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equalf(t, tt.want, tt.d.References(), "References()")
+		})
+	}
+}
+
+func TestTestNamesFromStructLiteral(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want []string
+	}{
+		{
+			name: "positional with name as the second field",
+			src: `[]struct {
+				input string
+				name  string
+			}{
+				{"in1", "alpha"},
+				{"in2", "beta"},
+			}`,
+			want: []string{"alpha", "beta"},
+		},
+		{
+			name: "keyed literal in any field order",
+			src: `[]struct {
+				input string
+				name  string
+			}{
+				{name: "alpha", input: "in1"},
+				{input: "in2", name: "beta"},
+			}`,
+			want: []string{"alpha", "beta"},
+		},
+		{
+			name: "name as first field (unchanged behavior)",
+			src: `[]struct {
+				name  string
+				input string
+			}{
+				{"alpha", "in1"},
+			}`,
+			want: []string{"alpha"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expr, err := parser.ParseExpr(tt.src)
+			require.NoError(t, err)
+			lit, ok := expr.(*ast.CompositeLit)
+			require.True(t, ok)
+			_, names := testNamesFromStructLiteral(lit, "name")
+			assert.Equal(t, tt.want, names)
 		})
 	}
 }

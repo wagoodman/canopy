@@ -119,6 +119,21 @@ func (n *coreUI) Teardown(_ bool) error {
 
 	n.teardownCalled = true
 
+	// flush any buffered handler output before the presenters run. a streaming handler closes
+	// its open collapsible group (writes ::endgroup::) here, so the summary the presenters emit
+	// next lands outside the group instead of being collapsed with the passed/skipped packages.
+	for _, h := range n.handlers {
+		s, ok := h.(fmt.Stringer)
+		if !ok {
+			continue
+		}
+		if out := s.String(); out != "" && n.stdout != nil {
+			if _, err := io.WriteString(n.stdout, out); err != nil {
+				errs = multierror.Append(errs, err)
+			}
+		}
+	}
+
 	for _, p := range n.presenters {
 		if err := p.Present(n.stdout, n.stderr); err != nil {
 			errs = multierror.Append(errs, err)

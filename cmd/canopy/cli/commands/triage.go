@@ -335,14 +335,16 @@ func triageResults(analyzer *flaky.Analyzer, selected []runFailure, targetStart 
 	for i, f := range selected {
 		refs[i] = f.ref
 	}
-	analysisByRef, err := analyzer.AnalyzeRefs(refs)
+	// time-stamped outcomes let the prior view count passes (not just failures) strictly before
+	// the target run, so an explicit older --run doesn't leak later passes into the verdict.
+	outcomesByRef, err := analyzer.OutcomesForRefs(refs)
 	if err != nil {
-		return nil, fmt.Errorf("unable to analyze failures: %w", err)
+		return nil, fmt.Errorf("unable to collect outcomes: %w", err)
 	}
 
 	results := make([]triageResultJSON, 0, len(selected))
 	for _, f := range selected {
-		results = append(results, buildResult(f, analysisByRef[f.ref], targetStart, fp))
+		results = append(results, buildResult(f, outcomesByRef[f.ref], targetStart, fp))
 	}
 
 	// most-actionable first: new-regression, then pre-existing, then flaky.
@@ -373,8 +375,8 @@ func selectFailures(failures []runFailure, only string) []runFailure {
 // buildResult produces a single per-failure result. the flaky determination and history
 // use the PRIOR view (target run excluded) so a test that only ever passed before now
 // reads as a regression, not as flaky.
-func buildResult(f runFailure, analysis *flaky.Analysis, targetStart time.Time, fp *gotest.ExecFingerprint) triageResultJSON {
-	priorPass, priorFail, priorPrints, lastFailure := priorView(analysis, targetStart)
+func buildResult(f runFailure, outcomes []flaky.Outcome, targetStart time.Time, fp *gotest.ExecFingerprint) triageResultJSON {
+	priorPass, priorFail, priorPrints, lastFailure := priorView(outcomes, targetStart)
 
 	priorAnalysis := &flaky.Analysis{PassCount: priorPass, FailCount: priorFail}
 	verdict := deriveVerdict(priorAnalysis, f.detail.Fingerprint, priorPrints)
@@ -400,30 +402,27 @@ func buildResult(f runFailure, analysis *flaky.Analysis, targetStart time.Time, 
 	}
 }
 
-// priorView projects a flaky analysis onto the window strictly before the target run,
-// removing the target run's own failure. failures are counted from the analyzer's
-// failure modes (which carry run times); passes are taken as-is since the target run
-// failed for this reference and nothing runs after the last run.
-//
-// ponytail: prior passes are not time-filtered (the Analysis does not timestamp passes).
-// for the default "last run" target this is exact. an explicit older --run could include
-// later passes in the count; the verdict itself is unaffected. upgrade path if it matters:
-// have the analyzer expose per-run pass times.
-func priorView(analysis *flaky.Analysis, targetStart time.Time) (passCount, failCount int, fingerprints map[string]bool, lastFailure *time.Time) {
+// priorView projects a reference's outcomes onto the window strictly before the target run
+// (the target run and anything after it are excluded). counting both passes and failures
+// against targetStart is what keeps an explicit older --run from leaking later passes into
+// the flaky determination. skips are ignored, matching the flaky score's pass/fail model.
+func priorView(outcomes []flaky.Outcome, targetStart time.Time) (passCount, failCount int, fingerprints map[string]bool, lastFailure *time.Time) {
 	fingerprints = map[string]bool{}
-	if analysis == nil {
-		return 0, 0, fingerprints, nil
-	}
-	passCount = analysis.PassCount
-	for _, fm := range analysis.FailureModes {
-		for _, r := range fm.Runs {
-			if !r.Time.Before(targetStart) {
-				continue
-			}
+	for i := range outcomes {
+		o := outcomes[i]
+		if !o.Time.Before(targetStart) {
+			continue
+		}
+		switch o.Action {
+		case gotest.PassAction:
+			passCount++
+		case gotest.FailAction:
 			failCount++
-			fingerprints[fm.Fingerprint] = true
-			if lastFailure == nil || r.Time.After(*lastFailure) {
-				t := r.Time
+			if o.Failure != nil {
+				fingerprints[o.Failure.Fingerprint] = true
+			}
+			if lastFailure == nil || o.Time.After(*lastFailure) {
+				t := o.Time
 				lastFailure = &t
 			}
 		}

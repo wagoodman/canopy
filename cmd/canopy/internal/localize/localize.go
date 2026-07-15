@@ -150,9 +150,26 @@ func indexTestEntries(prog *ssa.Program) map[string]*ssa.Function {
 // node also supplies the symbol's fully-qualified display name, which the AST extraction alone
 // cannot know (it lacks the import path).
 func indexGraph(prog *ssa.Program, cg *callgraph.Graph, changed []Symbol) (edges map[string][]string, symbolByNode map[string]string, infos map[string]symbolInfo) {
+	// go/packages resolves symlinks in file paths (e.g. macOS /tmp -> /private/tmp) while the git
+	// worktree paths in changed symbols do not, so key both sides by their resolved path; otherwise
+	// every lookup silently misses and all failures land in Unattributed with no error.
+	resolved := map[string]string{}
+	resolve := func(p string) string {
+		if r, ok := resolved[p]; ok {
+			return r
+		}
+		r := p
+		if ev, err := filepath.EvalSymlinks(p); err == nil {
+			r = ev
+		}
+		resolved[p] = r
+		return r
+	}
+
 	changedByFile := map[string][]Symbol{}
 	for _, s := range changed {
-		changedByFile[s.File] = append(changedByFile[s.File], s)
+		key := resolve(s.File)
+		changedByFile[key] = append(changedByFile[key], s)
 	}
 
 	edges = map[string][]string{}
@@ -178,7 +195,7 @@ func indexGraph(prog *ssa.Program, cg *callgraph.Graph, changed []Symbol) (edges
 			continue
 		}
 		pos := prog.Fset.Position(fn.Pos())
-		for _, s := range changedByFile[pos.Filename] {
+		for _, s := range changedByFile[resolve(pos.Filename)] {
 			if pos.Line < s.Line || pos.Line > s.EndLine {
 				continue
 			}

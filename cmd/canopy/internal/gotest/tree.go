@@ -156,7 +156,7 @@ func (t *Tree) Add(refs ...Reference) {
 	for _, ref := range refs {
 		_, exists := t.Nodes[ref]
 		if exists {
-			return
+			continue // skip this ref, not the rest of the batch
 		}
 
 		t.addNode(newTreeNodeFromReference(ref))

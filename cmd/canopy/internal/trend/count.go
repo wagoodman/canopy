@@ -67,7 +67,10 @@ func Counts(records map[gotest.Reference][]Record) []CountPoint {
 	}
 
 	sort.Slice(points, func(i, j int) bool {
-		return points[i].Time.Before(points[j].Time)
+		if !points[i].Time.Equal(points[j].Time) {
+			return points[i].Time.Before(points[j].Time)
+		}
+		return points[i].RunID.String() < points[j].RunID.String() // stable order on ties
 	})
 	return points
 }

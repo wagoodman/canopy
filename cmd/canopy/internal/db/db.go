@@ -57,7 +57,12 @@ func New(dbFilePath string) (*Store, error) {
 		return nil, err
 	}
 
-	db.Exec("PRAGMA foreign_keys = ON")
+	// collapse any duplicate references before AutoMigrate adds the idx_ref_identity unique
+	// index, otherwise index creation fails on DBs that a pre-uniqueIndex schema (or a
+	// FirstOrCreate race) left with duplicate reference rows.
+	if err := dedupeReferences(db); err != nil {
+		return nil, fmt.Errorf("unable to dedupe references: %w", err)
+	}
 
 	ms := models()
 	for i := range ms {
@@ -77,12 +82,9 @@ func New(dbFilePath string) (*Store, error) {
 		}
 	}
 
-	// durability pragmas (journal_mode=WAL, synchronous=NORMAL, busy_timeout) are set in the
-	// connection string so they apply to every pooled connection; see connectionString.
-	db.Exec("PRAGMA temp_store = MEMORY")
-	db.Exec("PRAGMA cache_size = 100000")
-	db.Exec("PRAGMA mmap_size = 268435456") // 256 MB
-	// db.Exec("PRAGMA auto_vacuum = NONE")
+	// all pragmas (foreign_keys, journal_mode=WAL, synchronous=NORMAL, busy_timeout, and the
+	// perf knobs) are set in the connection string so they apply to every pooled connection.
+	// a PRAGMA exec'd here would only bind to one connection out of the pool; see connectionString.
 
 	return &Store{
 		db:              db,
@@ -142,15 +144,16 @@ func (s Store) GetTestSessionByName(name string) (*TestSession, error) {
 }
 
 // EndTestSession marks a test session as completed by setting its ended timestamp.
+// Targeted single-column update to avoid Save cascading redundant writes over the
+// session's preloaded has-many TestRuns (see SetRunCoverageDir for the same pattern).
 func (s Store) EndTestSession(sessionID uuid.UUID) error {
-	session, err := s.GetTestSession(sessionID)
-	if err != nil {
-		return err
-	}
 	n := time.Now()
-	session.Ended = &n
-	if err := s.db.Save(&session).Error; err != nil {
-		return fmt.Errorf("unable to end test session: %w", err)
+	result := s.db.Model(&TestSession{}).Where("uuid = ?", sessionID.String()).Update("ended", n)
+	if result.Error != nil {
+		return fmt.Errorf("unable to end test session: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("unable to end test session: no session with uuid %s", sessionID)
 	}
 	return nil
 }
@@ -313,10 +316,54 @@ func (s Store) GetSessionTestRuns(sessionID uuid.UUID, infoOnly bool) ([]TestRun
 	return runs, nil
 }
 
+// dedupeReferences collapses duplicate reference rows sharing the same identity tuple
+// (package, function, t_run_name), repointing their events onto the surviving (lowest-id)
+// row and deleting the extras. Runs before AutoMigrate so the idx_ref_identity unique index
+// can be added on an existing DB that predates the constraint. No-op on a fresh DB.
+func dedupeReferences(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&Reference{}) {
+		return nil
+	}
+
+	var refs []Reference
+	if err := db.Order("id ASC").Find(&refs).Error; err != nil {
+		return err
+	}
+
+	haveEvents := db.Migrator().HasTable(&TestEvent{})
+	keeper := make(map[string]int64, len(refs))
+	for _, r := range refs {
+		key := r.Package + "\x00" + r.FuncName + "\x00" + r.TRunName
+		keepID, seen := keeper[key]
+		if !seen {
+			keeper[key] = r.ID
+			continue
+		}
+		// r duplicates keepID: repoint its events, then drop it (repoint first to respect the FK)
+		if haveEvents {
+			if err := db.Model(&TestEvent{}).Where("reference_id = ?", r.ID).Update("reference_id", keepID).Error; err != nil {
+				return err
+			}
+		}
+		if err := db.Delete(&Reference{}, r.ID).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // GetOrCreateReference finds an existing test reference or creates a new one if it doesn't exist.
 // This ensures references are deduplicated across test runs for historical tracking.
 func (s Store) GetOrCreateReference(ref *Reference) error {
-	if err := s.db.Where("package = ? AND function = ? AND t_run_name = ?", ref.Package, ref.FuncName, ref.TRunName).FirstOrCreate(ref).Error; err != nil {
+	where := func() *gorm.DB {
+		return s.db.Where("package = ? AND function = ? AND t_run_name = ?", ref.Package, ref.FuncName, ref.TRunName)
+	}
+	if err := where().FirstOrCreate(ref).Error; err != nil {
+		// lost a create race against a concurrent writer (unique constraint on idx_ref_identity);
+		// the row now exists, so re-fetch it instead of failing.
+		if err2 := where().First(ref).Error; err2 == nil {
+			return nil
+		}
 		return fmt.Errorf("unable to get or create reference: %w", err)
 	}
 	return nil
@@ -326,6 +373,11 @@ func (s Store) GetOrCreateReference(ref *Reference) error {
 // This ensures annotations are deduplicated across test events.
 func (s Store) GetOrCreateAnnotation(annotation *Annotation) error {
 	if err := s.db.Where("value = ?", annotation.Value).FirstOrCreate(annotation).Error; err != nil {
+		// lost a create race against a concurrent writer (unique constraint on value);
+		// the row now exists, so re-fetch it instead of failing.
+		if err2 := s.db.Where("value = ?", annotation.Value).First(annotation).Error; err2 == nil {
+			return nil
+		}
 		return fmt.Errorf("unable to get or create annotation: %w", err)
 	}
 	return nil
@@ -561,34 +613,37 @@ func (s Store) AddSourceState(runID uuid.UUID, state *SourceStateInput) error {
 		return err
 	}
 
-	ss := SourceState{
-		RunID:  run.ID,
-		Commit: state.Commit,
-		Branch: state.Branch,
-		Dirty:  state.Dirty,
-	}
+	// wrap both writes so a mid-way failure can't leave dirty=true with no dirty-file rows
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		ss := SourceState{
+			RunID:  run.ID,
+			Commit: state.Commit,
+			Branch: state.Branch,
+			Dirty:  state.Dirty,
+		}
 
-	if err := s.db.Create(&ss).Error; err != nil {
-		return fmt.Errorf("unable to create source state: %w", err)
-	}
+		if err := tx.Create(&ss).Error; err != nil {
+			return fmt.Errorf("unable to create source state: %w", err)
+		}
 
-	if len(state.DirtyFiles) > 0 {
-		files := make([]FileState, len(state.DirtyFiles))
-		for i, f := range state.DirtyFiles {
-			files[i] = FileState{
-				SourceStateID: ss.ID,
-				Path:          f.Path,
-				ContentHash:   f.ContentHash,
-				ModTime:       f.ModTime,
+		if len(state.DirtyFiles) > 0 {
+			files := make([]FileState, len(state.DirtyFiles))
+			for i, f := range state.DirtyFiles {
+				files[i] = FileState{
+					SourceStateID: ss.ID,
+					Path:          f.Path,
+					ContentHash:   f.ContentHash,
+					ModTime:       f.ModTime,
+				}
+			}
+
+			if err := tx.CreateInBatches(files, 500).Error; err != nil {
+				return fmt.Errorf("unable to create file states: %w", err)
 			}
 		}
 
-		if err := s.db.CreateInBatches(files, 500).Error; err != nil {
-			return fmt.Errorf("unable to create file states: %w", err)
-		}
-	}
-
-	return nil
+		return nil
+	})
 }
 
 // GetSourceState retrieves source state data for a test run, including dirty files.
@@ -788,10 +843,13 @@ func (s Store) DeleteAllRuns() (int, error) {
 	return s.DeleteRuns(ids)
 }
 
-// DeleteOrphanedSessions removes sessions that have no remaining test runs.
+// DeleteOrphanedSessions removes anonymous sessions that have no remaining test runs.
+// Named sessions are durable find-or-create targets (see getOrCreateSession), so they are
+// preserved even when retention prunes all their runs, otherwise reusing "--session ci"
+// would silently mint a new session and lose the original's identity/continuity.
 func (s Store) DeleteOrphanedSessions() (int, error) {
 	activeSessionIDs := s.db.Model(&TestRun{}).Select("DISTINCT session_id")
-	result := s.db.Where("id NOT IN (?)", activeSessionIDs).Delete(&TestSession{})
+	result := s.db.Where("name = ?", "").Where("id NOT IN (?)", activeSessionIDs).Delete(&TestSession{})
 	if result.Error != nil {
 		return 0, fmt.Errorf("unable to delete orphaned sessions: %w", result.Error)
 	}
@@ -819,6 +877,10 @@ func (s Store) CountRunsByAge(maxAge time.Duration) (int64, error) {
 
 // CountRunsBeyondKeep returns the number of test runs that would be removed to keep only N most recent.
 func (s Store) CountRunsBeyondKeep(keep int) (int64, error) {
+	// clamp identically to DeleteRunsKeepingLast so the count matches what a delete would remove
+	if keep < 0 {
+		keep = 0
+	}
 	var total int64
 	if err := s.db.Model(&TestRun{}).Count(&total).Error; err != nil {
 		return 0, fmt.Errorf("unable to count runs: %w", err)
@@ -849,7 +911,9 @@ func connectionString(path string) (string, error) {
 	}
 	// WAL + synchronous=NORMAL keeps transaction rollback working and avoids the corruption
 	// risk of the old journal_mode=OFF/synchronous=OFF. busy_timeout lets concurrent writers
-	// wait for a lock instead of failing immediately. set via DSN so every pooled connection
-	// (not just the first) gets them.
-	return fmt.Sprintf("file:%s?cache=shared&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)", path), nil
+	// wait for a lock instead of failing immediately. foreign_keys(1) enforces the FK
+	// constraints AutoMigrate creates (the pragma is per-connection, so it must live here to
+	// bind every pooled connection, not just the first). temp_store/cache_size/mmap_size are
+	// perf knobs. all set via DSN so every pooled connection gets them.
+	return fmt.Sprintf("file:%s?cache=shared&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)&_pragma=temp_store(MEMORY)&_pragma=cache_size(100000)&_pragma=mmap_size(268435456)", path), nil
 }

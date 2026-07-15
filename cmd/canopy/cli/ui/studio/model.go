@@ -63,6 +63,10 @@ type Model struct {
 	// running is a WaitGroup that tracks if the UI is still active.
 	running *sync.WaitGroup
 
+	// quitOnce guards running.Done() so a repeated quit key can't drive the WaitGroup
+	// counter negative (which panics) before tea.Quit tears the program down.
+	quitOnce *sync.Once
+
 	// help provides the help/keybinding display system.
 	help xhelp.Model
 
@@ -127,6 +131,7 @@ func New(config Config, wg *sync.WaitGroup) Model {
 		//state:          s,
 		controller: newController(config.RunController),
 		running:    wg,
+		quitOnce:   &sync.Once{},
 		config:     config,
 		help:       xhelp.New(),
 		selection:  selection,
@@ -239,7 +244,7 @@ func (m *Model) respondToGlobalKeybindings(msg tea.Msg) tea.Cmd {
 		//	m.help.ShowAll = !m.help.ShowAll
 
 		case key.Matches(x, m.Quit.Binding):
-			m.running.Done()
+			m.quitOnce.Do(m.running.Done)
 			return tea.Quit
 
 		case key.Matches(x, m.Help.Binding):
