@@ -40,7 +40,7 @@ require (
 	golang.org/x/term v0.39.0
 	golang.org/x/tools v0.41.0
 	gorm.io/datatypes v1.2.7
-	gorm.io/gorm v1.31.1
+	gorm.io/gorm v1.31.2
 )
 
 require (
