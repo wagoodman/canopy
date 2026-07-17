@@ -12,6 +12,7 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/cli"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/commands"
 	"github.com/wagoodman/canopy/cmd/canopy/internal"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/bus"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 
 	"github.com/anchore/clio"
@@ -19,6 +20,9 @@ import (
 )
 
 const valueNotProvided = "[not provided]"
+
+// exitCodeInterrupted is the conventional exit status for a process terminated by SIGINT (128 + signal 2).
+const exitCodeInterrupted = 130
 
 // all variables here are provided as build-time arguments, with clear default values
 var version = "dev"
@@ -70,6 +74,7 @@ func main() {
 		select {
 		case <-signals: // first signal, cancel context
 			log.Trace("signal interrupt, stop requested")
+			bus.MarkInterrupted()
 			cancel()
 		case <-ctx.Done():
 		}
@@ -96,5 +101,12 @@ func main() {
 		}
 
 		exitCode = 1
+	}
+
+	// a user interrupt (ctrl-c) is a graceful exit as far as clio is concerned, so the worker error is dropped
+	// and Execute returns nil. surface it as the conventional "terminated by SIGINT" code (128 + 2) so callers
+	// (CI, scripts) don't mistake a canceled run for a passing one.
+	if exitCode == 0 && bus.Interrupted() {
+		exitCode = exitCodeInterrupted
 	}
 }

@@ -18,11 +18,12 @@ import (
 var _ tea.Model = (*Model)(nil)
 
 type Model struct {
-	config  presenter.GoSummaryConfig
-	started bool
-	runs    []gotest.Run
-	ids     mapset.Set[uuid.UUID]
-	common  state.Common
+	config   presenter.GoSummaryConfig
+	started  bool
+	canceled bool
+	runs     []gotest.Run
+	ids      mapset.Set[uuid.UUID]
+	common   state.Common
 }
 
 func NewModel(config presenter.GoSummaryConfig, common state.Common, runID uuid.UUID, runCfg gotest.RunnerConfig) *Model {
@@ -50,6 +51,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		// an interrupt (ctrl+c/esc) means the run was canceled before completion; record it so the
+		// final render reports CANCELED rather than a stale spinner or a misleading PASS.
+		switch msg.String() {
+		case "esc", "ctrl+c":
+			m.canceled = true
+		}
 	case partybus.Event:
 		switch msg.Type {
 		case event.GoTestType:
@@ -93,6 +101,11 @@ func (m *Model) handleGoTestRunEvent(msg partybus.Event) {
 		return
 	}
 
+	// the run-end event carries the final run state, including whether it was interrupted
+	if runEvent.Canceled {
+		m.canceled = true
+	}
+
 	if !m.ids.Contains(runEvent.ID) {
 		m.runs = append(m.runs, *runEvent)
 		m.ids.Add(runEvent.ID)
@@ -126,6 +139,7 @@ func (m Model) View() string {
 	sb := strings.Builder{}
 	m.config.RunningState = m.common.Spinner.View
 	m.config.Window = m.common.Window
+	m.config.Canceled = m.canceled
 	err := m.config.New(m.runs...).Present(&sb, &sb)
 	if err != nil {
 		// TODO

@@ -14,6 +14,9 @@ type Run struct {
 	Result           Result
 	PackageCoverage  []cover.PackageResult  // per-package coverage from covdata
 	FunctionCoverage []cover.FunctionResult // per-function coverage from covdata
+
+	// Canceled indicates the run was interrupted before completion (e.g. ctrl-c / context cancellation).
+	Canceled bool
 }
 
 // NewRun creates a new test execution session with a unique identifier.

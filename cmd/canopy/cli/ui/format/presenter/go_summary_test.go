@@ -75,6 +75,28 @@ func TestGoTestResultSummary_Present(t *testing.T) {
 
 }
 
+func TestGoTestResultSummary_Canceled(t *testing.T) {
+	// a canceled run must report CANCELED, never a false PASS, even when every concluded test passed
+	subject := GoTestResultSummary{
+		config: GoSummaryConfig{
+			Color:              false,
+			WriteToStderr:      true,
+			PackageNameWidth:   100,
+			DurationFromEvents: true,
+			Canceled:           true,
+		},
+		style: style.NewGo(false),
+	}
+	subject.results = newJoinedResults(*fixtureRun(t, "mixed-verbose.json"))
+
+	sb := strings.Builder{}
+	require.NoError(t, subject.Present(&sb, &sb))
+
+	require.Contains(t, sb.String(), canceledGlyph)
+	require.Contains(t, sb.String(), "canceled by user")
+	require.NotContains(t, sb.String(), "PASS")
+}
+
 func fixtureRun(t testing.TB, name string) *gotest.Run {
 	fh, err := os.Open(filepath.Join("testdata", name))
 	require.NoError(t, err)

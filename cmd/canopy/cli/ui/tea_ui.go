@@ -355,6 +355,10 @@ func (m UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// cancel in-flight work via a context, we can wire up esc to this path with bus.Exit()
 		case "esc", "ctrl+c":
 			bus.ExitWithInterrupt()
+			// let the models observe the interrupt before we quit, so the final rendered frame can
+			// reflect the cancellation (e.g. the summary footer shows CANCELED instead of a stale spinner/PASS)
+			frameModel, _ := m.config.frame.Update(msg)
+			m.config.frame = frameModel.(frameWithFooter)
 			return m, tea.Quit
 		}
 

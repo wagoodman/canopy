@@ -94,6 +94,9 @@ func (r *Runner) Start(ctx context.Context, resultConfig ResultConfig, onEvent .
 		for {
 			select {
 			case <-ctx.Done():
+				// mark the run as canceled so the summary reflects the interruption rather than a false PASS.
+				// this is published to the UI via the run-end event (onEvent(nil) in the deferred cleanup).
+				run.Canceled = true
 				// TODO: better error here?
 				done <- fmt.Errorf("context cancelled")
 				return

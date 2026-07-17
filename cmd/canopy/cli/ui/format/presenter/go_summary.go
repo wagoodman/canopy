@@ -16,6 +16,9 @@ import (
 
 var _ Presenter = (*GoTestResultSummary)(nil)
 
+// canceledGlyph is shown in the summary status column when a run is interrupted (the word "CANCELED" is too wide).
+const canceledGlyph = "⊘"
+
 type GoSummaryConfig struct {
 	// Color enables/ disables color output
 	Color bool
@@ -64,6 +67,10 @@ type GoSummaryConfig struct {
 	// HidePackagesWithNoTests indicates whether packages with no tests are being hidden from display.
 	// When true and there are hidden packages, the summary footer will show a count of such packages.
 	HidePackagesWithNoTests bool
+
+	// Canceled indicates the run was interrupted before completion, so the summary should report a
+	// cancellation instead of a PASS/FAIL conclusion.
+	Canceled bool
 }
 
 func DefaultGoTestResultSummaryConfig() GoSummaryConfig {
@@ -367,6 +374,11 @@ func (s GoTestResultSummary) summaryFooter() string {
 
 	var status string
 	switch {
+	case s.config.Canceled:
+		// a canceled run takes precedence over any pass/fail/running state: the results are incomplete,
+		// so reporting PASS would be misleading. use a skip glyph here (the word doesn't fit the status
+		// column) and explain the interruption on a trailer line below the summary.
+		status = s.style.Skipped.Render(canceledGlyph)
 	case isRunning:
 		if s.config.RunningState != "" {
 			status = s.style.Running.Render(s.config.RunningState)
@@ -428,6 +440,11 @@ func (s GoTestResultSummary) summaryFooter() string {
 	if coverage, ok := s.results.Coverage(); ok {
 		// match the same format changes used in the gostd handlers
 		result += "\t" + s.style.Aux.Render(fmt.Sprintf("[%0.1f%% coverage]", coverage))
+	}
+
+	if s.config.Canceled {
+		// call out the interruption in red on its own trailer line, since the glyph alone is ambiguous
+		result += "\n" + s.style.Failed.Render("└──▶ canceled by user")
 	}
 
 	return result
