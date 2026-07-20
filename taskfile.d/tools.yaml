@@ -1,0 +1,52 @@
+version: "3"
+
+# tool management tasks, included under the "tools" namespace (see the root Taskfile).
+# includes have their own var scope, so TOOL_DIR/BINNY are (re)declared here.
+vars:
+  TOOL_DIR: .tool
+  BINNY: "{{ .TOOL_DIR }}/binny"
+
+tasks:
+  # `task tools` (the namespace default) and `task tools:install` both land here
+  default:
+    desc: Install all tools needed for CI and local development
+    aliases: [install]
+    deps: [binny]
+    generates:
+      - ".binny.yaml"
+      - "{{ .TOOL_DIR }}/*"
+    status:
+      - "{{ .BINNY }} check -v"
+    cmd: "{{ .BINNY }} install -v"
+    silent: true
+
+  update:
+    desc: Update pinned versions of all tools to their latest available versions
+    deps: [binny]
+    generates:
+      - ".binny.yaml"
+      - "{{ .TOOL_DIR }}/*"
+    cmd: "{{ .BINNY }} update -v"
+    silent: true
+
+  list:
+    desc: List all tools needed for CI and local development
+    deps: [binny]
+    cmd: "{{ .BINNY }} list"
+    silent: true
+
+  list:updates:
+    desc: List all tools that are not up to date relative to the binny config
+    deps: [binny]
+    cmd: "{{ .BINNY }} list --updates"
+    silent: true
+
+  binny:
+    internal: true
+    # get the binny tool, which manages the rest of the toolchain
+    generates:
+      - "{{ .BINNY }}"
+    status:
+      - "test -f {{ .BINNY }}"
+    cmd: "curl -sSfL https://raw.githubusercontent.com/anchore/binny/main/install.sh | sh -s -- -b {{ .TOOL_DIR }}"
+    silent: true

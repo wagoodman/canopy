@@ -31,6 +31,14 @@ tools:
     with:
       repo: anchore/syft
 
+  # used for keyless signing of release checksums during release
+  - name: cosign
+    version:
+      want: v3.1.2
+    method: github-release
+    with:
+      repo: sigstore/cosign
+
   # used for linting
   - name: golangci-lint
     version:

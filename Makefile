@@ -1,11 +1,13 @@
+OWNER = wagoodman
+PROJECT = canopy
+
 TOOL_DIR = .tool
 BINNY = $(TOOL_DIR)/binny
 TASK = $(TOOL_DIR)/task
 
-.DEFAULT_GOAL := make-default
+.DEFAULT_GOAL := default
 
 ## Bootstrapping targets #################################
-
 # note: we need to assume that binny and task have not already been installed
 $(BINNY):
 	@mkdir -p $(TOOL_DIR)
@@ -18,15 +20,23 @@ $(TASK) task: $(BINNY)
 
 # this is a bootstrapping catch-all, where if the target doesn't exist, we'll ensure the tools are installed and then try again
 %:
-	@make $(TASK)
-	@$(TASK) $@
+	make $(TASK)
+	$(TASK) $@
 
 ## Shim targets #################################
 
-.PHONY: make-default
-make-default: $(TASK)
+.PHONY: default
+default: $(TASK)
 	@# run the default task in the taskfile
 	@$(TASK)
+
+# for those of us that can't seem to kick the habit of typing `make ...` lets wrap the superior `task` tool
+# note: filter out `default`, which has its own explicit shim target above
+TASKS := $(filter-out default,$(shell bash -c "test -f $(TASK) && NO_COLOR=1 $(TASK) -l | grep '^\* ' | cut -d' ' -f2 | tr -d ':' | tr '\n' ' '" ) $(shell bash -c "test -f $(TASK) && NO_COLOR=1 $(TASK) -l | grep 'aliases:' | cut -d ':' -f 3 | tr '\n' ' ' | tr -d ','"))
+
+.PHONY: $(TASKS)
+$(TASKS): $(TASK)
+	@$(TASK) $@
 
 help: $(TASK)
 	@$(TASK) -l
