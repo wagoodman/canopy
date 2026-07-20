@@ -67,3 +67,21 @@ jobs:
         run: make demo
         env:
           VERBOSE: ${{ matrix.verbose }}
+
+  build-snapshot-artifacts:
+    # Note: changing this job name requires making the same update in the .github/workflows/release.yaml check-gate
+    name: "Build snapshot artifacts"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Bootstrap environment
+        uses: ./.github/actions/bootstrap
+        with:
+          # separate cache key so the all-OS/arch snapshot build cache isn't evicted by the test jobs' caches
+          cache-key-prefix: "snapshot"
+
+      - name: Build snapshot artifacts
+        run: make snapshot

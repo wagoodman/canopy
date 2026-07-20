@@ -194,35 +194,40 @@ tasks:
 
   ## Build-related targets #################################
 
+  goreleaser-config:
+    internal: true
+    deps: [tmpdir]
+    requires:
+      vars: [DIST]
+    # goreleaser v2 has no --dist flag, so we prepend the dist dir to a temp copy of the config
+    silent: true
+    cmd: |
+      echo "dist: {{ .DIST }}" > {{ .TMP_DIR }}/goreleaser.yaml
+      cat .goreleaser.yaml >> {{ .TMP_DIR }}/goreleaser.yaml
+
   build:
     desc: Build the project
-    deps: [tools, tmpdir]
+    deps: [tools]
     generates:
       - "{{ .PROJECT }}"
     cmds:
-      - silent: true
-        cmd: |
-          echo "dist: {{ .SNAPSHOT_DIR }}" > {{ .TMP_DIR }}/goreleaser.yaml
-          cat .goreleaser.yaml >> {{ .TMP_DIR }}/goreleaser.yaml
-
+      - task: goreleaser-config
+        vars: { DIST: "{{ .SNAPSHOT_DIR }}" }
       - "{{ .BUILD_CMD }}"
 
   snapshot:
     desc: Create a snapshot release
     aliases:
       - build
-    deps: [tools, tmpdir]
+    deps: [tools]
     sources:
       - cmd/**/*.go
     method: checksum
     generates:
       - "{{ .SNAPSHOT_BIN }}"
     cmds:
-      - silent: true
-        cmd: |
-          echo "dist: {{ .SNAPSHOT_DIR }}" > {{ .TMP_DIR }}/goreleaser.yaml
-          cat .goreleaser.yaml >> {{ .TMP_DIR }}/goreleaser.yaml
-
+      - task: goreleaser-config
+        vars: { DIST: "{{ .SNAPSHOT_DIR }}" }
       - "{{ .SNAPSHOT_CMD }}"
 
   changelog:
@@ -233,7 +238,7 @@ tasks:
       - "{{ .NEXT_VERSION }}"
     cmds:
       - "{{ .CHRONICLE }} -vv -n --version-file {{ .NEXT_VERSION }} > {{ .CHANGELOG }}"
-      - "{{ .GLOE }} {{ .CHANGELOG }}"
+      - "{{ .GLOW }} {{ .CHANGELOG }}"
 
 
   ## Release targets #################################

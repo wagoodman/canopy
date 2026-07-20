@@ -6,6 +6,20 @@ execution, and a stored history you can browse.
 ## Install
 
 ```
+curl -sSfL https://raw.githubusercontent.com/wagoodman/canopy/main/install.sh | sh
+```
+
+The script picks a sensible spot on its own: an existing writable dir on your `PATH` such as `~/.local/bin`, otherwise `/usr/local/bin` (elevating with `sudo` only if needed).
+
+Override the destination with `-b DIR`, verify the release signature with `-v` (requires [cosign](https://docs.sigstore.dev/system_config/installation/)), or pass a release tag to pin a version:
+
+```
+curl -sSfL https://raw.githubusercontent.com/wagoodman/canopy/main/install.sh | sh -s -- -v -b /usr/local/bin v0.1.0
+```
+
+Or with Go:
+
+```
 go install github.com/wagoodman/canopy/cmd/canopy@latest
 ```
 
