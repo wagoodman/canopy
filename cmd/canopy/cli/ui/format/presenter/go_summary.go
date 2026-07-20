@@ -369,7 +369,8 @@ func (s GoTestResultSummary) completedPkgsAfter(startRunningPkgRef *gotest.Refer
 	return completedPkgsAfter, pkgStats
 }
 
-func (s GoTestResultSummary) summaryFooter() string {
+// footerStatus renders the pass/fail/running/canceled glyph, tab-padded to the status column width.
+func (s GoTestResultSummary) footerStatus() string {
 	passed, isRunning := s.results.Passed()
 
 	var status string
@@ -380,19 +381,18 @@ func (s GoTestResultSummary) summaryFooter() string {
 		// column) and explain the interruption on a trailer line below the summary.
 		status = s.style.Skipped.Render(canceledGlyph)
 	case isRunning:
-		if s.config.RunningState != "" {
-			status = s.style.Running.Render(s.config.RunningState)
-		} else {
-			status = s.style.Running.Render("RUNNING")
+		runningState := s.config.RunningState
+		if runningState == "" {
+			runningState = "RUNNING"
 		}
+		status = s.style.Running.Render(runningState)
 	case !passed:
 		status = s.style.Failed.Render("FAIL")
 	default:
 		status = s.style.Success.Render("PASS")
 	}
 
-	width := lipgloss.Width(status)
-	switch {
+	switch width := lipgloss.Width(status); {
 	case width == 0:
 		status = "\t\t"
 	case width < 4:
@@ -401,7 +401,11 @@ func (s GoTestResultSummary) summaryFooter() string {
 		status += "\t"
 	}
 
-	result := status
+	return status
+}
+
+func (s GoTestResultSummary) summaryFooter() string {
+	result := s.footerStatus()
 	var sections []string
 
 	if s.config.ShowPackageCount {
