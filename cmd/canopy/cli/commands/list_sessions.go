@@ -2,7 +2,10 @@ package commands
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -13,13 +16,22 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/test"
 
 	"github.com/anchore/clio"
+	"github.com/anchore/fangs"
 )
+
+var _ fangs.FlagAdder = (*sessionListConfig)(nil)
 
 type sessionListConfig struct {
 	options.Config `yaml:",inline" mapstructure:",squash"`
 	options.Store  `yaml:"store" json:"store" mapstructure:"store"`
 	// SessionID specifies which session to list runs for (if empty, lists all sessions).
 	SessionID string `yaml:"session-id" json:"session-id" mapstructure:"session-id"`
+	// Output controls the output format: "table" (default), "id", or "json".
+	Output string `yaml:"output" json:"output" mapstructure:"output"`
+}
+
+func (o *sessionListConfig) AddFlags(flags fangs.FlagSet) {
+	flags.StringVarP(&o.Output, "output", "o", "output format (table, id, json)")
 }
 
 // ListSessions creates a command to display all test sessions and their associated run information.
@@ -28,7 +40,8 @@ func ListSessions(app clio.Application) *cobra.Command {
 	store := options.DefaultStore()
 	store.Enabled = true
 	opts := &sessionListConfig{
-		Store: store,
+		Store:  store,
+		Output: formatTable,
 	}
 
 	cmd := &cobra.Command{
@@ -91,34 +104,77 @@ func runSessionList(cfg sessionListConfig) error {
 		sessions = filtered
 	}
 
-	var rows []table.Row
+	entries := collectSessionEntries(sessions)
+
+	switch strings.ToLower(cfg.Output) {
+	case formatJSON:
+		return writeJSON(os.Stdout, entries)
+	case formatID:
+		writeSessionIDs(os.Stdout, entries)
+		return nil
+	case formatTable, "":
+		writeSessionsTable(os.Stdout, entries)
+		return nil
+	default:
+		return fmt.Errorf("unknown output format: %s", cfg.Output)
+	}
+}
+
+// sessionListEntry is a flattened representation of a session for display and serialization.
+type sessionListEntry struct {
+	SessionID string     `json:"session_id"`
+	Name      string     `json:"name,omitempty"`
+	Started   time.Time  `json:"started"`
+	Ended     *time.Time `json:"ended,omitempty"`
+	Elapsed   string     `json:"elapsed,omitempty"`
+	Runs      int        `json:"runs"`
+}
+
+func collectSessionEntries(sessions []test.SessionInfo) []sessionListEntry {
+	var entries []sessionListEntry
 	for i := range sessions {
 		session := sessions[i]
-		rows = append(rows, table.Row{
-			session.Name,
-			session.UUID.String(),
-			fmtTime(&session.Started),
-			fmtElapsed(session.Started, session.Ended),
-			len(session.Runs),
+		entries = append(entries, sessionListEntry{
+			SessionID: session.UUID.String(),
+			Name:      session.Name,
+			Started:   session.Started,
+			Ended:     session.Ended,
+			Elapsed:   fmtElapsed(session.Started, session.Ended),
+			Runs:      len(session.Runs),
 		})
 	}
 
-	// sort rows by start time (index 2 now that Name is prepended)
-	sort.Slice(rows, func(i, j int) bool {
-		return rows[i][2].(string) > rows[j][2].(string)
+	// most recent first
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Started.After(entries[j].Started)
 	})
 
-	t := table.NewWriter()
-	t.SetStyle(table.StyleLight)
-	t.Style().Options.DrawBorder = false
-	t.Style().Options.SeparateColumns = false
+	return entries
+}
+
+// writeSessionIDs writes session IDs one per line for scriptability.
+func writeSessionIDs(w io.Writer, entries []sessionListEntry) {
+	for _, entry := range entries {
+		fmt.Fprintln(w, entry.SessionID)
+	}
+}
+
+func writeSessionsTable(w io.Writer, entries []sessionListEntry) {
+	t := newTable()
+	t.SetOutputMirror(w)
 
 	t.AppendHeader(table.Row{"Name", "Session", "Started", "Elapsed", "Test Runs"})
-	t.AppendRows(rows)
+	for _, entry := range entries {
+		t.AppendRow(table.Row{
+			entry.Name,
+			entry.SessionID,
+			fmtTime(&entry.Started),
+			entry.Elapsed,
+			entry.Runs,
+		})
+	}
 
-	fmt.Println(t.Render())
-
-	return nil
+	t.Render()
 }
 
 // fmtTime formats a time pointer as a string in "YYYY-MM-DD HH:MM:SS" format.

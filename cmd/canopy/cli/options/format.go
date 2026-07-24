@@ -72,7 +72,8 @@ func DefaultTestFormat() Format {
 // PostLoad validates format specifications and creates output writers (files or stdout) for each format.
 func (o *Format) PostLoad() error {
 	if len(o.Output) > 0 {
-		o.Outputs = append(o.Outputs, o.Output)
+		// single-format mode: the flag replaces the default rather than adding to it
+		o.Outputs = []string{o.Output}
 		o.Output = ""
 	}
 

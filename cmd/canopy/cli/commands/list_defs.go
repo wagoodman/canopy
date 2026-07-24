@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/scylladb/go-set/strset"
 	"github.com/spf13/cobra"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options"
@@ -51,9 +52,9 @@ func ListDefs(app clio.Application) *cobra.Command {
 		List: listConfig{
 			Packages: options.DefaultPackages(),
 			Format: options.Format{
-				Outputs:          []string{formatFunction},
-				AllowableFormats: []string{formatFunction, formatJSON, formatPackage},
-				Aliases:          []string{"fn", "fns", "f", "p", "pkg", "pkgs", "functions", "packages"},
+				Outputs:          []string{formatTable},
+				AllowableFormats: []string{formatTable, formatID, formatJSON, formatPackage},
+				Aliases:          []string{formatFunction, "fn", "fns", "f", "p", "pkg", "pkgs", "functions", "packages"},
 				AllowMultiple:    false,
 			},
 		},
@@ -101,8 +102,10 @@ func runList(cfg listConfig) error {
 	switch strings.ToLower(cfg.Outputs[0]) {
 	case formatPackage, "packages", "pkg", "pkgs", "p":
 		report = listTestPkgs(tests)
-	case formatFunction, "functions", "fn", "fns", "f":
+	case formatID, formatFunction, "functions", "fn", "fns", "f":
 		report = listTestFunctions(tests, cfg.Cases)
+	case formatTable:
+		report = listTestTable(tests, cfg.Cases)
 	case formatJSON:
 		report, err = listTestJSON(tests)
 	default:
@@ -152,6 +155,26 @@ func listTestFunctions(tests []gotest.Definition, showCases bool) string {
 		}
 	}
 	return sb.String()
+}
+
+// listTestTable returns a table of test definitions with the package and function split into columns.
+// If showCases is true, subtests get their own rows as "TestFunc/SubTest".
+func listTestTable(tests []gotest.Definition, showCases bool) string {
+	t := newTable()
+	t.AppendHeader(table.Row{"Package", "Test"})
+
+	for _, def := range tests {
+		t.AppendRow(table.Row{def.ImportPath, def.FnName})
+		if !showCases {
+			continue
+		}
+
+		for _, c := range def.Cases {
+			t.AppendRow(table.Row{def.ImportPath, fmt.Sprintf("%s/%s", def.FnName, c)})
+		}
+	}
+
+	return t.Render()
 }
 
 // listTestJSON returns a JSON representation of all test definitions.

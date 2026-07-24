@@ -1,8 +1,6 @@
 package commands
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -29,17 +27,16 @@ type listRunsConfig struct {
 
 	// Last limits the output to the N most recent runs.
 	Last int `yaml:"last" json:"last" mapstructure:"last"`
-	// Output controls the output format: "table" (default) or "json".
+	// Output controls the output format: "table" (default), "id", or "json".
 	Output string `yaml:"output" json:"output" mapstructure:"output"`
 }
 
 func (o *listRunsConfig) AddFlags(flags fangs.FlagSet) {
 	flags.IntVarP(&o.Last, "last", "", "show only the last N runs")
-	flags.StringVarP(&o.Output, "output", "o", "output format (table, json)")
+	flags.StringVarP(&o.Output, "output", "o", "output format (table, id, json)")
 }
 
-// ListRuns creates a command to display historical test run IDs and metadata.
-// Run IDs are written to stdout for scriptability, while metadata is written to stderr.
+// ListRuns creates a command to display historical test runs.
 func ListRuns(app clio.Application) *cobra.Command {
 	store := options.DefaultStore()
 	store.Enabled = true
@@ -53,17 +50,16 @@ func ListRuns(app clio.Application) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "runs",
 		Short: "list historical test run IDs",
-		Long: `List historical test run IDs from the database.
-
-Run IDs are written to stdout for scriptability, metadata goes to stderr.
+		Long: `List historical test runs from the database.
 
 Examples:
   canopy list runs                    # list recent runs
   canopy list runs --last 20          # last 20 runs
+  canopy list runs -o id              # run IDs only (one per line)
   canopy list runs -o json            # JSON output
 
   # pipe run IDs to another command
-  canopy list runs | head -1 | xargs canopy show`,
+  canopy list runs -o id | head -1 | xargs canopy show`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runListRuns(*opts)
 		},
@@ -128,9 +124,12 @@ func runListRuns(cfg listRunsConfig) error {
 
 	switch strings.ToLower(cfg.Output) {
 	case formatJSON:
-		return writeRunsJSON(os.Stdout, entries)
+		return writeJSON(os.Stdout, entries)
+	case formatID:
+		writeRunIDs(os.Stdout, entries)
+		return nil
 	case formatTable, "":
-		writeRunsTable(os.Stdout, os.Stderr, entries)
+		writeRunsTable(os.Stdout, entries)
 		return nil
 	default:
 		return fmt.Errorf("unknown output format: %s", cfg.Output)
@@ -157,19 +156,17 @@ func collectRunEntries(sessions []test.SessionInfo) []runListEntry {
 	return entries
 }
 
-// writeRunsTable writes run IDs to stdout (one per line) and a metadata table to stderr.
-func writeRunsTable(stdout, stderr io.Writer, entries []runListEntry) {
-	// write IDs to stdout for scriptability
+// writeRunIDs writes run IDs one per line for scriptability.
+func writeRunIDs(w io.Writer, entries []runListEntry) {
 	for _, entry := range entries {
-		fmt.Fprintln(stdout, entry.RunID)
+		fmt.Fprintln(w, entry.RunID)
 	}
+}
 
-	// write metadata table to stderr
-	t := table.NewWriter()
-	t.SetOutputMirror(stderr)
-	t.SetStyle(table.StyleLight)
-	t.Style().Options.DrawBorder = false
-	t.Style().Options.SeparateColumns = false
+// writeRunsTable writes a metadata table for each run.
+func writeRunsTable(w io.Writer, entries []runListEntry) {
+	t := newTable()
+	t.SetOutputMirror(w)
 
 	t.AppendHeader(table.Row{"Run ID", "Session", "Started", "Elapsed"})
 
@@ -188,19 +185,4 @@ func writeRunsTable(stdout, stderr io.Writer, entries []runListEntry) {
 	}
 
 	t.Render()
-}
-
-// writeRunsJSON writes all run entries as JSON to stdout.
-func writeRunsJSON(w io.Writer, entries []runListEntry) error {
-	buf := &bytes.Buffer{}
-	enc := json.NewEncoder(buf)
-	enc.SetIndent("", "  ")
-	enc.SetEscapeHTML(false)
-
-	if err := enc.Encode(entries); err != nil {
-		return fmt.Errorf("unable to encode runs as JSON: %w", err)
-	}
-
-	_, err := w.Write(buf.Bytes())
-	return err
 }

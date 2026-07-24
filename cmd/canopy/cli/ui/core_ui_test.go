@@ -6,9 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/wagoodman/go-partybus"
-
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
+	"github.com/wagoodman/go-partybus"
 )
 
 // a handler whose String() closes a streaming group (here just a sentinel).

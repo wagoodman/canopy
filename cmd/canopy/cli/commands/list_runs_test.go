@@ -154,7 +154,7 @@ func TestWriteRunsJSON(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	err := writeRunsJSON(&buf, entries)
+	err := writeJSON(&buf, entries)
 	require.NoError(t, err)
 
 	// verify the output is valid JSON
@@ -186,21 +186,28 @@ func TestWriteRunsTable(t *testing.T) {
 		},
 	}
 
-	var stdout, stderr bytes.Buffer
-	writeRunsTable(&stdout, &stderr, entries)
+	var buf bytes.Buffer
+	writeRunsTable(&buf, entries)
 
-	// stdout should contain only run IDs, one per line
-	stdoutLines := stdout.String()
-	require.Contains(t, stdoutLines, "bbbbbbbb-1111-2222-3333-444444444444\n")
-	require.Contains(t, stdoutLines, "cccccccc-1111-2222-3333-444444444444\n")
+	// the table carries the metadata (go-pretty uppercases headers)
+	content := buf.String()
+	require.Contains(t, content, "RUN ID")
+	require.Contains(t, content, "SESSION")
+	require.Contains(t, content, "STARTED")
+	require.Contains(t, content, "ELAPSED")
+	require.Contains(t, content, "bbbbbbbb") // run ID in table
+	require.Contains(t, content, "aaaaaaaa") // abbreviated session ID
+	require.Contains(t, content, "5s")       // elapsed time
+}
 
-	// stderr should contain the table with metadata (go-pretty uppercases headers)
-	stderrContent := stderr.String()
-	require.Contains(t, stderrContent, "RUN ID")
-	require.Contains(t, stderrContent, "SESSION")
-	require.Contains(t, stderrContent, "STARTED")
-	require.Contains(t, stderrContent, "ELAPSED")
-	require.Contains(t, stderrContent, "bbbbbbbb") // run ID in table
-	require.Contains(t, stderrContent, "aaaaaaaa") // abbreviated session ID
-	require.Contains(t, stderrContent, "5s")       // elapsed time
+func TestWriteRunIDs(t *testing.T) {
+	entries := []runListEntry{
+		{RunID: "bbbbbbbb-1111-2222-3333-444444444444"},
+		{RunID: "cccccccc-1111-2222-3333-444444444444"},
+	}
+
+	var buf bytes.Buffer
+	writeRunIDs(&buf, entries)
+
+	require.Equal(t, "bbbbbbbb-1111-2222-3333-444444444444\ncccccccc-1111-2222-3333-444444444444\n", buf.String())
 }
