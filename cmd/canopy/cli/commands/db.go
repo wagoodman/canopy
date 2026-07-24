@@ -10,7 +10,7 @@ import (
 func DB(app clio.Application) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "db",
-		Short: "manage the canopy database",
+		Short: "Manage the canopy database",
 	}
 
 	cmd.AddCommand(

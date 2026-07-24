@@ -34,7 +34,7 @@ func TrendCount(app clio.Application) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "count [GO-PKG-SPECIFIER...]",
-		Short: "report test suite size over time",
+		Short: "Report test suite size over time",
 		Long: `Track how many distinct tests ran across historical sessions.
 
 Each run contributes one point: the number of distinct per-test references observed

@@ -46,7 +46,7 @@ func ListSessions(app clio.Application) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "sessions [SESSION-ID]",
-		Short: "list sessions and the runs grouped under each",
+		Short: "List sessions and the runs grouped under each",
 		Args: func(_ *cobra.Command, args []string) error {
 			if err := cobra.MaximumNArgs(1)(nil, args); err != nil {
 				return err

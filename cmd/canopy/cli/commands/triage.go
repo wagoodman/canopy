@@ -95,7 +95,7 @@ func Triage(app clio.Application) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "triage",
-		Short: "fuse a run's failures into symptoms, verdicts, and root causes",
+		Short: "Fuse a run's failures into symptoms, verdicts, and root causes",
 		Long: `Produce one holistic report for a test run: X failures grouped into Y distinct
 symptoms, each pointing to Z changed root causes, with every symptom showing its
 verdict and its root cause side by side.

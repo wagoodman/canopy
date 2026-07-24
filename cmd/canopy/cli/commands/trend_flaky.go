@@ -41,7 +41,7 @@ func TrendFlaky(app clio.Application) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "flaky [GO-PKG-SPECIFIER...]",
-		Short: "detect and report flaky tests from historical sessions",
+		Short: "Detect and report flaky tests from historical sessions",
 		Long: `Analyze test runs to identify tests with inconsistent outcomes.
 
 A test is considered flaky if it has both passed and failed across multiple runs.

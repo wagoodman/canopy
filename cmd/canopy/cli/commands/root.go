@@ -60,7 +60,7 @@ func Root(app clio.Application) *cobra.Command {
 	var runErr error
 	cmd := &cobra.Command{
 		Use:   fmt.Sprintf("%s GO-PKG-SPECIFIER...", app.ID().Name),
-		Short: "select and run go tests",
+		Short: "Select and run go tests",
 		Long:  "This is a wrapper around the 'go test' command that provides additional value. See 'go help test' and 'go help build' for detailed flag information." + "\n" + prettyTitle,
 		Args: func(_ *cobra.Command, args []string) error {
 			if len(args) > 0 {

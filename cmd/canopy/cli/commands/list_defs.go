@@ -62,7 +62,7 @@ func ListDefs(app clio.Application) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "defs GO-PKG-SPECIFIER...",
-		Short: "list all test definitions found in the package path (use ... for recursive search)",
+		Short: "List all test definitions found in the package path (use ... for recursive search)",
 		Args: func(_ *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				opts.List.Specifiers = args

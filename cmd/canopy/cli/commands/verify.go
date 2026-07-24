@@ -90,7 +90,7 @@ func Verify(app clio.Application) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "verify",
-		Short: "diff the current run against a baseline to confirm a fix broke nothing new",
+		Short: "Diff the current run against a baseline to confirm a fix broke nothing new",
 		Long: `Diff the most recent run in a session against a baseline run and report one verdict:
 did the change fix its target and break nothing new?
 

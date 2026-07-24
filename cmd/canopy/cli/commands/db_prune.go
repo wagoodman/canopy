@@ -55,7 +55,7 @@ func DBPrune(app clio.Application) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "prune",
-		Short: "remove old test runs and reclaim database space",
+		Short: "Remove old test runs and reclaim database space",
 		Long: `Remove old test runs, their events, coverage data, and associated records.
 
 By default, applies the retention policy from your configuration (store.max-runs

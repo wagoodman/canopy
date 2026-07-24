@@ -34,7 +34,7 @@ func TrendDuration(app clio.Application) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "duration [GO-PKG-SPECIFIER...]",
-		Short: "report test duration trends from historical sessions",
+		Short: "Report test duration trends from historical sessions",
 		Long: `Analyze how test durations change over time.
 
 Lists the slowest tests with their latest duration and a history sparkline across

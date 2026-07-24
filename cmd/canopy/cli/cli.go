@@ -2,6 +2,8 @@
 package cli
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/commands"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui"
@@ -34,8 +36,8 @@ func New(id clio.Identification) *cobra.Command {
 	app.AddFlags(root.PersistentFlags())
 
 	root.AddCommand(
-		clio.VersionCommand(id),
-		clio.ConfigCommand(app, nil),
+		capitalizeShort(clio.VersionCommand(id)),
+		capitalizeShort(clio.ConfigCommand(app, nil)),
 		commands.Test(app),
 		commands.List(app),
 		commands.Open(app),
@@ -50,4 +52,13 @@ func New(id clio.Identification) *cobra.Command {
 	)
 
 	return root
+}
+
+// capitalizeShort uppercases the first letter of a command's short description so clio-provided
+// commands match the casing of our own.
+func capitalizeShort(cmd *cobra.Command) *cobra.Command {
+	if cmd.Short != "" {
+		cmd.Short = strings.ToUpper(cmd.Short[:1]) + cmd.Short[1:]
+	}
+	return cmd
 }

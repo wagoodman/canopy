@@ -60,7 +60,7 @@ func Affected(app clio.Application) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "affected [GO-PKG-SPECIFIER...]",
-		Short: "report tests affected by a change using the static import graph",
+		Short: "Report tests affected by a change using the static import graph",
 		Long: `Determine the minimal sound set of tests to run to verify a change did not break
 something, using only the static Go import graph (no coverage).
 

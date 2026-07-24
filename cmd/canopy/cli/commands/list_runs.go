@@ -49,7 +49,7 @@ func ListRuns(app clio.Application) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "runs",
-		Short: "list historical test run IDs",
+		Short: "List historical test run IDs",
 		Long: `List historical test runs from the database.
 
 Examples:

@@ -34,7 +34,7 @@ func TrendFailures(app clio.Application) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "failures [GO-PKG-SPECIFIER...]",
-		Short: "report failure-rate trends from historical sessions",
+		Short: "Report failure-rate trends from historical sessions",
 		Long: `Analyze test runs to surface failure rates and how they are trending.
 
 Tests are ranked by failure rate (fails over pass+fail, skips excluded). The trend

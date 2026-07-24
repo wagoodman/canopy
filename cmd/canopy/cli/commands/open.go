@@ -37,7 +37,7 @@ func Open(app clio.Application) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "open [NAME]",
-		Short: "open an interactive session from existing test results",
+		Short: "Open an interactive session from existing test results",
 		Long: "open an interactive session by name (find-or-create).\n\n" +
 			"NAME defaults to @branch. resolvers: @branch (current git branch), " +
 			"@module (go module path), @worktree (worktree root basename).",

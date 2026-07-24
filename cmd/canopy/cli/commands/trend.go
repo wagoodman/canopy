@@ -70,7 +70,7 @@ func collectTrendRecords(store options.Store, t options.Trend) (map[gotest.Refer
 func Trend(app clio.Application) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "trend",
-		Short: "analyze test trends and patterns from historical data",
+		Short: "Analyze test trends and patterns from historical data",
 		Long: `Analyze historical test data to identify patterns and trends.
 
 The trend command provides insights into test behavior across multiple runs,
