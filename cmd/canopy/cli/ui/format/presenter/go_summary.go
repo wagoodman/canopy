@@ -19,6 +19,10 @@ var _ Presenter = (*GoTestResultSummary)(nil)
 // canceledGlyph is shown in the summary status column when a run is interrupted (the word "CANCELED" is too wide).
 const canceledGlyph = "⊘"
 
+// elapsedPlaceholder fills the elapsed column for lines that have no elapsed time. It must be the same width as a
+// rendered elapsed value, otherwise the following tab lands on a different tab stop and the stats column is offset.
+var elapsedPlaceholder = strings.Repeat(" ", len(formatElapsed(0, true)))
+
 type GoSummaryConfig struct {
 	// Color enables/ disables color output
 	Color bool
@@ -244,7 +248,7 @@ func (s GoTestResultSummary) runningFooter() string { //nolint:funlen
 			completedPkgRefsAfter, pkgStats := s.completedPkgsAfter(s.firstNonStaleRunningRef(runningPkgRefs))
 
 			if len(completedPkgRefsAfter) > 0 {
-				aux := []string{" "} // blank (not "\t") elapsed placeholder, so stats align with running-package lines rather than landing one tab-stop further right
+				aux := []string{elapsedPlaceholder}
 				if s.config.ShowTestStatsForRunningPackages {
 					aux = append(aux, s.renderStats(s.mergeStats(pkgStats), true))
 				}

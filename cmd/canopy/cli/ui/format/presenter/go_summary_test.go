@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/require"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
@@ -95,6 +97,13 @@ func TestGoTestResultSummary_Canceled(t *testing.T) {
 	require.Contains(t, sb.String(), canceledGlyph)
 	require.Contains(t, sb.String(), "canceled by user")
 	require.NotContains(t, sb.String(), "PASS")
+}
+
+func TestElapsedPlaceholderWidth(t *testing.T) {
+	// the unrendered-packages rollup line has no elapsed time, but its placeholder must still occupy the same
+	// number of columns as a rendered elapsed value, otherwise the trailing tab lands on a different tab stop
+	// and the stats column is offset from the running-package lines.
+	require.Equal(t, lipgloss.Width(formatElapsed(time.Second, true)), lipgloss.Width(elapsedPlaceholder))
 }
 
 func fixtureRun(t testing.TB, name string) *gotest.Run {
