@@ -80,7 +80,6 @@ helping identify flaky tests, performance regressions, and other patterns.`,
 	cmd.AddCommand(
 		TrendFlaky(app),
 		TrendDuration(app),
-		TrendFailures(app),
 		TrendCount(app),
 	)
 
