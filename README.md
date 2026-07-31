@@ -159,7 +159,6 @@ codebase over time. All of these need `--store`d runs to draw from.
   the static import graph (what to re-run after editing a symbol)
 - `canopy coverage [RUN-ID]`   show coverage for the last run (or a specific one)
 - `canopy trend flaky`         detect flaky tests across historical sessions
-- `canopy trend failures`      failure-rate trends over time
 - `canopy trend duration`      test duration trends
 - `canopy trend count`         test-suite size over time
 
