@@ -16,6 +16,13 @@ import (
 
 var _ Presenter = (*GoTestResultSummary)(nil)
 
+// compilingGlyph and waitingGlyph mark the phases of the waiting line shown before any test has reported. Both are
+// plain text symbols with no emoji presentation, so terminals won't render them as color emoji.
+const (
+	compilingGlyph = "⛭"
+	waitingGlyph   = "⧖"
+)
+
 // elapsedPlaceholder fills the elapsed column for lines that have no elapsed time. It must be the same width as a
 // rendered elapsed value, otherwise the following tab lands on a different tab stop and the stats column is offset.
 var elapsedPlaceholder = strings.Repeat(" ", len(formatElapsed(0, true)))
@@ -176,16 +183,33 @@ func (c GoSummaryConfig) WithHidePackagesWithNoTests(hide bool) GoSummaryConfig 
 
 func (c GoSummaryConfig) New(runs ...gotest.Run) Presenter {
 	return GoTestResultSummary{
-		config:  c,
-		style:   style.NewGo(c.Color),
-		results: newJoinedResults(runs...),
+		config:           c,
+		style:            style.NewGo(c.Color),
+		results:          newJoinedResults(runs...),
+		expectedPackages: expectedPackageCount(runs),
 	}
+}
+
+// expectedPackageCount returns the number of distinct packages handed to `go test` across all runs, or 0 when
+// any run doesn't know its packages up front (e.g. replays), since a partial count would look like a stalled build.
+func expectedPackageCount(runs []gotest.Run) int {
+	pkgs := strset.New()
+	for _, run := range runs {
+		if run.Config.Packages == nil {
+			return 0
+		}
+		pkgs.Add(run.Config.Packages.ImportPaths()...)
+	}
+	return pkgs.Size()
 }
 
 type GoTestResultSummary struct {
 	config  GoSummaryConfig
 	style   style.Go
 	results result
+
+	// expectedPackages is the number of packages being tested (0 when unknown), used to show compile progress.
+	expectedPackages int
 }
 
 func (s GoTestResultSummary) Present(stdout, stderr io.Writer) error {
@@ -199,7 +223,10 @@ func (s GoTestResultSummary) Present(stdout, stderr io.Writer) error {
 		runningFooter = s.runningFooter()
 	}
 
-	footer := s.summaryFooter()
+	footer, waiting := s.waitingFooter()
+	if !waiting {
+		footer = s.summaryFooter()
+	}
 
 	if _, err := fmt.Fprintln(w, runningFooter+footer); err != nil {
 		return fmt.Errorf("failed to write summary footer: %w", err)
@@ -445,8 +472,6 @@ func (s GoTestResultSummary) summaryFooter() string {
 	elapsed := s.results.Elapsed(!s.config.DurationFromEvents)
 	if elapsed > 0 {
 		result += "\t" + s.style.Aux.Render(formatElapsed(elapsed, false))
-	} else {
-		result += "\t" + s.style.Aux.Render("compiling...")
 	}
 
 	if coverage, ok := s.results.Coverage(); ok {
@@ -470,6 +495,48 @@ func (s GoTestResultSummary) summaryFooter() string {
 	}
 
 	return result
+}
+
+// waitingFooter renders a compact footer for the stretch before any test has concluded. There are no stats to
+// column-align yet, so padding to the package name width would only leave a wide gap. Returns false once there are
+// results to show, or when none are coming (finished or canceled).
+func (s GoTestResultSummary) waitingFooter() (string, bool) {
+	if s.config.Canceled || !s.config.Running || s.results.TestStats().Total() > 0 {
+		return "", false
+	}
+
+	// once every package has started we are only waiting on test binaries to report
+	started := s.startedPackageCount()
+	compiling := started == 0 || started < s.expectedPackages
+
+	var body string
+	switch {
+	case compiling && s.expectedPackages > 0:
+		body = compilingGlyph + " compiling" + s.style.Aux.Render(fmt.Sprintf(" %d/%d packages", started, s.expectedPackages))
+	case compiling:
+		body = compilingGlyph + " compiling"
+	default:
+		body = waitingGlyph + " waiting for test output"
+	}
+
+	line := s.footerStatus() + body
+
+	if elapsed := s.results.Elapsed(!s.config.DurationFromEvents); elapsed > 0 {
+		line += "  " + s.style.Aux.Render(strings.TrimSpace(formatElapsed(elapsed, false)))
+	}
+
+	return line, true
+}
+
+// startedPackageCount returns how many packages have a "start" event. The go test command emits one once a package's
+// test binary is built, but holds it until every earlier package (in the order given to go test) has started. This
+// keeps the count a little behind the true build progress: a slow package holds back already-linked packages after it.
+func (s GoTestResultSummary) startedPackageCount() int {
+	started := strset.New()
+	for _, ref := range s.results.ReferencesByAction(gotest.StartAction) {
+		started.Add(ref.Package)
+	}
+	return started.Size()
 }
 
 func (s GoTestResultSummary) renderStats(stats gotest.ResultStats, asAux bool) string {
@@ -505,9 +572,12 @@ func (s GoTestResultSummary) renderStats(stats gotest.ResultStats, asAux bool) s
 		testCountSuffix = " tests"
 	}
 	switch {
+	case total == 0 && !asAux:
+		// the waiting footer covers the in-progress case, so here the run was finished or canceled without results
+		tests = append(tests, s.style.Waiting.Render("(no test results)"))
+		testCountSuffix = ""
 	case total == 0:
 		tests = append(tests, s.style.Waiting.Render("(waiting for test results)"))
-		// tests = append(tests, s.style.Waiting.Render("∅"))
 		testCountSuffix = ""
 	case s.config.ShowTotalTestCount && total != stats.Passed:
 		totalStr := fmt.Sprintf("%d total", stats.Total())
