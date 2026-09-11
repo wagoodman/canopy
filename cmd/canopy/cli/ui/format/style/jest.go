@@ -36,7 +36,7 @@ func NewJest(color bool) Jest {
 			CheckTitle:   lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true),
 			XTitle:       lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true),
 			RunningTitle: lipgloss.NewStyle().Background(lipgloss.Color("11")).Foreground(lipgloss.Color("0")).Bold(true),
-			SkipTitle:    lipgloss.NewStyle().Background(lipgloss.Color("246")).Foreground(lipgloss.Color("0")).Bold(true),
+			SkipTitle:    lipgloss.NewStyle().Background(lipgloss.Color("11")).Foreground(lipgloss.Color("0")).Bold(true),
 			SuccessTitle: lipgloss.NewStyle().Background(lipgloss.Color("10")).Foreground(lipgloss.Color("0")).Bold(true),
 			FailureTitle: lipgloss.NewStyle().Background(lipgloss.Color("9")).Foreground(lipgloss.Color("15")).Bold(true),
 			Aux:          lipgloss.NewStyle().Faint(true),

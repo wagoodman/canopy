@@ -54,13 +54,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		// an interrupt (ctrl+c/esc) means the run was canceled before completion; record it so the
-		// final render reports CANCELED rather than a stale spinner or a misleading PASS.
-		switch msg.String() {
-		case "esc", "ctrl+c":
-			m.canceled = true
-		}
 	case partybus.Event:
 		switch msg.Type {
 		case event.GoTestType:
@@ -163,7 +156,8 @@ func (m Model) View() string {
 	sb := strings.Builder{}
 	m.config.RunningState = m.common.Spinner.View
 	m.config.Window = m.common.Window
-	m.config.Canceled = m.canceled
+	// an interrupt keypress (tracked on common) or a canceled run-end event both mean the results are incomplete
+	m.config.Canceled = m.canceled || m.common.Canceled
 	m.config.Running = m.pending.Cardinality() > 0
 	err := m.config.New(m.runs...).Present(&sb, &sb)
 	if err != nil {

@@ -94,7 +94,7 @@ func TestGoTestResultSummary_Canceled(t *testing.T) {
 	sb := strings.Builder{}
 	require.NoError(t, subject.Present(&sb, &sb))
 
-	require.Contains(t, sb.String(), canceledGlyph)
+	require.Contains(t, sb.String(), style.CanceledGlyph)
 	require.Contains(t, sb.String(), "canceled by user")
 	require.NotContains(t, sb.String(), "PASS")
 }

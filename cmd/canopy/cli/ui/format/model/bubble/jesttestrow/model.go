@@ -155,7 +155,11 @@ func (m Model) testNestedTitleOutput() (title, output string) {
 			status = "…"
 		}
 
-		title = m.style.Aux.Render(fmt.Sprintf("  %s", status))
+		titleStyle := m.style.Aux
+		if m.common.Canceled {
+			titleStyle = m.style.XTitle
+		}
+		title = titleStyle.Render(fmt.Sprintf("  %s", status))
 		if m.config.ShowIntermediateOutput && len(m.output) > 0 {
 			output = m.style.Aux.Render(strings.TrimSpace(m.output[len(m.output)-1]))
 		}
