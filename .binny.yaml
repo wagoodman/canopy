@@ -36,7 +36,7 @@ tools:
   # (.pem/.sig) flow, which cosign 3.x drops in favor of --bundle. see .goreleaser.yaml signs.
   - name: cosign
     version:
-      want: v2.6.4
+      want: v3.1.3
     method: github-release
     with:
       repo: sigstore/cosign
@@ -44,7 +44,7 @@ tools:
   # used for linting
   - name: golangci-lint
     version:
-      want: v2.12.2
+      want: v2.13.2
     method: github-release
     with:
       repo: golangci/golangci-lint
@@ -52,7 +52,7 @@ tools:
   # used for showing the changelog at release
   - name: glow
     version:
-      want: v2.1.2
+      want: v3.0.0
     method: github-release
     with:
       repo: charmbracelet/glow
@@ -60,7 +60,7 @@ tools:
   # used to release all artifacts
   - name: goreleaser
     version:
-      want: v2.17.0
+      want: v2.18.1
     method: github-release
     with:
       repo: goreleaser/goreleaser
@@ -92,7 +92,7 @@ tools:
   # used for running all local and CI tasks
   - name: task
     version:
-      want: v3.52.0
+      want: v3.53.1
     method: github-release
     with:
       repo: go-task/task
@@ -100,7 +100,7 @@ tools:
   # used for triggering a release
   - name: gh
     version:
-      want: v2.96.0
+      want: v2.100.0
     method: github-release
     with:
       repo: cli/cli
