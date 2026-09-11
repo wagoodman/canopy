@@ -75,6 +75,11 @@ type GoSummaryConfig struct {
 	// Canceled indicates the run was interrupted before completion, so the summary should report a
 	// cancellation instead of a PASS/FAIL conclusion.
 	Canceled bool
+
+	// Running indicates the run-end event has not been seen yet. The results alone can't tell this: between
+	// packages (e.g. while the next package is still compiling) every reference seen so far has concluded,
+	// which would otherwise read as a final PASS/FAIL.
+	Running bool
 }
 
 func DefaultGoTestResultSummaryConfig() GoSummaryConfig {
@@ -375,8 +380,6 @@ func (s GoTestResultSummary) completedPkgsAfter(startRunningPkgRef *gotest.Refer
 
 // footerStatus renders the pass/fail/running/canceled glyph, tab-padded to the status column width.
 func (s GoTestResultSummary) footerStatus() string {
-	passed, isRunning := s.results.Passed()
-
 	var status string
 	switch {
 	case s.config.Canceled:
@@ -384,13 +387,13 @@ func (s GoTestResultSummary) footerStatus() string {
 		// so reporting PASS would be misleading. use a skip glyph here (the word doesn't fit the status
 		// column) and explain the interruption on a trailer line below the summary.
 		status = s.style.Skipped.Render(canceledGlyph)
-	case isRunning:
+	case s.config.Running:
 		runningState := s.config.RunningState
 		if runningState == "" {
 			runningState = "RUNNING"
 		}
 		status = s.style.Running.Render(runningState)
-	case !passed:
+	case !s.results.Passed():
 		status = s.style.Failed.Render("FAIL")
 	default:
 		status = s.style.Success.Render("PASS")

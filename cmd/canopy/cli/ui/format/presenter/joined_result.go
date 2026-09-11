@@ -27,7 +27,7 @@ type result interface {
 	ReferenceDuration(ref gotest.Reference) time.Duration
 	SetCoverage(coverage *float64)
 	Coverage() (float64, bool)
-	Passed() (bool, bool)
+	Passed() bool
 }
 
 type joinedResult struct {
@@ -196,13 +196,11 @@ func (j joinedResult) Coverage() (float64, bool) {
 	return 0, false
 }
 
-func (j joinedResult) Passed() (bool, bool) {
-	var allPassed = true
-	var isStillRunning = false
+func (j joinedResult) Passed() bool {
 	for _, run := range j.runs {
-		passed, stillRunning := run.Result.Passed()
-		allPassed = allPassed && passed
-		isStillRunning = isStillRunning || stillRunning
+		if !run.Result.Passed() {
+			return false
+		}
 	}
-	return allPassed, isStillRunning
+	return true
 }

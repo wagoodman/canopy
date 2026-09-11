@@ -334,7 +334,7 @@ func evaluateResults(runs []*gotest.Run, elapsed time.Duration, logTestFailuresA
 	var resultErr error
 	for _, run := range runs {
 		result := run.Result
-		runPassed, _ := result.Passed()
+		runPassed := result.Passed()
 		passed = passed && runPassed
 
 		if !runPassed {
