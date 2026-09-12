@@ -294,6 +294,10 @@ func (h *verboseHandler) outputPackageToWriter(pkgRef gotest.Reference, writer i
 		}
 	}
 
+	writeForeignBuildFailure(h.result, pkgRef, func(e gotest.Event) {
+		h.writeEvent(e, writer)
+	})
+
 	// output package-level conclusions (FAIL line, etc.)
 	for _, e := range h.result.ReferenceEvents(pkgRef) {
 		if output.HasAny(output.HasPackagePassMarking, output.HasPackageCoverageMarking, output.HasShuffleSeedMarking)(e.Output) {

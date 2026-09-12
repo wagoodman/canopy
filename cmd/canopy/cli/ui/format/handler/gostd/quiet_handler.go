@@ -247,6 +247,10 @@ func (h *quietHandler) outputPackageToWriter(pkgRef gotest.Reference, writer io.
 		}
 	}
 
+	writeForeignBuildFailure(h.result, pkgRef, func(e gotest.Event) {
+		fmt.Fprint(writer, h.formatter(e, h.panic[e.Reference]).String())
+	})
+
 	// output package conclusions
 	outputEvents := h.result.ReferenceEvents(pkgRef)
 	for _, e := range outputEvents {
