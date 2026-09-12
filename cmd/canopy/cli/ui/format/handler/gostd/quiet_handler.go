@@ -189,7 +189,13 @@ func (h *quietHandler) render() {
 
 // hasFailure recursively checks if a test reference or any of its children failed.
 func (h *quietHandler) hasFailure(testRef gotest.Reference) bool {
-	if h.result.ReferenceConclusiveAction(testRef) == gotest.FailAction {
+	switch action := h.result.ReferenceConclusiveAction(testRef); {
+	case action == gotest.FailAction:
+		return true
+	case !action.Completed():
+		// this is only called once the package has concluded, so a test with no conclusion of its own was
+		// abandoned mid-run: the binary died under it (a panic, a timeout, a fatal signal). Its output carries
+		// the only explanation of the failure, so it must not be filtered out.
 		return true
 	}
 	for _, child := range h.result.Children(testRef) {

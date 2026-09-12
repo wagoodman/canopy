@@ -229,3 +229,21 @@ func TestResult_SetCoverage(t *testing.T) {
 	assert.False(t, ok)
 	assert.Equal(t, 0.0, cov)
 }
+
+// TestResult_Passed_PackageFailureAmongPassingTests covers a package that dies without any of its tests
+// concluding (a panic or a build failure): the only failure signal is the package reference, and the
+// passing tests of other packages must not mask it.
+func TestResult_Passed_PackageFailureAmongPassingTests(t *testing.T) {
+	result := NewResult(ResultConfig{})
+
+	// a healthy package: its test passes and the package concludes
+	result.Update(Event{Action: PassAction, Reference: Reference{Package: "good", FuncName: "TestGood"}})
+	result.Update(Event{Action: PassAction, Reference: Reference{Package: "good"}})
+	require.True(t, result.Passed())
+
+	// a package whose binary panicked: the test started but never concluded, only the package failed
+	result.Update(Event{Action: RunAction, Reference: Reference{Package: "boom", FuncName: "TestBoom"}})
+	result.Update(Event{Action: FailAction, Reference: Reference{Package: "boom"}})
+
+	require.False(t, result.Passed())
+}

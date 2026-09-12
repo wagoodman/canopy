@@ -438,7 +438,7 @@ func (r Result) Coverage() (float64, bool) {
 	return *r.coverage, true
 }
 
-// Passed reports whether no test has failed. A result with no events is never a pass. Whether the run is still in
+// Passed reports whether nothing failed. A result with no events is never a pass. Whether the run is still in
 // progress can't be derived from its events (e.g. the next package may still be compiling), that is only known
 // from the run-end event.
 func (r Result) Passed() bool {
@@ -449,13 +449,9 @@ func (r Result) Passed() bool {
 		return false
 	}
 
-	failed := r.testReferencesByAction[FailAction]
-	if refCount(r.testReferencesByAction[PassAction])+refCount(failed)+refCount(r.testReferencesByAction[SkipAction]) == 0 {
-		// no test has concluded, which may be a compilation error or some such that only leaves package refs
-		failed = r.referencesByAction[FailAction]
-	}
-
-	return refCount(failed) == 0
+	// package references are counted too, not just test references: a package that panics or fails to build
+	// concludes as a failure without any of its tests ever concluding.
+	return refCount(r.referencesByAction[FailAction]) == 0
 }
 
 func refCount(set *orderedset.OrderedSet[Reference]) int {
