@@ -146,14 +146,13 @@ func (h *quietHandler) OnGoTestEvent(e gotest.Event) error {
 func (h *quietHandler) render() {
 	// only render packages that are done, and render them in alphabetical order
 	// this is the reason why we cannot use a package handler (since order of packages is important, independent of the order of completion)
-	pkgs := h.packages.Values()
-	sort.Sort(gotest.References(pkgs))
+	pkgs := h.pendingPackages()
 
 	// check if across-packages grouping is enabled
 	if h.groupConfig.AcrossPackages && h.groupConfig.Formatter != nil {
 		h.grouper.RenderWithGrouping(pkgs, func(ref gotest.Reference) []gotest.Reference {
 			h.packages.Delete(ref)
-			return h.packages.Values()
+			return h.pendingPackages()
 		})
 		return
 	}
@@ -183,8 +182,17 @@ func (h *quietHandler) render() {
 
 		h.outputPackage(pkgRef)
 		h.packages.Delete(pkgRef)
-		pkgs = h.packages.Values()
+		pkgs = h.pendingPackages()
 	}
+}
+
+// pendingPackages returns the not-yet-rendered packages in alphabetical order. The ordered set holds them
+// in completion order, so every re-read has to be re-sorted or output reverts to completion order after the
+// first package is rendered.
+func (h *quietHandler) pendingPackages() []gotest.Reference {
+	pkgs := h.packages.Values()
+	sort.Sort(gotest.References(pkgs))
+	return pkgs
 }
 
 // hasFailure recursively checks if a test reference or any of its children failed.
