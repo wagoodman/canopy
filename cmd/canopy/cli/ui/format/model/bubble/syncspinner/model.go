@@ -29,10 +29,38 @@ func nextID() int {
 	return lastID
 }
 
+// Glass is a single braille cell that fills like a glass, rising on a diagonal from the bottom-left dot to the
+// top-right dot, then drains from the bottom in that same order.
+var Glass = spinner.Spinner{
+	Frames: fillAndDrain(0x40, 0x04, 0x80, 0x02, 0x20, 0x01, 0x10, 0x08),
+	FPS:    time.Second / 12,
+}
+
+// fillAndDrain builds braille frames that light dots in the given order, then clear them in the same order.
+// Each dot is its bit offset from U+2800, laid out in the cell as:
+//
+//	0x01 0x08
+//	0x02 0x10
+//	0x04 0x20
+//	0x40 0x80
+func fillAndDrain(order ...rune) []string {
+	var frames []string
+	var cell rune
+	for _, dot := range order {
+		cell |= dot
+		frames = append(frames, string(0x2800+cell))
+	}
+	for _, dot := range order {
+		cell &^= dot
+		frames = append(frames, string(0x2800+cell))
+	}
+	return frames
+}
+
 // New creates a spinner model with default values and optional configuration.
 func New(opts ...spinner.Option) Model {
 	m := spinner.Model{
-		Spinner: spinner.MiniDot,
+		Spinner: Glass,
 	}
 
 	for _, opt := range opts {

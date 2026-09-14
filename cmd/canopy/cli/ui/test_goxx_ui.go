@@ -105,8 +105,12 @@ func newDefaultDynamicGoxxUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 			common,
 			func(ref gotest.Reference, common state.Common, completed map[gotest.Reference]struct{}, elapsed time.Duration) string {
 				// show the package name, the number of completed tests, the elapsed time + the spinner
+				statusStyle := sty.Running
+				if common.Canceled {
+					statusStyle = sty.Failed
+				}
 				return presenter.Package{
-					Status:         common.Spinner.View,
+					Status:         statusStyle.Render(common.Spinner.View),
 					Name:           ref.Package,
 					TestsCompleted: len(completed),
 					Aux:            []string{elapsed.String()},

@@ -54,7 +54,8 @@ func NewGo(color bool) Go {
 			Bold:    lipgloss.NewStyle().Bold(true),
 			Success: lipgloss.NewStyle().Foreground(lipgloss.Color("10")),
 			Failed:  lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
-			Running: lipgloss.NewStyle().Foreground(lipgloss.Color("14")),
+			// running and skipped share yellow: neither is a conclusive pass/fail (canceled uses Failed)
+			Running: lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
 			Skipped: lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
 			Aux:     lipgloss.NewStyle().Faint(true),
 			Info:    lipgloss.NewStyle().Foreground(lipgloss.Color("13")),

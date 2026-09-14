@@ -16,9 +16,6 @@ import (
 
 var _ Presenter = (*GoTestResultSummary)(nil)
 
-// canceledGlyph is shown in the summary status column when a run is interrupted (the word "CANCELED" is too wide).
-const canceledGlyph = "⊘"
-
 // elapsedPlaceholder fills the elapsed column for lines that have no elapsed time. It must be the same width as a
 // rendered elapsed value, otherwise the following tab lands on a different tab stop and the stats column is offset.
 var elapsedPlaceholder = strings.Repeat(" ", len(formatElapsed(0, true)))
@@ -273,6 +270,8 @@ func (s GoTestResultSummary) runningFooter() string { //nolint:funlen
 		}
 	}
 
+	runningStatus := s.runningPackageStatus()
+
 	for i, runningPkgRef := range runningPkgRefs {
 		if i == 0 {
 			includeRollupLine()
@@ -298,7 +297,7 @@ func (s GoTestResultSummary) runningFooter() string { //nolint:funlen
 		}
 
 		lines = append(lines, Package{
-			Status:       s.config.RunningState,
+			Status:       runningStatus,
 			NameAsAux:    true,
 			Name:         runningPkgRef.Package,
 			Aux:          aux,
@@ -315,6 +314,16 @@ func (s GoTestResultSummary) runningFooter() string { //nolint:funlen
 	}
 
 	return strings.Join(lines, "\n") + "\n"
+}
+
+// runningPackageStatus is the status for in-flight package rows: the spinner, or the canceled glyph once interrupted.
+func (s GoTestResultSummary) runningPackageStatus() string {
+	if s.config.Canceled {
+		// packages still in flight were interrupted, a frozen spinner frame would read as a hung UI. Match the
+		// footer's canceled glyph color so the whole interrupted block reads as one state.
+		return s.style.Failed.Render(style.CanceledGlyph)
+	}
+	return s.style.Running.Render(s.config.RunningState)
 }
 
 func (s GoTestResultSummary) firstNonStaleRunningRef(runningPkgRefs []gotest.Reference) *gotest.Reference {
@@ -384,9 +393,9 @@ func (s GoTestResultSummary) footerStatus() string {
 	switch {
 	case s.config.Canceled:
 		// a canceled run takes precedence over any pass/fail/running state: the results are incomplete,
-		// so reporting PASS would be misleading. use a skip glyph here (the word doesn't fit the status
+		// so reporting PASS would be misleading. use a glyph here (the word doesn't fit the status
 		// column) and explain the interruption on a trailer line below the summary.
-		status = s.style.Skipped.Render(canceledGlyph)
+		status = s.style.Failed.Render(style.CanceledGlyph)
 	case s.config.Running:
 		runningState := s.config.RunningState
 		if runningState == "" {

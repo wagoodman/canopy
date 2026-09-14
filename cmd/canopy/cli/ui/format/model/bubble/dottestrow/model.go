@@ -170,7 +170,11 @@ func (m Model) testTopTitleOutput() (title, output string) {
 			status = "…"
 		}
 
-		title = m.style.RunningTitle.Render(status)
+		titleStyle := m.style.RunningTitle
+		if m.common.Canceled {
+			titleStyle = m.style.FailureTitle
+		}
+		title = titleStyle.Render(status)
 		if m.config.ShowIntermediateOutput && len(m.output) > 0 {
 			output = m.style.Aux.Render(strings.TrimSpace(m.output[len(m.output)-1]))
 		}
