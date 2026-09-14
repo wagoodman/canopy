@@ -99,6 +99,31 @@ func TestGoTestResultSummary_Canceled(t *testing.T) {
 	require.NotContains(t, sb.String(), "PASS")
 }
 
+func TestGoTestResultSummary_PackagesWithNoTests(t *testing.T) {
+	// the no-tests count must come after the elapsed time rather than inside the summary column, otherwise a long
+	// summary pushes the elapsed time out of alignment with the package lines above it.
+	subject := GoTestResultSummary{
+		config: GoSummaryConfig{
+			Color:                   false,
+			PackageNameWidth:        100,
+			DurationFromEvents:      true,
+			HidePackagesWithNoTests: true,
+		},
+		style: style.NewGo(false),
+	}
+	subject.results = newJoinedResults(*fixtureRun(t, "mixed-verbose.json"))
+
+	sb := strings.Builder{}
+	require.NoError(t, subject.Present(&sb, &sb))
+	out := sb.String()
+
+	elapsed := formatElapsed(subject.results.Elapsed(false), false)
+	noTests := "with no tests)"
+	require.Contains(t, out, elapsed)
+	require.Contains(t, out, noTests)
+	require.Less(t, strings.Index(out, elapsed), strings.Index(out, noTests))
+}
+
 func TestElapsedPlaceholderWidth(t *testing.T) {
 	// the unrendered-packages rollup line has no elapsed time, but its placeholder must still occupy the same
 	// number of columns as a rendered elapsed value, otherwise the trailing tab lands on a different tab stop

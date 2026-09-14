@@ -422,14 +422,6 @@ func (s GoTestResultSummary) summaryFooter() string {
 	stats := s.results.TestStats()
 	sections = append(sections, s.renderStats(stats, false))
 
-	if s.config.HidePackagesWithNoTests && stats.PackagesWithNoTests > 0 {
-		label := "package"
-		if stats.PackagesWithNoTests > 1 {
-			label = "packages"
-		}
-		sections = append(sections, s.style.Aux.Render(fmt.Sprintf("(%d %s with no tests)", stats.PackagesWithNoTests, label)))
-	}
-
 	summary := strings.Join(sections, " ")
 	// pad to the package-name column width, but never below the content width, else
 	// lipgloss word-wraps a summary wider than the column (e.g. the waiting state).
@@ -451,6 +443,16 @@ func (s GoTestResultSummary) summaryFooter() string {
 	if coverage, ok := s.results.Coverage(); ok {
 		// match the same format changes used in the gostd handlers
 		result += "\t" + s.style.Aux.Render(fmt.Sprintf("[%0.1f%% coverage]", coverage))
+	}
+
+	if s.config.HidePackagesWithNoTests && stats.PackagesWithNoTests > 0 {
+		// this lives after the elapsed column (not in the summary column) so a long summary doesn't push the
+		// elapsed time out of alignment with the package lines above it.
+		label := "package"
+		if stats.PackagesWithNoTests > 1 {
+			label = "packages"
+		}
+		result += "\t" + s.style.Aux.Render(fmt.Sprintf("(%d %s with no tests)", stats.PackagesWithNoTests, label))
 	}
 
 	if s.config.Canceled {
