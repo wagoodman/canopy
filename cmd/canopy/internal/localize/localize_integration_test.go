@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"golang.org/x/tools/go/callgraph"
@@ -106,4 +107,31 @@ func TestLocalize_FixtureRTARanksRootCause(t *testing.T) {
 	require.Greater(t, len(chaRes.Candidates), 1)
 	require.Equal(t, chaRes.Candidates[0].ReachedBy, chaRes.Candidates[1].ReachedBy,
 		"CHA over-attributes: its top score should be tied, showing why the RTA upgrade matters")
+}
+
+// TestLocalize_PanicDegrades guards the process against go/ssa and the callgraph resolvers, which panic
+// rather than return an error on a program they consider malformed. Before the recover in localizeWith
+// this took the whole canopy run (or test binary) down with it; triage is expected to fall back to
+// symptom-grouped verdicts instead. The resolver seam stands in for the panic because reproducing a
+// malformed program on demand depends on the toolchain version.
+func TestLocalize_PanicDegrades(t *testing.T) {
+	if testing.Short() {
+		t.Skip("loads real packages and builds SSA; skipped in -short")
+	}
+
+	abs, err := filepath.Abs("../flaky/analyzer.go")
+	require.NoError(t, err)
+	changed, err := ChangedSymbols([]string{abs})
+	require.NoError(t, err)
+	require.NotEmpty(t, changed)
+
+	panicking := func(_ *ssa.Program, _ []*ssa.Function) (*callgraph.Graph, string) {
+		panic("unexpected expr: *ast.KeyValueExpr")
+	}
+
+	res, err := localizeWith(panicking, []string{flakyPkg}, changed, fixtureFailures())
+
+	require.Error(t, err)
+	assert.Nil(t, res)
+	assert.Contains(t, err.Error(), "unexpected expr: *ast.KeyValueExpr")
 }
