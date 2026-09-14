@@ -11,6 +11,7 @@ import (
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/require"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
 
@@ -122,6 +123,160 @@ func TestGoTestResultSummary_PackagesWithNoTests(t *testing.T) {
 	require.Contains(t, out, elapsed)
 	require.Contains(t, out, noTests)
 	require.Less(t, strings.Index(out, elapsed), strings.Index(out, noTests))
+}
+
+func TestGoTestResultSummary_WaitingFooter(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	pkgs := golist.NewPackageCollection(
+		golist.Package{ImportPath: "example.com/a", Dir: "/a"},
+		golist.Package{ImportPath: "example.com/b", Dir: "/b"},
+		golist.Package{ImportPath: "example.com/c", Dir: "/c"},
+	)
+
+	start := func(pkg string, offset time.Duration) gotest.Event {
+		return gotest.Event{Reference: gotest.NewReference(pkg, ""), Action: gotest.StartAction, Time: base.Add(offset)}
+	}
+
+	cases := []struct {
+		name   string
+		pkgs   *golist.PackageCollection
+		events []gotest.Event
+		want   string
+	}{
+		{
+			name: "nothing compiled yet",
+			pkgs: pkgs,
+			want: "⠋ ⛭ compiling 0/3 packages\n",
+		},
+		{
+			name:   "partially compiled",
+			pkgs:   pkgs,
+			events: []gotest.Event{start("example.com/a", 0), start("example.com/b", 1500*time.Millisecond)},
+			want:   "⠋ ⛭ compiling 2/3 packages  1.5s\n",
+		},
+		{
+			name: "compiled, waiting for test output",
+			pkgs: pkgs,
+			events: []gotest.Event{
+				start("example.com/a", 0),
+				start("example.com/b", time.Second),
+				start("example.com/c", 2*time.Second),
+				{Reference: gotest.NewReference("example.com/a", "TestA"), Action: gotest.RunAction, Time: base.Add(3 * time.Second)},
+			},
+			want: "⠋ ⧖ waiting for test output  3s\n",
+		},
+		{
+			name: "unknown package set",
+			want: "⠋ ⛭ compiling\n",
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			subject := newWaitingSubject(tt.pkgs, tt.events, false)
+
+			sb := strings.Builder{}
+			require.NoError(t, subject.Present(&sb, &sb))
+			require.Equal(t, tt.want, sb.String())
+		})
+	}
+}
+
+func TestGoTestResultSummary_WaitingFooterAlignment(t *testing.T) {
+	// the status column is only worth padding out when there are running package lines above to line up with
+	subject := newWaitingSubject(golist.NewPackageCollection(golist.Package{ImportPath: "example.com/a", Dir: "/a"}), nil, false)
+
+	line, ok := subject.waitingFooter(true)
+	require.True(t, ok)
+	require.Equal(t, "⠋\t\t⛭ compiling 0/1 packages", line)
+
+	line, ok = subject.waitingFooter(false)
+	require.True(t, ok)
+	require.Equal(t, "⠋ ⛭ compiling 0/1 packages", line)
+}
+
+func TestGoTestResultSummary_WaitingFooterStepsAside(t *testing.T) {
+	pkg := gotest.NewReference("example.com/a", "")
+	test := gotest.NewReference("example.com/a", "TestA")
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	pkgs := golist.NewPackageCollection(golist.Package{ImportPath: "example.com/a", Dir: "/a"})
+
+	t.Run("finished without results", func(t *testing.T) {
+		subject := newWaitingSubject(pkgs, []gotest.Event{{Reference: pkg, Action: gotest.StartAction, Time: now}}, true)
+
+		sb := strings.Builder{}
+		require.NoError(t, subject.Present(&sb, &sb))
+		require.Contains(t, sb.String(), "(no test results)")
+		require.NotContains(t, sb.String(), "compiling")
+		require.NotContains(t, sb.String(), "waiting for test output")
+	})
+
+	t.Run("test results arrived", func(t *testing.T) {
+		subject := newWaitingSubject(pkgs, []gotest.Event{
+			{Reference: pkg, Action: gotest.StartAction, Time: now},
+			{Reference: test, Action: gotest.RunAction, Time: now},
+			{Reference: test, Action: gotest.PassAction, Time: now.Add(time.Second)},
+		}, false)
+
+		sb := strings.Builder{}
+		require.NoError(t, subject.Present(&sb, &sb))
+		require.Contains(t, sb.String(), "1 passed tests")
+		require.NotContains(t, sb.String(), "compiling")
+		require.NotContains(t, sb.String(), "waiting for test output")
+	})
+
+	t.Run("results arrive while packages still compile", func(t *testing.T) {
+		morePkgs := golist.NewPackageCollection(
+			golist.Package{ImportPath: "example.com/a", Dir: "/a"},
+			golist.Package{ImportPath: "example.com/b", Dir: "/b"},
+			golist.Package{ImportPath: "example.com/c", Dir: "/c"},
+		)
+		subject := newWaitingSubject(morePkgs, []gotest.Event{
+			{Reference: pkg, Action: gotest.StartAction, Time: now},
+			{Reference: test, Action: gotest.RunAction, Time: now},
+			{Reference: test, Action: gotest.PassAction, Time: now.Add(time.Second)},
+		}, false)
+
+		sb := strings.Builder{}
+		require.NoError(t, subject.Present(&sb, &sb))
+		require.Contains(t, sb.String(), "1 passed tests")
+		// once tests are reporting, the footer sticks to test status (build progress is only for the wait before)
+		require.NotContains(t, sb.String(), "compiling")
+		// every result seen so far passed, but the run isn't done while packages are still compiling
+		require.True(t, strings.HasPrefix(sb.String(), "⠋"), "expected a running status, got %q", sb.String())
+	})
+
+	t.Run("finished while packages never started", func(t *testing.T) {
+		morePkgs := golist.NewPackageCollection(
+			golist.Package{ImportPath: "example.com/a", Dir: "/a"},
+			golist.Package{ImportPath: "example.com/b", Dir: "/b"},
+		)
+		subject := newWaitingSubject(morePkgs, []gotest.Event{
+			{Reference: pkg, Action: gotest.StartAction, Time: now},
+			{Reference: test, Action: gotest.RunAction, Time: now},
+			{Reference: test, Action: gotest.PassAction, Time: now.Add(time.Second)},
+		}, true)
+
+		sb := strings.Builder{}
+		require.NoError(t, subject.Present(&sb, &sb))
+		require.NotContains(t, sb.String(), "compiling")
+	})
+}
+
+func newWaitingSubject(pkgs *golist.PackageCollection, events []gotest.Event, finished bool) GoTestResultSummary {
+	run := gotest.NewRun(gotest.RunnerConfig{Packages: pkgs})
+	run.Result = *gotest.NewResult(gotest.ResultConfig{})
+	for _, e := range events {
+		run.Result.Update(e)
+	}
+
+	return GoSummaryConfig{
+		Color:              false,
+		PackageNameWidth:   40,
+		DurationFromEvents: true,
+		RunningState:       "⠋",
+		Running:            !finished,
+	}.New(*run).(GoTestResultSummary)
 }
 
 func TestElapsedPlaceholderWidth(t *testing.T) {

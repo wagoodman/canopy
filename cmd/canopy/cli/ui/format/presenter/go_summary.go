@@ -16,6 +16,13 @@ import (
 
 var _ Presenter = (*GoTestResultSummary)(nil)
 
+// compilingGlyph and waitingGlyph mark the phases of the waiting line shown before any test has reported. Both are
+// plain text symbols with no emoji presentation, so terminals won't render them as color emoji.
+const (
+	compilingGlyph = "⛭"
+	waitingGlyph   = "⧖"
+)
+
 // elapsedPlaceholder fills the elapsed column for lines that have no elapsed time. It must be the same width as a
 // rendered elapsed value, otherwise the following tab lands on a different tab stop and the stats column is offset.
 var elapsedPlaceholder = strings.Repeat(" ", len(formatElapsed(0, true)))
@@ -194,21 +201,31 @@ func (s GoTestResultSummary) Present(stdout, stderr io.Writer) error {
 		w = stderr
 	}
 
-	var runningFooter string
+	var rows []string
 	if s.config.ShowRunningTests {
-		runningFooter = s.runningFooter()
+		rows = s.runningRows()
 	}
 
-	footer := s.summaryFooter()
+	footer, waiting := s.waitingFooter(len(rows) > 0)
+	if !waiting {
+		footer = s.summaryFooter()
+	}
 
-	if _, err := fmt.Fprintln(w, runningFooter+footer); err != nil {
+	var block string
+	if len(rows) > 0 {
+		block = strings.Join(rows, "\n") + "\n"
+	}
+
+	if _, err := fmt.Fprintln(w, block+footer); err != nil {
 		return fmt.Errorf("failed to write summary footer: %w", err)
 	}
 
 	return nil
 }
 
-func (s GoTestResultSummary) runningFooter() string { //nolint:funlen
+// runningRows renders one row per in-flight package in presentation order, preceded by a rollup row for completed
+// packages that aren't shown individually. The caller places these above the footer.
+func (s GoTestResultSummary) runningRows() []string { //nolint:funlen
 	runningRefs := s.results.ReferencesByAction(gotest.RunAction)
 
 	// these references are in started order... but that doesn't mean they are in the logical topological order if t.Parallel() is used across tests / subtests
@@ -309,11 +326,7 @@ func (s GoTestResultSummary) runningFooter() string { //nolint:funlen
 		}.String())
 	}
 
-	if len(lines) == 0 {
-		return ""
-	}
-
-	return strings.Join(lines, "\n") + "\n"
+	return lines
 }
 
 // runningPackageStatus is the status for in-flight package rows: the spinner, or the canceled glyph once interrupted.
@@ -389,6 +402,11 @@ func (s GoTestResultSummary) completedPkgsAfter(startRunningPkgRef *gotest.Refer
 
 // footerStatus renders the pass/fail/running/canceled glyph, tab-padded to the status column width.
 func (s GoTestResultSummary) footerStatus() string {
+	return statusColumn(s.footerStatusGlyph())
+}
+
+// footerStatusGlyph renders the pass/fail/running/canceled indicator without any column padding.
+func (s GoTestResultSummary) footerStatusGlyph() string {
 	var status string
 	switch {
 	case s.config.Canceled:
@@ -406,15 +424,6 @@ func (s GoTestResultSummary) footerStatus() string {
 		status = s.style.Failed.Render("FAIL")
 	default:
 		status = s.style.Success.Render("PASS")
-	}
-
-	switch width := lipgloss.Width(status); {
-	case width == 0:
-		status = "\t\t"
-	case width < 4:
-		status += "\t\t"
-	case width < 8:
-		status += "\t"
 	}
 
 	return status
@@ -445,8 +454,6 @@ func (s GoTestResultSummary) summaryFooter() string {
 	elapsed := s.results.Elapsed(!s.config.DurationFromEvents)
 	if elapsed > 0 {
 		result += "\t" + s.style.Aux.Render(formatElapsed(elapsed, false))
-	} else {
-		result += "\t" + s.style.Aux.Render("compiling...")
 	}
 
 	if coverage, ok := s.results.Coverage(); ok {
@@ -470,6 +477,45 @@ func (s GoTestResultSummary) summaryFooter() string {
 	}
 
 	return result
+}
+
+// waitingFooter renders a compact footer for the stretch before any test has concluded. There are no stats to
+// column-align yet, so padding to the package name width would only leave a wide gap. Returns false once there are
+// results to show, or when none are coming (finished or canceled).
+//
+// hasPackageLines says whether running package lines were drawn above this one, which decides whether the status
+// column is padded out to line up with them.
+func (s GoTestResultSummary) waitingFooter(hasPackageLines bool) (string, bool) {
+	if s.config.Canceled || !s.config.Running || s.results.TestStats().Total() > 0 {
+		return "", false
+	}
+
+	progress := s.results.BuildProgress()
+
+	var body string
+	switch {
+	case progress.Building() && progress.Known():
+		body = compilingGlyph + " compiling" + s.style.Aux.Render(fmt.Sprintf(" %d/%d packages", progress.Started, progress.Expected))
+	case progress.Building():
+		body = compilingGlyph + " compiling"
+	default:
+		body = waitingGlyph + " waiting for test output"
+	}
+
+	// only pad out to the status column when there are package lines above to line up with, otherwise the line
+	// opens with a wide gap and nothing to align against
+	status := s.footerStatusGlyph() + " "
+	if hasPackageLines {
+		status = s.footerStatus()
+	}
+
+	line := status + body
+
+	if elapsed := s.results.Elapsed(!s.config.DurationFromEvents); elapsed > 0 {
+		line += "  " + s.style.Aux.Render(strings.TrimSpace(formatElapsed(elapsed, false)))
+	}
+
+	return line, true
 }
 
 func (s GoTestResultSummary) renderStats(stats gotest.ResultStats, asAux bool) string {
@@ -505,9 +551,12 @@ func (s GoTestResultSummary) renderStats(stats gotest.ResultStats, asAux bool) s
 		testCountSuffix = " tests"
 	}
 	switch {
+	case total == 0 && !asAux:
+		// the waiting footer covers the in-progress case, so here the run was finished or canceled without results
+		tests = append(tests, s.style.Waiting.Render("(no test results)"))
+		testCountSuffix = ""
 	case total == 0:
 		tests = append(tests, s.style.Waiting.Render("(waiting for test results)"))
-		// tests = append(tests, s.style.Waiting.Render("∅"))
 		testCountSuffix = ""
 	case s.config.ShowTotalTestCount && total != stats.Passed:
 		totalStr := fmt.Sprintf("%d total", stats.Total())
