@@ -88,6 +88,7 @@ func (c controller) startTestReRun(ctx context.Context, all bool) tea.Cmd {
 
 		return event.SwitchTestRun{
 			TestRun: r,
+			Running: true,
 		}
 	}
 

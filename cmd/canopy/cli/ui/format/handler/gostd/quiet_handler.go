@@ -146,14 +146,13 @@ func (h *quietHandler) OnGoTestEvent(e gotest.Event) error {
 func (h *quietHandler) render() {
 	// only render packages that are done, and render them in alphabetical order
 	// this is the reason why we cannot use a package handler (since order of packages is important, independent of the order of completion)
-	pkgs := h.packages.Values()
-	sort.Sort(gotest.References(pkgs))
+	pkgs := h.pendingPackages()
 
 	// check if across-packages grouping is enabled
 	if h.groupConfig.AcrossPackages && h.groupConfig.Formatter != nil {
 		h.grouper.RenderWithGrouping(pkgs, func(ref gotest.Reference) []gotest.Reference {
 			h.packages.Delete(ref)
-			return h.packages.Values()
+			return h.pendingPackages()
 		})
 		return
 	}
@@ -183,13 +182,28 @@ func (h *quietHandler) render() {
 
 		h.outputPackage(pkgRef)
 		h.packages.Delete(pkgRef)
-		pkgs = h.packages.Values()
+		pkgs = h.pendingPackages()
 	}
+}
+
+// pendingPackages returns the not-yet-rendered packages in alphabetical order. The ordered set holds them
+// in completion order, so every re-read has to be re-sorted or output reverts to completion order after the
+// first package is rendered.
+func (h *quietHandler) pendingPackages() []gotest.Reference {
+	pkgs := h.packages.Values()
+	sort.Sort(gotest.References(pkgs))
+	return pkgs
 }
 
 // hasFailure recursively checks if a test reference or any of its children failed.
 func (h *quietHandler) hasFailure(testRef gotest.Reference) bool {
-	if h.result.ReferenceConclusiveAction(testRef) == gotest.FailAction {
+	switch action := h.result.ReferenceConclusiveAction(testRef); {
+	case action == gotest.FailAction:
+		return true
+	case !action.Completed():
+		// this is only called once the package has concluded, so a test with no conclusion of its own was
+		// abandoned mid-run: the binary died under it (a panic, a timeout, a fatal signal). Its output carries
+		// the only explanation of the failure, so it must not be filtered out.
 		return true
 	}
 	for _, child := range h.result.Children(testRef) {
@@ -232,6 +246,10 @@ func (h *quietHandler) outputPackageToWriter(pkgRef gotest.Reference, writer io.
 			h.outputTestToWriter(testRef, writer, include, render)
 		}
 	}
+
+	writeForeignBuildFailure(h.result, pkgRef, func(e gotest.Event) {
+		fmt.Fprint(writer, h.formatter(e, h.panic[e.Reference]).String())
+	})
 
 	// output package conclusions
 	outputEvents := h.result.ReferenceEvents(pkgRef)

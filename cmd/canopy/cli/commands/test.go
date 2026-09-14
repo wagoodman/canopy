@@ -336,7 +336,7 @@ func runTest(ctx context.Context, app clio.Application, coreCfg TestCoreConfig, 
 
 func evaluateResult(run *gotest.Run, logTestFailuresAsErrors bool, coverMin float64) (bool, error) {
 	result := run.Result
-	passed, _ := result.Passed()
+	passed := result.Passed()
 
 	var resultStr = "passed"
 	var resultErr error

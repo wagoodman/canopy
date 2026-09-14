@@ -18,6 +18,10 @@ type FilteringInput struct {
 type SwitchTestRun struct {
 	// TestRun is the new test run to display.
 	TestRun *gotest.Run
+
+	// Running is true when the run was just started and is still receiving events. Concluded runs (from a
+	// run-end event or the store) leave this false.
+	Running bool
 }
 
 // SelectedTestReferences indicates which test references the user has selected

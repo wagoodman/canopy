@@ -37,15 +37,11 @@ func TestResult_Update_WithTest_StartConditions(t *testing.T) {
 	config := ResultConfig{}
 	result := NewResult(config)
 
-	passed, running := result.Passed()
-	require.False(t, passed) // we've seen no events
-	require.True(t, running)
+	require.False(t, result.Passed()) // we've seen no events
 
 	result.Update(mockEventRun)
 
-	passed, running = result.Passed()
-	require.True(t, passed) // we've seen an event, even though it's not a pass yet
-	require.True(t, running)
+	require.True(t, result.Passed()) // we've seen an event, even though it's not a pass yet
 }
 
 func TestResult_Update_WithTest(t *testing.T) {
@@ -60,9 +56,7 @@ func TestResult_Update_WithTest(t *testing.T) {
 	mockTestEventFail := Event{Action: FailAction, Reference: mockTestReference2}
 	mockTestEventRun := Event{Action: RunAction, Reference: mockTestReference3}
 
-	passed, running := result.Passed()
-	require.False(t, passed) // we've seen no events, so it can't be a pass
-	require.True(t, running)
+	require.False(t, result.Passed()) // we've seen no events, so it can't be a pass
 
 	//update test with pass
 	result.Update(mockTestEventPass)
@@ -72,9 +66,7 @@ func TestResult_Update_WithTest(t *testing.T) {
 	assert.Equal(t, []Reference{mockTestReference1}, result.TestReferencesByAction(PassAction))
 	assert.Equal(t, PassAction, result.ReferenceConclusiveAction(mockTestReference1))
 
-	passed, running = result.Passed()
-	require.True(t, passed)
-	require.False(t, running) // TODO: is this right?
+	require.True(t, result.Passed())
 
 	// update with FailAction
 	result.Update(mockTestEventFail)
@@ -84,9 +76,7 @@ func TestResult_Update_WithTest(t *testing.T) {
 	assert.Equal(t, []Reference{mockTestReference2}, result.TestReferencesByAction(FailAction))
 	assert.Equal(t, FailAction, result.ReferenceConclusiveAction(mockTestReference2))
 
-	passed, running = result.Passed()
-	require.False(t, passed)
-	require.False(t, running) // TODO: is this right?
+	require.False(t, result.Passed())
 
 	// update with RunAction
 	result.Update(mockTestEventRun)
@@ -95,18 +85,14 @@ func TestResult_Update_WithTest(t *testing.T) {
 	assert.Equal(t, []Reference{mockTestReference3}, result.ReferencesByAction(RunAction))
 	assert.Equal(t, []Reference{mockTestReference3}, result.TestReferencesByAction(RunAction))
 
-	passed, running = result.Passed()
-	require.False(t, passed)
-	require.True(t, running)
+	require.False(t, result.Passed())
 }
 
 func TestResult_Update_WithPackage(t *testing.T) {
 	config := ResultConfig{}
 	result := NewResult(config)
 
-	passed, running := result.Passed()
-	require.False(t, passed) // we've seen no events, so it can't be a pass
-	require.True(t, running)
+	require.False(t, result.Passed()) // we've seen no events, so it can't be a pass
 
 	//update test with pass
 	result.Update(mockEventPass)
@@ -116,9 +102,7 @@ func TestResult_Update_WithPackage(t *testing.T) {
 	assert.Equal(t, []Reference{}, result.TestReferencesByAction(PassAction)) // note the difference: no test was passed
 	assert.Equal(t, PassAction, result.ReferenceConclusiveAction(mockReference1))
 
-	passed, running = result.Passed()
-	require.True(t, passed)
-	require.True(t, running) // TODO: is this right?
+	require.True(t, result.Passed())
 
 	// update with fail
 	result.Update(mockEventFail)
@@ -128,9 +112,7 @@ func TestResult_Update_WithPackage(t *testing.T) {
 	assert.Equal(t, []Reference{}, result.TestReferencesByAction(FailAction)) // note the difference: no test was passed
 	assert.Equal(t, FailAction, result.ReferenceConclusiveAction(mockReference2))
 
-	passed, running = result.Passed()
-	require.False(t, passed)
-	require.True(t, running) // TODO: is this right?
+	require.False(t, result.Passed())
 
 	// update with run
 	result.Update(mockEventRun)
@@ -140,9 +122,7 @@ func TestResult_Update_WithPackage(t *testing.T) {
 	assert.Equal(t, []Reference{}, result.TestReferencesByAction(RunAction))
 	assert.Equal(t, FailAction, result.ReferenceConclusiveAction(mockReference2)) // from before the run event
 
-	passed, running = result.Passed()
-	require.False(t, passed)
-	require.True(t, running)
+	require.False(t, result.Passed())
 }
 
 func TestResult_References(t *testing.T) {
@@ -248,4 +228,22 @@ func TestResult_SetCoverage(t *testing.T) {
 	cov, ok = result.Coverage()
 	assert.False(t, ok)
 	assert.Equal(t, 0.0, cov)
+}
+
+// TestResult_Passed_PackageFailureAmongPassingTests covers a package that dies without any of its tests
+// concluding (a panic or a build failure): the only failure signal is the package reference, and the
+// passing tests of other packages must not mask it.
+func TestResult_Passed_PackageFailureAmongPassingTests(t *testing.T) {
+	result := NewResult(ResultConfig{})
+
+	// a healthy package: its test passes and the package concludes
+	result.Update(Event{Action: PassAction, Reference: Reference{Package: "good", FuncName: "TestGood"}})
+	result.Update(Event{Action: PassAction, Reference: Reference{Package: "good"}})
+	require.True(t, result.Passed())
+
+	// a package whose binary panicked: the test started but never concluded, only the package failed
+	result.Update(Event{Action: RunAction, Reference: Reference{Package: "boom", FuncName: "TestBoom"}})
+	result.Update(Event{Action: FailAction, Reference: Reference{Package: "boom"}})
+
+	require.False(t, result.Passed())
 }

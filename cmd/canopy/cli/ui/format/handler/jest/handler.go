@@ -103,8 +103,7 @@ func (h *jestHandler) OnGoTestEvent(e gotest.Event) error {
 
 // render outputs completed packages in alphabetical order.
 func (h *jestHandler) render() {
-	pkgs := h.packages.Values()
-	sort.Sort(gotest.References(pkgs))
+	pkgs := h.pendingPackages()
 
 	// check if across-packages grouping is enabled
 	if h.groupConfig.AcrossPackages && h.groupConfig.Formatter != nil {
@@ -136,8 +135,17 @@ func (h *jestHandler) render() {
 		}
 
 		h.packages.Delete(pkgRef)
-		pkgs = h.packages.Values()
+		pkgs = h.pendingPackages()
 	}
+}
+
+// pendingPackages returns the not-yet-rendered packages in alphabetical order. The ordered set holds them
+// in completion order, so every re-read has to be re-sorted or output reverts to completion order after the
+// first package is rendered.
+func (h *jestHandler) pendingPackages() []gotest.Reference {
+	pkgs := h.packages.Values()
+	sort.Sort(gotest.References(pkgs))
+	return pkgs
 }
 
 // renderWithPackageGrouping renders packages, grouping consecutive packages together when their
@@ -198,7 +206,7 @@ func (h *jestHandler) renderWithPackageGrouping(pkgs []gotest.Reference) {
 		}
 
 		h.packages.Delete(pkgRef)
-		pkgs = h.packages.Values()
+		pkgs = h.pendingPackages()
 	}
 
 	// flush remaining packages

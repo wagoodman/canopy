@@ -2,6 +2,7 @@ package gotest
 
 import (
 	"math"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,7 +22,7 @@ type Event struct {
 	Action         Action
 	Output         string
 	Elapsed        *float64 // duration in seconds for terminal events (pass/fail/skip)
-	FailedBuild    string   // package that caused a build failure (if any)
+	FailedBuild    string   // package whose build failed, causing this package to fail (if any)
 	Annotations    []Annotation
 	Error          error
 }
@@ -60,7 +61,7 @@ func NewEvent(runID uuid.UUID, jsonl JSONL, pkgs *golist.PackageCollection) *Eve
 	// reference that every build failure would collapse into.
 	pkg := jsonl.Package
 	if pkg == "" {
-		pkg = jsonl.ImportPath
+		pkg = packagePathOfBuildUnit(jsonl.ImportPath)
 	}
 
 	var dir string
@@ -84,7 +85,16 @@ func NewEvent(runID uuid.UUID, jsonl JSONL, pkgs *golist.PackageCollection) *Eve
 		Annotations:    ExtractAnnotations(jsonl.Output),
 		Output:         jsonl.Output,
 		Elapsed:        elapsed,
-		FailedBuild:    jsonl.FailedBuild,
+		FailedBuild:    packagePathOfBuildUnit(jsonl.FailedBuild),
 		Error:          err,
 	}
+}
+
+// packagePathOfBuildUnit reduces a go build unit to the package path it belongs to. Build failures are
+// reported against the unit that was compiled, which for a package built under test is spelled
+// "example.com/pkg [example.com/pkg.test]". Without this, the compiler output lands on a reference that
+// no package ever concludes, so it is never rendered and it stalls in-order package output behind it.
+func packagePathOfBuildUnit(importPath string) string {
+	path, _, _ := strings.Cut(importPath, " ")
+	return path
 }

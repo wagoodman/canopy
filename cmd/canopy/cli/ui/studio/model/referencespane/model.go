@@ -35,6 +35,8 @@ type Model struct {
 
 	// go test state
 	currentTestRun state.RunViewer
+	// running is set while the current run has not concluded (see SwitchTestRun.Running)
+	running bool
 
 	keyMap
 }
@@ -71,12 +73,7 @@ func New(options ...Option) (Model, error) {
 }
 
 func (m Model) isRunning() bool {
-	if m.currentTestRun == nil {
-		return false
-	}
-
-	_, isRunning := m.currentTestRun.Passed()
-	return isRunning
+	return m.currentTestRun != nil && m.running
 }
 
 func (m Model) Init() tea.Cmd {
@@ -154,6 +151,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) { //nolint: funlen
 
 	// handle core interactions...
 	case uievent.SwitchTestRun:
+		m.running = msg.Running
 		cmds = append(cmds, m.onSwitchTestRun(state.NewRunViewer(msg.TestRun)))
 
 	case gotest.Event:
@@ -307,7 +305,7 @@ func (m Model) statsView() string {
 
 	// concluded view...
 
-	if pass, _ := m.currentTestRun.Passed(); pass {
+	if m.currentTestRun.Passed() {
 		status = m.testCountsView.PassedCountStyle.Render("✔ ")
 	} else {
 		status = m.testCountsView.FailedCountStyle.Render("✘ ")

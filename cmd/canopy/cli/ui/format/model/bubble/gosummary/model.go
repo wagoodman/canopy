@@ -23,7 +23,9 @@ type Model struct {
 	canceled bool
 	runs     []gotest.Run
 	ids      mapset.Set[uuid.UUID]
-	common   state.Common
+	// pending holds the requested runs that have not published a run-end event yet
+	pending mapset.Set[uuid.UUID]
+	common  state.Common
 }
 
 func NewModel(config presenter.GoSummaryConfig, common state.Common, runID uuid.UUID, runCfg gotest.RunnerConfig) *Model {
@@ -35,10 +37,11 @@ func NewModel(config presenter.GoSummaryConfig, common state.Common, runID uuid.
 	run.ID = runID
 	run.Config = runCfg
 	return &Model{
-		config: config,
-		runs:   []gotest.Run{*run},
-		ids:    mapset.NewSet[uuid.UUID](runID),
-		common: common,
+		config:  config,
+		runs:    []gotest.Run{*run},
+		ids:     mapset.NewSet[uuid.UUID](runID),
+		pending: mapset.NewSet[uuid.UUID](runID),
+		common:  common,
 	}
 }
 
@@ -64,6 +67,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.handleGoTestEvent(msg)
 		case event.GoTestRunType:
 			m.handleGoTestRunEvent(msg)
+		case event.GoTestRunRequestType:
+			m.handleGoTestRunRequestEvent(msg)
 		}
 	}
 
@@ -101,6 +106,9 @@ func (m *Model) handleGoTestRunEvent(msg partybus.Event) {
 		return
 	}
 
+	// the run-end event is the only reliable signal that a run has concluded
+	m.pending.Remove(runEvent.ID)
+
 	// the run-end event carries the final run state, including whether it was interrupted
 	if runEvent.Canceled {
 		m.canceled = true
@@ -110,6 +118,22 @@ func (m *Model) handleGoTestRunEvent(msg partybus.Event) {
 		m.runs = append(m.runs, *runEvent)
 		m.ids.Add(runEvent.ID)
 	}
+}
+
+// handleGoTestRunRequestEvent tracks runs requested after this model was created, so a combined summary
+// keeps running until every run has concluded (not just the first one)
+func (m *Model) handleGoTestRunRequestEvent(msg partybus.Event) {
+	if !m.config.CombineMultipleRuns {
+		return
+	}
+
+	_, id, err := parser.ParseGoTestRunRequestType(msg)
+	if err != nil {
+		log.WithFields("error", err).Error("unable to parse go test run request event")
+		return
+	}
+
+	m.pending.Add(*id)
 }
 
 // shouldProcessTestEvent determines if a test event should be processed based on configuration
@@ -140,6 +164,7 @@ func (m Model) View() string {
 	m.config.RunningState = m.common.Spinner.View
 	m.config.Window = m.common.Window
 	m.config.Canceled = m.canceled
+	m.config.Running = m.pending.Cardinality() > 0
 	err := m.config.New(m.runs...).Present(&sb, &sb)
 	if err != nil {
 		// TODO

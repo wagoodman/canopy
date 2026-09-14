@@ -438,36 +438,20 @@ func (r Result) Coverage() (float64, bool) {
 	return *r.coverage, true
 }
 
-func (r Result) Passed() (bool, bool) {
+// Passed reports whether nothing failed. A result with no events is never a pass. Whether the run is still in
+// progress can't be derived from its events (e.g. the next package may still be compiling), that is only known
+// from the run-end event.
+func (r Result) Passed() bool {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	runningTestRefs := r.testReferencesByAction[RunAction]
-	passedTestRefs := r.testReferencesByAction[PassAction]
-	failedTestRefs := r.testReferencesByAction[FailAction]
-	skippedTestRefs := r.testReferencesByAction[SkipAction]
-	hasMirroredRefs := len(r.conclusionEvent) == r.references.Size()
-	isStarting := (refCount(passedTestRefs) + refCount(failedTestRefs) + refCount(skippedTestRefs)) == 0
-	isStillRunning := hasRefs(runningTestRefs) || isStarting || (!hasMirroredRefs && r.references.Size() > 0)
-	passed := refCount(failedTestRefs) == 0
-
-	if isStarting {
-		// we may be starting... or there will be no test refs (only package refs) since there is a
-		// compilation error or some such. No tests now doesn't mean we should expect tests later.
-		failedTestRefs = r.referencesByAction[FailAction]
-
-		isStillRunning = true
-		passed = refCount(failedTestRefs) == 0
-		if r.references.Size() == 0 {
-			passed = false
-		}
+	if r.references.Size() == 0 {
+		return false
 	}
 
-	return passed, isStillRunning
-}
-
-func hasRefs(set *orderedset.OrderedSet[Reference]) bool {
-	return set != nil && set.Size() > 0
+	// package references are counted too, not just test references: a package that panics or fails to build
+	// concludes as a failure without any of its tests ever concluding.
+	return refCount(r.referencesByAction[FailAction]) == 0
 }
 
 func refCount(set *orderedset.OrderedSet[Reference]) int {

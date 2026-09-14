@@ -64,8 +64,8 @@ type RunViewer interface {
 	// is available.
 	Coverage() (float64, bool)
 
-	// Passed returns whether all tests passed and whether the run is still in progress.
-	Passed() (bool, bool)
+	// Passed returns whether all tests passed.
+	Passed() bool
 }
 
 // RunController manages the execution of test runs.

@@ -5,6 +5,7 @@ import (
 	"go/types"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
@@ -62,10 +63,22 @@ func Localize(loadPatterns []string, changed []Symbol, failures []gotest.Referen
 	return localizeWith(rtaResolver, loadPatterns, changed, failures)
 }
 
-func localizeWith(resolve resolver, loadPatterns []string, changed []Symbol, failures []gotest.Reference) (*Result, error) {
+func localizeWith(resolve resolver, loadPatterns []string, changed []Symbol, failures []gotest.Reference) (out *Result, err error) {
 	if len(changed) == 0 || len(failures) == 0 || len(loadPatterns) == 0 {
 		return nil, nil
 	}
+
+	// go/ssa and the call graph resolvers panic rather than return an error on a program they consider
+	// malformed, and a package set that type-checked with errors is enough to produce one. localization
+	// is a ranking heuristic over somebody else's analysis, so a panic in it degrades triage to
+	// symptom-grouped verdicts instead of taking the whole run down.
+	defer func() {
+		if r := recover(); r != nil {
+			log.WithFields("panic", r, "stack", string(debug.Stack())).Debug("root-cause localization panicked")
+			out = nil
+			err = fmt.Errorf("root-cause localization panicked: %v", r)
+		}
+	}()
 
 	prog, err := buildSSA(loadPatterns)
 	if err != nil {
@@ -124,7 +137,14 @@ func buildSSA(patterns []string) (*ssa.Program, error) {
 	}
 
 	prog, _ := ssautil.AllPackages(pkgs, ssa.InstantiateGenerics)
-	prog.Build()
+
+	// build a package at a time rather than prog.Build(): that fans the work out to goroutines, so a
+	// panic inside go/ssa surfaces on a goroutine no caller can recover from and kills the process.
+	// Building here keeps any panic on this goroutine, where localizeWith's recover can degrade it.
+	// AllPackages (not the slice ssautil returns) is what prog.Build covers: the dependencies too.
+	for _, p := range prog.AllPackages() {
+		p.Build()
+	}
 	return prog, nil
 }
 

@@ -37,6 +37,11 @@ runs:
     - name: Bootstrap project tools
       shell: bash
       if: inputs.tools == 'true'
+      env:
+        # binny resolves and downloads every tool through the github API. unauthenticated calls are
+        # limited per source IP, which hosted runners share, so without a token this step fails
+        # intermittently with "giving up after 5 attempt(s)" on whichever tool it happened to reach first.
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
         make tools
         .tool/binny list
