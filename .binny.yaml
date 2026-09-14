@@ -26,7 +26,7 @@ tools:
   # used to produce SBOMs during release
   - name: syft
     version:
-      want: latest
+      want: v1.51.1
     method: github-release
     with:
       repo: anchore/syft
