@@ -4,6 +4,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/scylladb/go-set/strset"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 )
 
@@ -28,6 +29,7 @@ type result interface {
 	SetCoverage(coverage *float64)
 	Coverage() (float64, bool)
 	Passed() bool
+	BuildProgress() gotest.BuildProgress
 }
 
 type joinedResult struct {
@@ -203,4 +205,27 @@ func (j joinedResult) Passed() bool {
 		}
 	}
 	return true
+}
+
+func (j joinedResult) BuildProgress() gotest.BuildProgress {
+	// union rather than sum: combined runs can cover the same package more than once
+	expected := strset.New()
+	started := strset.New()
+	known := true
+
+	for _, run := range j.runs {
+		pkgs := run.ExpectedPackages()
+		if pkgs == nil {
+			// a single run that doesn't know its packages makes the total unknowable
+			known = false
+		}
+		expected.Add(pkgs...)
+		started.Add(run.Result.StartedPackages()...)
+	}
+
+	progress := gotest.BuildProgress{Started: started.Size()}
+	if known {
+		progress.Expected = expected.Size()
+	}
+	return progress
 }

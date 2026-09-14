@@ -10,6 +10,20 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 )
 
+// statusColumn pads a status indicator out to the width of the status column, so whatever follows it lands on
+// the same tab stop on every line. Package rows and the summary footer both depend on this one rule to line up.
+func statusColumn(status string) string {
+	switch width := lipgloss.Width(status); {
+	case width == 0:
+		return "\t\t"
+	case width < 4:
+		return status + "\t\t"
+	case width < 8:
+		return status + "\t"
+	}
+	return status
+}
+
 type Package struct {
 	Status         string
 	Name           string
@@ -32,17 +46,7 @@ func (p Package) Present(stdout, _ io.Writer) error {
 
 // func FormatPackageLine(status, pkgName string, testsCompleted int, aux []string, trailer string, st style.Go, formatStatus bool, maxTestName int) string {
 func (p Package) String() string {
-	var status = p.Status
-
-	width := lipgloss.Width(status)
-	switch {
-	case width == 0:
-		status = "\t\t"
-	case width < 4:
-		status += "\t\t"
-	case width < 8:
-		status += "\t"
-	}
+	var status = statusColumn(p.Status)
 
 	var aux = p.Aux
 	if p.FormatStatus {

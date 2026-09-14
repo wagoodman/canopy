@@ -146,13 +146,13 @@ func TestGoTestResultSummary_WaitingFooter(t *testing.T) {
 		{
 			name: "nothing compiled yet",
 			pkgs: pkgs,
-			want: "⠋\t\t⛭ compiling 0/3 packages\n",
+			want: "⠋ ⛭ compiling 0/3 packages\n",
 		},
 		{
 			name:   "partially compiled",
 			pkgs:   pkgs,
 			events: []gotest.Event{start("example.com/a", 0), start("example.com/b", 1500*time.Millisecond)},
-			want:   "⠋\t\t⛭ compiling 2/3 packages  1.5s\n",
+			want:   "⠋ ⛭ compiling 2/3 packages  1.5s\n",
 		},
 		{
 			name: "compiled, waiting for test output",
@@ -163,11 +163,11 @@ func TestGoTestResultSummary_WaitingFooter(t *testing.T) {
 				start("example.com/c", 2*time.Second),
 				{Reference: gotest.NewReference("example.com/a", "TestA"), Action: gotest.RunAction, Time: base.Add(3 * time.Second)},
 			},
-			want: "⠋\t\t⧖ waiting for test output  3s\n",
+			want: "⠋ ⧖ waiting for test output  3s\n",
 		},
 		{
 			name: "unknown package set",
-			want: "⠋\t\t⛭ compiling\n",
+			want: "⠋ ⛭ compiling\n",
 		},
 	}
 
@@ -180,6 +180,19 @@ func TestGoTestResultSummary_WaitingFooter(t *testing.T) {
 			require.Equal(t, tt.want, sb.String())
 		})
 	}
+}
+
+func TestGoTestResultSummary_WaitingFooterAlignment(t *testing.T) {
+	// the status column is only worth padding out when there are running package lines above to line up with
+	subject := newWaitingSubject(golist.NewPackageCollection(golist.Package{ImportPath: "example.com/a", Dir: "/a"}), nil, false)
+
+	line, ok := subject.waitingFooter(true)
+	require.True(t, ok)
+	require.Equal(t, "⠋\t\t⛭ compiling 0/1 packages", line)
+
+	line, ok = subject.waitingFooter(false)
+	require.True(t, ok)
+	require.Equal(t, "⠋ ⛭ compiling 0/1 packages", line)
 }
 
 func TestGoTestResultSummary_WaitingFooterStepsAside(t *testing.T) {

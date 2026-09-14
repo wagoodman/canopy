@@ -183,33 +183,16 @@ func (c GoSummaryConfig) WithHidePackagesWithNoTests(hide bool) GoSummaryConfig 
 
 func (c GoSummaryConfig) New(runs ...gotest.Run) Presenter {
 	return GoTestResultSummary{
-		config:           c,
-		style:            style.NewGo(c.Color),
-		results:          newJoinedResults(runs...),
-		expectedPackages: expectedPackageCount(runs),
+		config:  c,
+		style:   style.NewGo(c.Color),
+		results: newJoinedResults(runs...),
 	}
-}
-
-// expectedPackageCount returns the number of distinct packages handed to `go test` across all runs, or 0 when
-// any run doesn't know its packages up front (e.g. replays), since a partial count would look like a stalled build.
-func expectedPackageCount(runs []gotest.Run) int {
-	pkgs := strset.New()
-	for _, run := range runs {
-		if run.Config.Packages == nil {
-			return 0
-		}
-		pkgs.Add(run.Config.Packages.ImportPaths()...)
-	}
-	return pkgs.Size()
 }
 
 type GoTestResultSummary struct {
 	config  GoSummaryConfig
 	style   style.Go
 	results result
-
-	// expectedPackages is the number of packages being tested (0 when unknown), used to show compile progress.
-	expectedPackages int
 }
 
 func (s GoTestResultSummary) Present(stdout, stderr io.Writer) error {
@@ -218,24 +201,31 @@ func (s GoTestResultSummary) Present(stdout, stderr io.Writer) error {
 		w = stderr
 	}
 
-	var runningFooter string
+	var rows []string
 	if s.config.ShowRunningTests {
-		runningFooter = s.runningFooter()
+		rows = s.runningRows()
 	}
 
-	footer, waiting := s.waitingFooter()
+	footer, waiting := s.waitingFooter(len(rows) > 0)
 	if !waiting {
 		footer = s.summaryFooter()
 	}
 
-	if _, err := fmt.Fprintln(w, runningFooter+footer); err != nil {
+	var block string
+	if len(rows) > 0 {
+		block = strings.Join(rows, "\n") + "\n"
+	}
+
+	if _, err := fmt.Fprintln(w, block+footer); err != nil {
 		return fmt.Errorf("failed to write summary footer: %w", err)
 	}
 
 	return nil
 }
 
-func (s GoTestResultSummary) runningFooter() string { //nolint:funlen
+// runningRows renders one row per in-flight package in presentation order, preceded by a rollup row for completed
+// packages that aren't shown individually. The caller places these above the footer.
+func (s GoTestResultSummary) runningRows() []string { //nolint:funlen
 	runningRefs := s.results.ReferencesByAction(gotest.RunAction)
 
 	// these references are in started order... but that doesn't mean they are in the logical topological order if t.Parallel() is used across tests / subtests
@@ -336,11 +326,7 @@ func (s GoTestResultSummary) runningFooter() string { //nolint:funlen
 		}.String())
 	}
 
-	if len(lines) == 0 {
-		return ""
-	}
-
-	return strings.Join(lines, "\n") + "\n"
+	return lines
 }
 
 // runningPackageStatus is the status for in-flight package rows: the spinner, or the canceled glyph once interrupted.
@@ -416,6 +402,11 @@ func (s GoTestResultSummary) completedPkgsAfter(startRunningPkgRef *gotest.Refer
 
 // footerStatus renders the pass/fail/running/canceled glyph, tab-padded to the status column width.
 func (s GoTestResultSummary) footerStatus() string {
+	return statusColumn(s.footerStatusGlyph())
+}
+
+// footerStatusGlyph renders the pass/fail/running/canceled indicator without any column padding.
+func (s GoTestResultSummary) footerStatusGlyph() string {
 	var status string
 	switch {
 	case s.config.Canceled:
@@ -433,15 +424,6 @@ func (s GoTestResultSummary) footerStatus() string {
 		status = s.style.Failed.Render("FAIL")
 	default:
 		status = s.style.Success.Render("PASS")
-	}
-
-	switch width := lipgloss.Width(status); {
-	case width == 0:
-		status = "\t\t"
-	case width < 4:
-		status += "\t\t"
-	case width < 8:
-		status += "\t"
 	}
 
 	return status
@@ -500,43 +482,40 @@ func (s GoTestResultSummary) summaryFooter() string {
 // waitingFooter renders a compact footer for the stretch before any test has concluded. There are no stats to
 // column-align yet, so padding to the package name width would only leave a wide gap. Returns false once there are
 // results to show, or when none are coming (finished or canceled).
-func (s GoTestResultSummary) waitingFooter() (string, bool) {
+//
+// hasPackageLines says whether running package lines were drawn above this one, which decides whether the status
+// column is padded out to line up with them.
+func (s GoTestResultSummary) waitingFooter(hasPackageLines bool) (string, bool) {
 	if s.config.Canceled || !s.config.Running || s.results.TestStats().Total() > 0 {
 		return "", false
 	}
 
-	// once every package has started we are only waiting on test binaries to report
-	started := s.startedPackageCount()
-	compiling := started == 0 || started < s.expectedPackages
+	progress := s.results.BuildProgress()
 
 	var body string
 	switch {
-	case compiling && s.expectedPackages > 0:
-		body = compilingGlyph + " compiling" + s.style.Aux.Render(fmt.Sprintf(" %d/%d packages", started, s.expectedPackages))
-	case compiling:
+	case progress.Building() && progress.Known():
+		body = compilingGlyph + " compiling" + s.style.Aux.Render(fmt.Sprintf(" %d/%d packages", progress.Started, progress.Expected))
+	case progress.Building():
 		body = compilingGlyph + " compiling"
 	default:
 		body = waitingGlyph + " waiting for test output"
 	}
 
-	line := s.footerStatus() + body
+	// only pad out to the status column when there are package lines above to line up with, otherwise the line
+	// opens with a wide gap and nothing to align against
+	status := s.footerStatusGlyph() + " "
+	if hasPackageLines {
+		status = s.footerStatus()
+	}
+
+	line := status + body
 
 	if elapsed := s.results.Elapsed(!s.config.DurationFromEvents); elapsed > 0 {
 		line += "  " + s.style.Aux.Render(strings.TrimSpace(formatElapsed(elapsed, false)))
 	}
 
 	return line, true
-}
-
-// startedPackageCount returns how many packages have a "start" event. The go test command emits one once a package's
-// test binary is built, but holds it until every earlier package (in the order given to go test) has started. This
-// keeps the count a little behind the true build progress: a slow package holds back already-linked packages after it.
-func (s GoTestResultSummary) startedPackageCount() int {
-	started := strset.New()
-	for _, ref := range s.results.ReferencesByAction(gotest.StartAction) {
-		started.Add(ref.Package)
-	}
-	return started.Size()
 }
 
 func (s GoTestResultSummary) renderStats(stats gotest.ResultStats, asAux bool) string {
