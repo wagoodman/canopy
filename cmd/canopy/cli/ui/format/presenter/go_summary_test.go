@@ -102,7 +102,7 @@ func TestGoTestResultSummary_Canceled(t *testing.T) {
 
 func TestGoTestResultSummary_Extras(t *testing.T) {
 	// extras trail the elapsed time rather than living in the summary column, otherwise a long summary knocks the
-	// elapsed time out of alignment with the package lines above. The started count only exists mid-run, so it gets its own
+	// elapsed time out of alignment with the package lines above. Package progress only exists mid-run, so it gets its own
 	// line under the stats column instead of widening the summary line.
 	started := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	pkgs := golist.NewPackageCollection(
@@ -128,9 +128,65 @@ func TestGoTestResultSummary_Extras(t *testing.T) {
 	subject.config.HidePackagesWithNoTests = true
 
 	require.Equal(t,
-		"⠋\t\t1 passed tests                          \t6s   \t(1 pkg w/o tests)\n\t\t└─ ⛭ started 2/3 packages",
+		// two of three packages done fills 13 of the 20 cells
+		"⠋\t\t1 passed tests                          \t6s   \t(1 pkg w/o tests)\n\t\t└─ ━━━━━━━━━━━━━───────  2 done · 1 waiting",
 		subject.summaryFooter(),
 	)
+}
+
+func TestGoTestResultSummary_PackageProgressLine(t *testing.T) {
+	// the rows are live (wall clock), so anchor events in the recent past
+	now := time.Now().Add(-5 * time.Second)
+	ev := func(pkg, test string, action gotest.Action) gotest.Event {
+		return gotest.Event{Reference: gotest.NewReference(pkg, test), Action: action, Time: now}
+	}
+
+	pkgs := golist.NewPackageCollection(
+		golist.Package{ImportPath: "example.com/done", Dir: "/done"},
+		golist.Package{ImportPath: "example.com/running", Dir: "/running"},
+		golist.Package{ImportPath: "example.com/starting", Dir: "/starting"},
+		golist.Package{ImportPath: "example.com/waiting", Dir: "/waiting"},
+	)
+	events := []gotest.Event{
+		ev("example.com/done", "", gotest.StartAction),
+		ev("example.com/done", "TestA", gotest.RunAction),
+		ev("example.com/done", "TestA", gotest.PassAction),
+		ev("example.com/done", "", gotest.PassAction),
+		ev("example.com/running", "", gotest.StartAction),
+		ev("example.com/running", "TestA", gotest.RunAction),
+		ev("example.com/starting", "", gotest.StartAction),
+	}
+
+	t.Run("counts every state, bar filled by the share done", func(t *testing.T) {
+		line, ok := newWaitingSubject(pkgs, events, false).packageProgressLine()
+		require.True(t, ok)
+		require.Equal(t, "└─ ━━━━━───────────────  1 done · 1 running · 1 starting · 1 waiting", line)
+	})
+
+	t.Run("without a known package set there is no waiting count", func(t *testing.T) {
+		line, ok := newWaitingSubject(nil, events, false).packageProgressLine()
+		require.True(t, ok)
+		require.True(t, strings.HasSuffix(line, "  1 done · 1 running · 1 starting"), "got %q", line)
+	})
+
+	t.Run("gone once the run ends or is canceled", func(t *testing.T) {
+		_, ok := newWaitingSubject(pkgs, events, true).packageProgressLine()
+		require.False(t, ok)
+
+		canceled := newWaitingSubject(pkgs, events, false)
+		canceled.config.Canceled = true
+		_, ok = canceled.packageProgressLine()
+		require.False(t, ok)
+	})
+
+	t.Run("with color the empty cells use the same character as the filled ones", func(t *testing.T) {
+		subject := newWaitingSubject(pkgs, events, false)
+		subject.config.Color = true
+		line, ok := subject.packageProgressLine()
+		require.True(t, ok)
+		require.NotContains(t, line, "─────")
+		require.Equal(t, progressBarWidth, strings.Count(line, "━"))
+	})
 }
 
 func TestGoTestResultSummary_WaitingFooter(t *testing.T) {
@@ -248,8 +304,8 @@ func TestGoTestResultSummary_WaitingFooterStepsAside(t *testing.T) {
 		sb := strings.Builder{}
 		require.NoError(t, subject.Present(&sb, &sb))
 		require.Contains(t, sb.String(), "1 passed tests")
-		// build progress stays visible after tests report, otherwise settled counts read as a run that is nearly done
-		require.Contains(t, sb.String(), "\n\t\t└─ ⛭ started 1/3 packages")
+		// package progress stays visible after tests report, otherwise settled counts read as a run that is nearly done
+		require.Contains(t, sb.String(), "\n\t\t└─ ────────────────────  0 done · 1 running · 2 waiting")
 		// every result seen so far passed, but the run isn't done while packages haven't started
 		require.True(t, strings.HasPrefix(sb.String(), "⠋"), "expected a running status, got %q", sb.String())
 	})
@@ -267,7 +323,8 @@ func TestGoTestResultSummary_WaitingFooterStepsAside(t *testing.T) {
 
 		sb := strings.Builder{}
 		require.NoError(t, subject.Present(&sb, &sb))
-		require.NotContains(t, sb.String(), "started")
+		// package progress is a mid-run line, never part of the final summary
+		require.NotContains(t, sb.String(), "└─")
 	})
 }
 

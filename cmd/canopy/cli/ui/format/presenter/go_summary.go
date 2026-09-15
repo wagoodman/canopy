@@ -549,11 +549,8 @@ func (s GoTestResultSummary) summaryFooter() string {
 		result += "\t" + s.style.Aux.Render(fmt.Sprintf("(%s w/o tests)", plural(stats.PackagesWithNoTests, "pkg")))
 	}
 
-	if progress := s.results.BuildProgress(); s.config.Running && !s.config.Canceled && progress.Known() && progress.Building() {
-		// not every package has started yet, so the run is far from over even if the counts above look settled. It
-		// gets its own line (under the stats column) since it only exists mid-run: it drops off once every package
-		// has started, and never appears in the final summary.
-		result += "\n" + statusColumn("") + s.style.Aux.Render(fmt.Sprintf("└─ %s started %d/%d packages", startedGlyph, progress.Started, progress.Expected))
+	if line, ok := s.packageProgressLine(); ok {
+		result += "\n" + statusColumn("") + line
 	}
 
 	if s.config.Canceled {
@@ -562,6 +559,93 @@ func (s GoTestResultSummary) summaryFooter() string {
 	}
 
 	return result
+}
+
+// progressBarWidth is the fixed width of the package progress bar, in cells. It stays short no matter how many
+// packages there are: it conveys how far along the run is, not the state of each package.
+const progressBarWidth = 20
+
+// packageCounts is the run's packages by state (see the timing model above). Waiting is only known when the run
+// knows its package set up front.
+type packageCounts struct {
+	done, running, starting, waiting int
+}
+
+func (c packageCounts) total() int {
+	return c.done + c.running + c.starting + c.waiting
+}
+
+func (s GoTestResultSummary) packageCounts() packageCounts {
+	var c packageCounts
+
+	seen := strset.New()
+	for _, pkgRef := range s.results.Packages() {
+		if seen.Has(pkgRef.Package) {
+			continue
+		}
+		seen.Add(pkgRef.Package)
+		if s.results.ReferenceConclusiveAction(pkgRef).Completed() {
+			c.done++
+		}
+	}
+
+	for _, pkgRef := range s.inFlightPackages() {
+		switch {
+		case s.results.ReferenceConclusiveAction(pkgRef).Completed():
+			// already counted as done (e.g. a package that died with a test still marked running)
+		case s.packageStarting(pkgRef):
+			c.starting++
+		default:
+			c.running++
+		}
+	}
+
+	if progress := s.results.BuildProgress(); progress.Known() {
+		// not started means still building, or built and queued behind an earlier package (see startedGlyph)
+		c.waiting = max(progress.Expected-progress.Started, 0)
+	}
+
+	return c
+}
+
+// packageProgressLine renders the line under the summary that tracks the run's packages: a short bar filled by the
+// share of packages done, then the counts by state, e.g. "└─ ━━━━━━━━━━━━━━━━━━━━  45 done · 3 running · 9 starting".
+// It only exists mid-run, so it never appears in the final summary.
+func (s GoTestResultSummary) packageProgressLine() (string, bool) {
+	if !s.config.Running || s.config.Canceled {
+		return "", false
+	}
+
+	c := s.packageCounts()
+	if c.total() == 0 {
+		return "", false
+	}
+
+	// the same bar syft draws: one heavy line character, filled cells in color and the rest gray. Without color the
+	// two would be indistinguishable, so empty cells fall back to a light line.
+	emptyCell := "━"
+	if !s.config.Color {
+		emptyCell = "─"
+	}
+	filled := progressBarWidth * c.done / c.total()
+	bar := s.style.Running.Render(strings.Repeat("━", filled)) + s.style.Aux.Render(strings.Repeat(emptyCell, progressBarWidth-filled))
+
+	// done always shows since it is what the bar measures, the rest only when there are any
+	parts := []string{fmt.Sprintf("%d done", c.done)}
+	for _, part := range []struct {
+		n     int
+		label string
+	}{
+		{c.running, "running"},
+		{c.starting, "starting"},
+		{c.waiting, "waiting"},
+	} {
+		if part.n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", part.n, part.label))
+		}
+	}
+
+	return s.style.Aux.Render("└─ ") + bar + s.style.Aux.Render("  "+strings.Join(parts, " · ")), true
 }
 
 func plural(n int, noun string) string {
