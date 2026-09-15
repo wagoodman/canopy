@@ -348,7 +348,7 @@ func (s GoTestResultSummary) unrenderedRow(inFlightPkgRefs []gotest.Reference) (
 	return Package{
 		Status:       "", // no status for unrendered packages, these are completed
 		NameAsAux:    true,
-		Name:         fmt.Sprintf("(%d unrendered packages)", len(completedPkgRefsAfter)),
+		Name:         fmt.Sprintf("(%d unrendered pkgs)", len(completedPkgRefsAfter)),
 		Aux:          aux,
 		Style:        s.style,
 		FormatStatus: false,
@@ -517,7 +517,7 @@ func (s GoTestResultSummary) summaryFooter() string {
 	var sections []string
 
 	if s.config.ShowPackageCount {
-		sections = append(sections, fmt.Sprintf("%d packages", len(s.results.Packages())))
+		sections = append(sections, fmt.Sprintf("%d pkgs", len(s.results.Packages())))
 	}
 
 	stats := s.results.TestStats()
@@ -562,17 +562,21 @@ func (s GoTestResultSummary) summaryFooter() string {
 }
 
 // progressBarWidth is the fixed width of the package progress bar, in cells. It stays short no matter how many
-// packages there are: it conveys how far along the run is, not the state of each package.
+// packages there are: it shows the split of packages by state, not the state of each package.
 const progressBarWidth = 20
 
-// packageCounts is the run's packages by state (see the timing model above). Waiting is only known when the run
-// knows its package set up front.
+// packageCounts is the run's packages by state (see the timing model above). Passed and failed together are the
+// packages that are done. Waiting is only known when the run knows its package set up front.
 type packageCounts struct {
-	done, running, starting, waiting int
+	passed, failed, running, starting, waiting int
+}
+
+func (c packageCounts) done() int {
+	return c.passed + c.failed
 }
 
 func (c packageCounts) total() int {
-	return c.done + c.running + c.starting + c.waiting
+	return c.done() + c.running + c.starting + c.waiting
 }
 
 func (s GoTestResultSummary) packageCounts() packageCounts {
@@ -584,8 +588,11 @@ func (s GoTestResultSummary) packageCounts() packageCounts {
 			continue
 		}
 		seen.Add(pkgRef.Package)
-		if s.results.ReferenceConclusiveAction(pkgRef).Completed() {
-			c.done++
+		switch action := s.results.ReferenceConclusiveAction(pkgRef); {
+		case action == gotest.FailAction:
+			c.failed++
+		case action.Completed():
+			c.passed++
 		}
 	}
 
@@ -608,8 +615,11 @@ func (s GoTestResultSummary) packageCounts() packageCounts {
 	return c
 }
 
-// packageProgressLine renders the line under the summary that tracks the run's packages: a short bar filled by the
-// share of packages done, then the counts by state, e.g. "└─ ━━━━━━━━━━━━━━━━━━━━  45 done · 3 running · 9 starting".
+// packageProgressLine renders the line under the summary that tracks the run's packages: a stacked bar showing the
+// split of packages by state, then the counts, e.g.
+//
+//	└─ ━━━━━━━━━━━━━━━━━━━━  28/59 packages done · 4 running · 7 starting · 20 waiting
+//
 // It only exists mid-run, so it never appears in the final summary.
 func (s GoTestResultSummary) packageProgressLine() (string, bool) {
 	if !s.config.Running || s.config.Canceled {
@@ -621,31 +631,112 @@ func (s GoTestResultSummary) packageProgressLine() (string, bool) {
 		return "", false
 	}
 
-	// the same bar syft draws: one heavy line character, filled cells in color and the rest gray. Without color the
-	// two would be indistinguishable, so empty cells fall back to a light line.
-	emptyCell := "━"
-	if !s.config.Color {
-		emptyCell = "─"
-	}
-	filled := progressBarWidth * c.done / c.total()
-	bar := s.style.Running.Render(strings.Repeat("━", filled)) + s.style.Aux.Render(strings.Repeat(emptyCell, progressBarWidth-filled))
+	return s.style.Aux.Render("└─ ") + s.packageBar(c) + "  " + s.packageLegend(c), true
+}
 
-	// done always shows since it is what the bar measures, the rest only when there are any
-	parts := []string{fmt.Sprintf("%d done", c.done)}
-	for _, part := range []struct {
+// packageBar is a horizontal stacked bar chart of the packages by state: grouped and in phase order (passed, failed,
+// running, starting, waiting), never interleaved. Each state takes the color its package rows use: green and red for
+// done, the running yellow, and faint for starting and waiting. The two faint states are told apart by line weight,
+// waiting being the light line. Without color only the done share can be shown, as heavy line over light.
+func (s GoTestResultSummary) packageBar(c packageCounts) string {
+	heavy, light := "━", "─"
+	segments := []struct {
 		n     int
-		label string
+		style lipgloss.Style
+		cell  string
 	}{
-		{c.running, "running"},
-		{c.starting, "starting"},
-		{c.waiting, "waiting"},
-	} {
-		if part.n > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", part.n, part.label))
+		{c.passed, s.style.Success, heavy},
+		{c.failed, s.style.Failed, heavy},
+		{c.running, s.style.Running, heavy},
+		{c.starting, s.style.Aux, heavy},
+		{c.waiting, s.style.Aux, light},
+	}
+
+	counts := make([]int, len(segments))
+	for i, seg := range segments {
+		counts[i] = seg.n
+	}
+
+	var sb strings.Builder
+	for i, cells := range apportion(counts, progressBarWidth) {
+		if cells == 0 {
+			continue
+		}
+		cell := segments[i].cell
+		if !s.config.Color {
+			cell = light
+			if i <= 1 { // passed, failed
+				cell = heavy
+			}
+		}
+		sb.WriteString(segments[i].style.Render(strings.Repeat(cell, cells)))
+	}
+	return sb.String()
+}
+
+// packageLegend is the text beside the bar: how many packages are done out of the total, with failures called out,
+// e.g. "43/89 pkgs done (10 failed)". The in-flight states (running, starting, waiting) are left to the bar's
+// segments. It says pkgs so the count can't be mistaken for tests.
+//
+// This is supporting information, not the primary status, so it stays faint to keep out of the way. Only the
+// failures are red.
+func (s GoTestResultSummary) packageLegend(c packageCounts) string {
+	done := s.style.Aux.Render(fmt.Sprintf("%d/%d pkgs done", c.done(), c.total()))
+	if c.failed > 0 {
+		done += s.style.Failed.Render(fmt.Sprintf(" (%d failed)", c.failed))
+	}
+	return done
+}
+
+// apportion splits width cells across counts in proportion. Every non-zero count keeps at least one cell, so a lone
+// failed package can't round away to nothing. Remaining cells go to the largest remainders so the parts always add
+// up to width.
+func apportion(counts []int, width int) []int {
+	cells := make([]int, len(counts))
+	total := 0
+	for _, n := range counts {
+		total += n
+	}
+	if total == 0 {
+		return cells
+	}
+
+	used := 0
+	for i, n := range counts {
+		if n > 0 {
+			cells[i] = max(1, n*width/total)
+			used += cells[i]
 		}
 	}
 
-	return s.style.Aux.Render("└─ ") + bar + s.style.Aux.Render("  "+strings.Join(parts, " · ")), true
+	// the one cell minimums can overshoot: take back from the biggest parts
+	for used > width {
+		biggest := 0
+		for i := range cells {
+			if cells[i] > cells[biggest] {
+				biggest = i
+			}
+		}
+		cells[biggest]--
+		used--
+	}
+
+	// hand out what flooring left over, largest remainder first
+	for used < width {
+		best, bestRemainder := -1, 0
+		for i, n := range counts {
+			if n == 0 {
+				continue
+			}
+			if remainder := n*width - cells[i]*total; best == -1 || remainder > bestRemainder {
+				best, bestRemainder = i, remainder
+			}
+		}
+		cells[best]++
+		used++
+	}
+
+	return cells
 }
 
 func plural(n int, noun string) string {
@@ -671,7 +762,7 @@ func (s GoTestResultSummary) waitingFooter(hasPackageLines bool) (string, bool) 
 	var body string
 	switch {
 	case progress.Building() && progress.Known():
-		body = startedGlyph + " started" + s.style.Aux.Render(fmt.Sprintf(" %d/%d packages", progress.Started, progress.Expected))
+		body = startedGlyph + " started" + s.style.Aux.Render(fmt.Sprintf(" %d/%d pkgs", progress.Started, progress.Expected))
 	case progress.Building():
 		body = startedGlyph + " waiting for packages to start"
 	default:

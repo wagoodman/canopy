@@ -129,7 +129,7 @@ func TestGoTestResultSummary_Extras(t *testing.T) {
 
 	require.Equal(t,
 		// two of three packages done fills 13 of the 20 cells
-		"⠋\t\t1 passed tests                          \t6s   \t(1 pkg w/o tests)\n\t\t└─ ━━━━━━━━━━━━━───────  2 done · 1 waiting",
+		"⠋\t\t1 passed tests                          \t6s   \t(1 pkg w/o tests)\n\t\t└─ ━━━━━━━━━━━━━───────  2/3 pkgs done",
 		subject.summaryFooter(),
 	)
 }
@@ -142,31 +142,49 @@ func TestGoTestResultSummary_PackageProgressLine(t *testing.T) {
 	}
 
 	pkgs := golist.NewPackageCollection(
-		golist.Package{ImportPath: "example.com/done", Dir: "/done"},
+		golist.Package{ImportPath: "example.com/failed", Dir: "/failed"},
+		golist.Package{ImportPath: "example.com/passed", Dir: "/passed"},
 		golist.Package{ImportPath: "example.com/running", Dir: "/running"},
 		golist.Package{ImportPath: "example.com/starting", Dir: "/starting"},
 		golist.Package{ImportPath: "example.com/waiting", Dir: "/waiting"},
 	)
 	events := []gotest.Event{
-		ev("example.com/done", "", gotest.StartAction),
-		ev("example.com/done", "TestA", gotest.RunAction),
-		ev("example.com/done", "TestA", gotest.PassAction),
-		ev("example.com/done", "", gotest.PassAction),
+		ev("example.com/failed", "", gotest.StartAction),
+		ev("example.com/failed", "TestA", gotest.RunAction),
+		ev("example.com/failed", "TestA", gotest.FailAction),
+		ev("example.com/failed", "", gotest.FailAction),
+		ev("example.com/passed", "", gotest.StartAction),
+		ev("example.com/passed", "TestA", gotest.RunAction),
+		ev("example.com/passed", "TestA", gotest.PassAction),
+		ev("example.com/passed", "", gotest.PassAction),
 		ev("example.com/running", "", gotest.StartAction),
 		ev("example.com/running", "TestA", gotest.RunAction),
 		ev("example.com/starting", "", gotest.StartAction),
 	}
 
-	t.Run("counts every state, bar filled by the share done", func(t *testing.T) {
+	t.Run("names packages and calls out failures", func(t *testing.T) {
 		line, ok := newWaitingSubject(pkgs, events, false).packageProgressLine()
 		require.True(t, ok)
-		require.Equal(t, "└─ ━━━━━───────────────  1 done · 1 running · 1 starting · 1 waiting", line)
+		// without color only the done share can show: heavy for passed and failed, light for the rest
+		require.Equal(t, "└─ ━━━━━━━━────────────  2/5 pkgs done (1 failed)", line)
 	})
 
-	t.Run("without a known package set there is no waiting count", func(t *testing.T) {
+	t.Run("with color every state but waiting is the heavy line, grouped in phase order", func(t *testing.T) {
+		subject := newWaitingSubject(pkgs, events, false)
+		subject.config.Color = true
+		// passed, failed, running and starting (4 cells each) are told apart by color, waiting by line weight
+		require.Equal(t, strings.Repeat("━", 16)+strings.Repeat("─", 4), subject.packageBar(subject.packageCounts()))
+	})
+
+	t.Run("without a known package set the total is what has been seen", func(t *testing.T) {
 		line, ok := newWaitingSubject(nil, events, false).packageProgressLine()
 		require.True(t, ok)
-		require.True(t, strings.HasSuffix(line, "  1 done · 1 running · 1 starting"), "got %q", line)
+		require.True(t, strings.HasSuffix(line, "  2/4 pkgs done (1 failed)"), "got %q", line)
+	})
+
+	t.Run("in-flight states are left to the bar", func(t *testing.T) {
+		subject := newWaitingSubject(pkgs, events, false)
+		require.Equal(t, "10/50 pkgs done", subject.packageLegend(packageCounts{passed: 10, running: 5, starting: 5, waiting: 30}))
 	})
 
 	t.Run("gone once the run ends or is canceled", func(t *testing.T) {
@@ -178,15 +196,27 @@ func TestGoTestResultSummary_PackageProgressLine(t *testing.T) {
 		_, ok = canceled.packageProgressLine()
 		require.False(t, ok)
 	})
+}
 
-	t.Run("with color the empty cells use the same character as the filled ones", func(t *testing.T) {
-		subject := newWaitingSubject(pkgs, events, false)
-		subject.config.Color = true
-		line, ok := subject.packageProgressLine()
-		require.True(t, ok)
-		require.NotContains(t, line, "─────")
-		require.Equal(t, progressBarWidth, strings.Count(line, "━"))
-	})
+func TestApportion(t *testing.T) {
+	cases := []struct {
+		name   string
+		counts []int
+		want   []int
+	}{
+		{name: "even split", counts: []int{1, 1, 1, 1, 0}, want: []int{5, 5, 5, 5, 0}},
+		{name: "leftovers go to the largest remainders", counts: []int{2, 0, 0, 0, 1}, want: []int{13, 0, 0, 0, 7}},
+		{name: "a lone failure keeps a cell", counts: []int{58, 1, 0, 0, 0}, want: []int{19, 1, 0, 0, 0}},
+		{name: "minimums taken back from the biggest part", counts: []int{1000, 1, 1, 1, 1}, want: []int{16, 1, 1, 1, 1}},
+		{name: "nothing to show", counts: []int{0, 0, 0, 0, 0}, want: []int{0, 0, 0, 0, 0}},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			got := apportion(tt.counts, progressBarWidth)
+			require.Equal(t, tt.want, got)
+		})
+	}
 }
 
 func TestGoTestResultSummary_WaitingFooter(t *testing.T) {
@@ -210,13 +240,13 @@ func TestGoTestResultSummary_WaitingFooter(t *testing.T) {
 		{
 			name: "nothing started yet",
 			pkgs: pkgs,
-			want: "⠋ ⛭ started 0/3 packages\n",
+			want: "⠋ ⛭ started 0/3 pkgs\n",
 		},
 		{
 			name:   "partially started",
 			pkgs:   pkgs,
 			events: []gotest.Event{start("example.com/a", 0), start("example.com/b", 1500*time.Millisecond)},
-			want:   "⠋ ⛭ started 2/3 packages  1.5s\n",
+			want:   "⠋ ⛭ started 2/3 pkgs  1.5s\n",
 		},
 		{
 			name: "all started, waiting for test output",
@@ -252,11 +282,11 @@ func TestGoTestResultSummary_WaitingFooterAlignment(t *testing.T) {
 
 	line, ok := subject.waitingFooter(true)
 	require.True(t, ok)
-	require.Equal(t, "⠋\t\t⛭ started 0/1 packages", line)
+	require.Equal(t, "⠋\t\t⛭ started 0/1 pkgs", line)
 
 	line, ok = subject.waitingFooter(false)
 	require.True(t, ok)
-	require.Equal(t, "⠋ ⛭ started 0/1 packages", line)
+	require.Equal(t, "⠋ ⛭ started 0/1 pkgs", line)
 }
 
 func TestGoTestResultSummary_WaitingFooterStepsAside(t *testing.T) {
@@ -305,7 +335,7 @@ func TestGoTestResultSummary_WaitingFooterStepsAside(t *testing.T) {
 		require.NoError(t, subject.Present(&sb, &sb))
 		require.Contains(t, sb.String(), "1 passed tests")
 		// package progress stays visible after tests report, otherwise settled counts read as a run that is nearly done
-		require.Contains(t, sb.String(), "\n\t\t└─ ────────────────────  0 done · 1 running · 2 waiting")
+		require.Contains(t, sb.String(), "\n\t\t└─ ────────────────────  0/3 pkgs done")
 		// every result seen so far passed, but the run isn't done while packages haven't started
 		require.True(t, strings.HasPrefix(sb.String(), "⠋"), "expected a running status, got %q", sb.String())
 	})
@@ -406,7 +436,7 @@ func TestGoTestResultSummary_UnrenderedRowWithoutResults(t *testing.T) {
 
 	rows := subject.runningRows()
 	require.Len(t, rows, 2)
-	require.Contains(t, rows[0], "(1 unrendered packages)")
+	require.Contains(t, rows[0], "(1 unrendered pkgs)")
 	require.NotContains(t, rows[0], "waiting for test results")
 }
 
@@ -427,7 +457,7 @@ func TestGoTestResultSummary_WallClockFooter(t *testing.T) {
 
 		sb := strings.Builder{}
 		require.NoError(t, subject.Present(&sb, &sb))
-		require.Equal(t, "⠋ ⛭ started 0/1 packages  2.5s\n", sb.String())
+		require.Equal(t, "⠋ ⛭ started 0/1 pkgs  2.5s\n", sb.String())
 	})
 
 	t.Run("results count from launch, not the first event", func(t *testing.T) {
