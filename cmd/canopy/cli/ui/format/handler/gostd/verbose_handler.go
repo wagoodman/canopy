@@ -115,6 +115,9 @@ type verboseHandler struct {
 
 	// executionMarkers controls visibility of test state markers (=== RUN/PAUSE/CONT).
 	executionMarkers string
+
+	// firstTest notes on the first package result line how long the run took to reach its first test.
+	firstTest firstTestNote
 }
 
 // NewVerboseHandler creates a handler that formats output in verbose mode,
@@ -161,6 +164,8 @@ func (h *verboseHandler) Handle(e partybus.Event) error {
 		}
 
 		return h.OnGoTestEvent(goTestEvent)
+	case event.GoTestRunRequestType:
+		h.firstTest.observeRunRequest()
 	}
 	return nil
 }
@@ -174,6 +179,7 @@ func (h *verboseHandler) OnGoTestEvent(e gotest.Event) error {
 	}
 
 	h.result.Update(e)
+	h.firstTest.observe(e)
 	if e.Reference.IsPackage() {
 		h.packages.Add(e.Reference)
 	}
@@ -304,7 +310,7 @@ func (h *verboseHandler) outputPackageToWriter(pkgRef gotest.Reference, writer i
 			// the shuffle-seed line is framework noise: go echoes it once per package, all identical.
 			continue
 		}
-		h.writeEvent(e, writer)
+		h.writeEvent(withTestsElapsed(h.result, pkgRef, h.firstTest.annotate(h.result, pkgRef, e)), writer)
 	}
 }
 

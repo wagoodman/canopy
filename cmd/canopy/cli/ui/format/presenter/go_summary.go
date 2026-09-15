@@ -16,11 +16,50 @@ import (
 
 var _ Presenter = (*GoTestResultSummary)(nil)
 
-// compilingGlyph and waitingGlyph mark the phases of the waiting line shown before any test has reported. Both are
-// plain text symbols with no emoji presentation, so terminals won't render them as color emoji.
+// Timing model. A run moves through these phases, and every timer shown is anchored to one of them:
+//
+//	launch     canopy starts the `go test` process (GoSummaryConfig.StartedAt)
+//	compiling  go test loads and builds packages. Nothing is reported for a package until its binary is linked.
+//	starting   per package: go test writes the package's "start" event, checks the test cache, then execs the test
+//	           binary. The binary hasn't reported anything yet. On macOS this can take seconds because the OS scans
+//	           each freshly linked binary on its first exec. Package init and a silent TestMain also land here.
+//	running    per package: the binary has reported (a test started, or package-level output)
+//	done       per package: the package pass/fail/skip event. For the run: the run-end event (EndedAt).
+//
+// Compiling and starting overlap across packages: go test links, launches, and runs binaries concurrently.
+//
+// The timers:
+//
+//	footer        wall clock from launch to run end, so compiling is included (see elapsed). Without a launch
+//	              time (non-TTY output, replays) it falls back to the span of the events seen.
+//	started after from launch to when canopy received the first test event, noted once at the far right of the
+//	              first package result line whose tests ran as "(started after 14.08s)" (see gostd.firstTestNote).
+//	              It never changes once known, so it sits beside that result rather than in this summary.
+//	package row   from the package's "start" event to now, so the starting phase is included (see runningRows).
+//	              This matches go test's own number: the "ok pkg 3.4s" line times the binary from just before exec
+//	              to exit, and the JSON pass/fail Elapsed counts from the "start" event itself. The two differ only
+//	              by the cache check. Switching a row from starting to running changes its glyph, never its timer,
+//	              so the live row hands off to the same number go prints when the package finishes.
+//	tests         per finished package, from its first test event to its last, shown after go's number on the
+//	              "ok"/"FAIL" line as "[tests 0.021s]" (see gotest.PackagePhases and gostd.withTestsElapsed). Only
+//	              shown when that package's startup reaches gotest.NotableStartup, the same bar the started after note
+//	              uses.
+//
+// Startup, as split out by gotest.PackagePhases, ends at the first test event, while the starting state ends at the
+// binary's first event of any kind. They differ only when a package writes output before its first test (e.g.
+// TestMain logging during setup): that package's row shows running, but the setup still counts toward startup.
+
+// startedGlyph and waitingGlyph mark the phases of the waiting line shown before any test has reported. The
+// waiting glyph also marks package rows in the starting phase. Both are plain text symbols with no emoji
+// presentation, so terminals won't render them as color emoji.
+//
+// The started count is how many packages have sent a "start" event, which go test only sends once a package's test
+// binary is built and every package before it (in the order given to go test) has started. That makes it a lower
+// bound on what is built: a package that hasn't started may still be compiling, or be built and waiting its turn.
+// So the UI says "started", never "compiling".
 const (
-	compilingGlyph = "⛭"
-	waitingGlyph   = "⧖"
+	startedGlyph = "⛭"
+	waitingGlyph = "⧖"
 )
 
 // elapsedPlaceholder fills the elapsed column for lines that have no elapsed time. It must be the same width as a
@@ -58,7 +97,8 @@ type GoSummaryConfig struct {
 	// ShowRunningTests toggles whether to show the full name of tests in progress in the summary
 	ShowRunningTests bool
 
-	// ShowElapsedForRunningPackages toggles whether the elapsed time for each package is shown in the summary
+	// ShowElapsedForRunningPackages toggles whether the elapsed time for each package is shown in the summary. It
+	// counts from the package's "start" event, so it includes the starting phase (see the timing model above).
 	ShowElapsedForRunningPackages bool
 
 	ShowTestStatsForRunningPackages bool
@@ -84,6 +124,14 @@ type GoSummaryConfig struct {
 	// packages (e.g. while the next package is still compiling) every reference seen so far has concluded,
 	// which would otherwise read as a final PASS/FAIL.
 	Running bool
+
+	// StartedAt is the wall clock time canopy launched the go test process (the launch phase in the timing model).
+	// When set, the footer timer counts from here instead of from the first event, so compiling is included.
+	// Canopy's own setup before launch (e.g. resolving packages) is not.
+	StartedAt time.Time
+
+	// EndedAt is the wall clock time the run-end event arrived, which stops the footer timer. Zero while running.
+	EndedAt time.Time
 }
 
 func DefaultGoTestResultSummaryConfig() GoSummaryConfig {
@@ -225,75 +273,17 @@ func (s GoTestResultSummary) Present(stdout, stderr io.Writer) error {
 
 // runningRows renders one row per in-flight package in presentation order, preceded by a rollup row for completed
 // packages that aren't shown individually. The caller places these above the footer.
-func (s GoTestResultSummary) runningRows() []string { //nolint:funlen
-	runningRefs := s.results.ReferencesByAction(gotest.RunAction)
-
-	// these references are in started order... but that doesn't mean they are in the logical topological order if t.Parallel() is used across tests / subtests
-	sort.Sort(gotest.References(runningRefs))
-
-	var testFuncsByPackage = make(map[string]*strset.Set)
-	var statsByPackage = make(map[string]gotest.ResultStats)
-	var testCountByFunction = make(map[string]map[string]int)
-	pkgsSet := strset.New()
-	var runningPkgRefs []gotest.Reference
-	for _, ref := range runningRefs {
-		if ref.IsPackage() {
-			continue
-		}
-		if !pkgsSet.Has(ref.Package) {
-			pkgsSet.Add(ref.Package)
-			runningPkgRefs = append(runningPkgRefs, ref.PackageRef())
-			statsByPackage[ref.Package] = s.results.ReferenceTestStats(ref.PackageRef(), false)
-		}
-
-		if ref.IsSubTest() {
-			continue
-		}
-
-		if _, ok := testFuncsByPackage[ref.Package]; !ok {
-			testFuncsByPackage[ref.Package] = strset.New()
-		}
-		testFuncsByPackage[ref.Package].Add(ref.FuncName)
-		if _, ok := testCountByFunction[ref.Package]; !ok {
-			testCountByFunction[ref.Package] = make(map[string]int)
-		}
-		testCountByFunction[ref.Package][ref.FuncName]++
-	}
+func (s GoTestResultSummary) runningRows() []string {
+	runningPkgRefs := s.inFlightPackages()
 
 	var lines []string
-
-	includeRollupLine := func() {
-		if s.config.ShowSummaryForUnrenderedPackages {
-			completedPkgRefsAfter, pkgStats := s.completedPkgsAfter(s.firstNonStaleRunningRef(runningPkgRefs))
-
-			if len(completedPkgRefsAfter) > 0 {
-				aux := []string{elapsedPlaceholder}
-				if s.config.ShowTestStatsForRunningPackages {
-					aux = append(aux, s.renderStats(s.mergeStats(pkgStats), true))
-				}
-
-				lines = append(lines, Package{
-					Status:       "", // no status for unrendered packages, these are completed
-					NameAsAux:    true,
-					Name:         fmt.Sprintf("(%d unrendered packages)", len(completedPkgRefsAfter)),
-					Aux:          aux,
-					Trailer:      "",
-					Style:        s.style,
-					FormatStatus: false,
-					MaxTestName:  s.config.PackageNameWidth,
-					StripPrefix:  s.config.StripPackagePrefix,
-				}.String())
-			}
-		}
+	if row, ok := s.unrenderedRow(runningPkgRefs); ok {
+		lines = append(lines, row)
 	}
 
-	runningStatus := s.runningPackageStatus()
-
-	for i, runningPkgRef := range runningPkgRefs {
-		if i == 0 {
-			includeRollupLine()
-		}
-
+	for _, runningPkgRef := range runningPkgRefs {
+		// counted from the package's "start" event, so the starting phase is included. This is deliberate: it is the
+		// same baseline go test uses for the "ok pkg 3.4s" line that replaces this row (see the timing model above).
 		elapsed := s.results.ReferenceElapsed(runningPkgRef, !s.config.DurationFromEvents)
 		if elapsed < 1*time.Second {
 			// low pass filter for events... otherwise we'll see a jitter of a lot of packages that show up briefly
@@ -302,6 +292,10 @@ func (s GoTestResultSummary) runningRows() []string { //nolint:funlen
 			continue
 		}
 
+		// starting packages get a row each rather than a shared count: they hold back the body's alphabetical output
+		// just like running packages do, so without their rows the unrendered rollup has no visible cause
+		starting := s.packageStarting(runningPkgRef)
+
 		var aux []string
 		if s.config.ShowElapsedForRunningPackages {
 			elapsedStr := formatElapsed(elapsed, true)
@@ -309,12 +303,15 @@ func (s GoTestResultSummary) runningRows() []string { //nolint:funlen
 		}
 
 		if s.config.ShowTestStatsForRunningPackages {
-			stats := statsByPackage[runningPkgRef.Package]
-			aux = append(aux, s.renderStats(stats, true))
+			if starting {
+				aux = append(aux, s.style.Waiting.Render("(starting)"))
+			} else {
+				aux = append(aux, s.renderStats(s.results.ReferenceTestStats(runningPkgRef, false), true))
+			}
 		}
 
 		lines = append(lines, Package{
-			Status:       runningStatus,
+			Status:       s.packageStatus(starting),
 			NameAsAux:    true,
 			Name:         runningPkgRef.Package,
 			Aux:          aux,
@@ -329,14 +326,100 @@ func (s GoTestResultSummary) runningRows() []string { //nolint:funlen
 	return lines
 }
 
-// runningPackageStatus is the status for in-flight package rows: the spinner, or the canceled glyph once interrupted.
-func (s GoTestResultSummary) runningPackageStatus() string {
-	if s.config.Canceled {
+// unrenderedRow is the rollup row for completed packages that the body hasn't printed yet because an earlier
+// package (in presentation order) is still in flight. Starting packages count as in flight here too, since the body
+// waits on them the same way.
+func (s GoTestResultSummary) unrenderedRow(inFlightPkgRefs []gotest.Reference) (string, bool) {
+	if !s.config.ShowSummaryForUnrenderedPackages || len(inFlightPkgRefs) == 0 {
+		return "", false
+	}
+
+	completedPkgRefsAfter, pkgStats := s.completedPkgsAfter(s.firstNonStaleRunningRef(inFlightPkgRefs))
+	if len(completedPkgRefsAfter) == 0 {
+		return "", false
+	}
+
+	aux := []string{elapsedPlaceholder}
+	// these packages are done, so no results means none are coming (e.g. no test files), not that we're waiting
+	if stats := s.mergeStats(pkgStats); s.config.ShowTestStatsForRunningPackages && stats.Total() > 0 {
+		aux = append(aux, s.renderStats(stats, true))
+	}
+
+	return Package{
+		Status:       "", // no status for unrendered packages, these are completed
+		NameAsAux:    true,
+		Name:         fmt.Sprintf("(%d unrendered packages)", len(completedPkgRefsAfter)),
+		Aux:          aux,
+		Style:        s.style,
+		FormatStatus: false,
+		MaxTestName:  s.config.PackageNameWidth,
+		StripPrefix:  s.config.StripPackagePrefix,
+	}.String(), true
+}
+
+// inFlightPackages returns the packages that haven't concluded, in presentation (alphabetical) order. That is every
+// package with a running test, plus any started package without one: its test binary is still launching, or it is
+// between tests (e.g. in TestMain). Without the latter a package can be in flight with no row at all.
+func (s GoTestResultSummary) inFlightPackages() []gotest.Reference {
+	pkgsSet := strset.New()
+	var refs []gotest.Reference
+	add := func(pkgRef gotest.Reference) {
+		if !pkgsSet.Has(pkgRef.Package) {
+			pkgsSet.Add(pkgRef.Package)
+			refs = append(refs, pkgRef)
+		}
+	}
+
+	for _, ref := range s.results.ReferencesByAction(gotest.RunAction) {
+		if !ref.IsPackage() {
+			add(ref.PackageRef())
+		}
+	}
+
+	for _, pkgRef := range s.results.Packages() {
+		if !s.results.ReferenceConclusiveAction(pkgRef).Completed() {
+			add(pkgRef)
+		}
+	}
+
+	sort.Sort(gotest.References(refs))
+	return refs
+}
+
+// packageStatus is the status for in-flight package rows: a static waiting glyph while the test binary is still
+// launching, the spinner once it is running tests, or the canceled glyph once interrupted.
+func (s GoTestResultSummary) packageStatus(starting bool) string {
+	switch {
+	case s.config.Canceled:
 		// packages still in flight were interrupted, a frozen spinner frame would read as a hung UI. Match the
 		// footer's canceled glyph color so the whole interrupted block reads as one state.
 		return s.style.Failed.Render(style.CanceledGlyph)
+	case starting:
+		return s.style.Aux.Render(waitingGlyph)
 	}
 	return s.style.Running.Render(s.config.RunningState)
+}
+
+// packageStarting reports whether the package is in the starting phase: go test wrote its "start" event (the binary
+// is linked and about to be exec'd) but the binary hasn't reported anything yet. Anything the binary writes, a test
+// starting or package-level output, lands as a second event or a child reference, which moves it to running.
+func (s GoTestResultSummary) packageStarting(pkgRef gotest.Reference) bool {
+	events := s.results.ReferenceEvents(pkgRef)
+	return len(events) == 1 && events[0].Action == gotest.StartAction && len(s.results.Children(pkgRef)) == 0
+}
+
+// elapsed is the footer timer. With a known launch time it is wall clock time from launch to run end (or now), which
+// covers compiling, starting, and running. Otherwise it falls back to the span from the first event seen, which
+// misses any compiling that happened before that event.
+func (s GoTestResultSummary) elapsed() time.Duration {
+	if s.config.StartedAt.IsZero() {
+		return s.results.Elapsed(!s.config.DurationFromEvents)
+	}
+	end := s.config.EndedAt
+	if end.IsZero() {
+		end = time.Now()
+	}
+	return end.Sub(s.config.StartedAt)
 }
 
 func (s GoTestResultSummary) firstNonStaleRunningRef(runningPkgRefs []gotest.Reference) *gotest.Reference {
@@ -451,8 +534,7 @@ func (s GoTestResultSummary) summaryFooter() string {
 
 	result += wideSummary
 
-	elapsed := s.results.Elapsed(!s.config.DurationFromEvents)
-	if elapsed > 0 {
+	if elapsed := s.elapsed(); elapsed > 0 {
 		result += "\t" + s.style.Aux.Render(formatElapsed(elapsed, false))
 	}
 
@@ -464,11 +546,14 @@ func (s GoTestResultSummary) summaryFooter() string {
 	if s.config.HidePackagesWithNoTests && stats.PackagesWithNoTests > 0 {
 		// this lives after the elapsed column (not in the summary column) so a long summary doesn't push the
 		// elapsed time out of alignment with the package lines above it.
-		label := "package"
-		if stats.PackagesWithNoTests > 1 {
-			label = "packages"
-		}
-		result += "\t" + s.style.Aux.Render(fmt.Sprintf("(%d %s with no tests)", stats.PackagesWithNoTests, label))
+		result += "\t" + s.style.Aux.Render(fmt.Sprintf("(%s w/o tests)", plural(stats.PackagesWithNoTests, "pkg")))
+	}
+
+	if progress := s.results.BuildProgress(); s.config.Running && !s.config.Canceled && progress.Known() && progress.Building() {
+		// not every package has started yet, so the run is far from over even if the counts above look settled. It
+		// gets its own line (under the stats column) since it only exists mid-run: it drops off once every package
+		// has started, and never appears in the final summary.
+		result += "\n" + statusColumn("") + s.style.Aux.Render(fmt.Sprintf("└─ %s started %d/%d packages", startedGlyph, progress.Started, progress.Expected))
 	}
 
 	if s.config.Canceled {
@@ -477,6 +562,13 @@ func (s GoTestResultSummary) summaryFooter() string {
 	}
 
 	return result
+}
+
+func plural(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, noun)
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 // waitingFooter renders a compact footer for the stretch before any test has concluded. There are no stats to
@@ -495,9 +587,9 @@ func (s GoTestResultSummary) waitingFooter(hasPackageLines bool) (string, bool) 
 	var body string
 	switch {
 	case progress.Building() && progress.Known():
-		body = compilingGlyph + " compiling" + s.style.Aux.Render(fmt.Sprintf(" %d/%d packages", progress.Started, progress.Expected))
+		body = startedGlyph + " started" + s.style.Aux.Render(fmt.Sprintf(" %d/%d packages", progress.Started, progress.Expected))
 	case progress.Building():
-		body = compilingGlyph + " compiling"
+		body = startedGlyph + " waiting for packages to start"
 	default:
 		body = waitingGlyph + " waiting for test output"
 	}
@@ -511,7 +603,7 @@ func (s GoTestResultSummary) waitingFooter(hasPackageLines bool) (string, bool) 
 
 	line := status + body
 
-	if elapsed := s.results.Elapsed(!s.config.DurationFromEvents); elapsed > 0 {
+	if elapsed := s.elapsed(); elapsed > 0 {
 		line += "  " + s.style.Aux.Render(strings.TrimSpace(formatElapsed(elapsed, false)))
 	}
 
