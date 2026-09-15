@@ -36,19 +36,19 @@ func TestWithTestsElapsed(t *testing.T) {
 			name:    "ok line",
 			startup: 7810 * time.Millisecond,
 			output:  "ok  \texample.com/a\t7.832s\n",
-			want:    "ok  \texample.com/a\t7.832s\ttests 0.021s\n",
+			want:    "ok  \texample.com/a\t7.832s\ttests 0.02s\n",
 		},
 		{
 			name:    "goes before coverage",
 			startup: 7810 * time.Millisecond,
 			output:  "ok  \texample.com/a\t7.832s\tcoverage: 82.1% of statements\n",
-			want:    "ok  \texample.com/a\t7.832s\ttests 0.021s\tcoverage: 82.1% of statements\n",
+			want:    "ok  \texample.com/a\t7.832s\ttests 0.02s\tcoverage: 82.1% of statements\n",
 		},
 		{
 			name:    "fail line",
 			startup: 7810 * time.Millisecond,
 			output:  "FAIL\texample.com/a\t7.832s\n",
-			want:    "FAIL\texample.com/a\t7.832s\ttests 0.021s\n",
+			want:    "FAIL\texample.com/a\t7.832s\ttests 0.02s\n",
 		},
 		{
 			name:    "startup not notable",

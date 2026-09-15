@@ -101,9 +101,9 @@ func TestGoTestResultSummary_Canceled(t *testing.T) {
 }
 
 func TestGoTestResultSummary_Extras(t *testing.T) {
-	// extras trail the elapsed time rather than living in the summary column, otherwise a long summary knocks the
-	// elapsed time out of alignment with the package lines above. Package progress only exists mid-run, so it gets its own
-	// line under the stats column instead of widening the summary line.
+	// mid-run the footer has two levels: packages on top, and the tests they produced branching underneath. Extras trail
+	// the elapsed time rather than living in the summary column, and the branch narrows that column by its own width,
+	// so the elapsed time stays on the tab stop the package rows above use.
 	started := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	pkgs := golist.NewPackageCollection(
 		golist.Package{ImportPath: "example.com/a", Dir: "/a"},
@@ -129,7 +129,8 @@ func TestGoTestResultSummary_Extras(t *testing.T) {
 
 	require.Equal(t,
 		// two of three packages done fills 13 of the 20 cells
-		"⠋\t\t1 passed tests                          \t6s   \t(1 pkg w/o tests)\n\t\t└─ ━━━━━━━━━━━━━───────  2/3 pkgs done",
+		"⠋\t\t━━━━━━━━━━━━━───────  2/3 pkgs completed\n"+
+			"\t\t└─ 1 passed tests                       \t6s   \t(1 pkg w/o tests)",
 		subject.summaryFooter(),
 	)
 }
@@ -166,7 +167,7 @@ func TestGoTestResultSummary_PackageProgressLine(t *testing.T) {
 		line, ok := newWaitingSubject(pkgs, events, false).packageProgressLine()
 		require.True(t, ok)
 		// without color only the done share can show: heavy for passed and failed, light for the rest
-		require.Equal(t, "└─ ━━━━━━━━────────────  2/5 pkgs done (1 failed)", line)
+		require.Equal(t, "━━━━━━━━────────────  2/5 pkgs completed (1 failed)", line)
 	})
 
 	t.Run("with color every state but waiting is the heavy line, grouped in phase order", func(t *testing.T) {
@@ -179,12 +180,12 @@ func TestGoTestResultSummary_PackageProgressLine(t *testing.T) {
 	t.Run("without a known package set the total is what has been seen", func(t *testing.T) {
 		line, ok := newWaitingSubject(nil, events, false).packageProgressLine()
 		require.True(t, ok)
-		require.True(t, strings.HasSuffix(line, "  2/4 pkgs done (1 failed)"), "got %q", line)
+		require.True(t, strings.HasSuffix(line, "  2/4 pkgs completed (1 failed)"), "got %q", line)
 	})
 
 	t.Run("in-flight states are left to the bar", func(t *testing.T) {
 		subject := newWaitingSubject(pkgs, events, false)
-		require.Equal(t, "10/50 pkgs done", subject.packageLegend(packageCounts{passed: 10, running: 5, starting: 5, waiting: 30}))
+		require.Equal(t, "10/50 pkgs completed", subject.packageLegend(packageCounts{passed: 10, running: 5, starting: 5, waiting: 30}))
 	})
 
 	t.Run("gone once the run ends or is canceled", func(t *testing.T) {
@@ -334,8 +335,9 @@ func TestGoTestResultSummary_WaitingFooterStepsAside(t *testing.T) {
 		sb := strings.Builder{}
 		require.NoError(t, subject.Present(&sb, &sb))
 		require.Contains(t, sb.String(), "1 passed tests")
-		// package progress stays visible after tests report, otherwise settled counts read as a run that is nearly done
-		require.Contains(t, sb.String(), "\n\t\t└─ ────────────────────  0/3 pkgs done")
+		// package progress stays visible after tests report, otherwise settled counts read as a run that is nearly done.
+		// It leads, with the tests branching under it.
+		require.True(t, strings.HasPrefix(sb.String(), "⠋\t\t────────────────────  0/3 pkgs completed\n\t\t└─ 1 passed tests"), "got %q", sb.String())
 		// every result seen so far passed, but the run isn't done while packages haven't started
 		require.True(t, strings.HasPrefix(sb.String(), "⠋"), "expected a running status, got %q", sb.String())
 	})

@@ -512,8 +512,39 @@ func (s GoTestResultSummary) footerStatusGlyph() string {
 	return status
 }
 
+// footerBranch leads a footer line that hangs off the line above it.
+const footerBranch = "└─ "
+
+// summaryFooter renders the footer once tests have reported. Mid-run it has two levels, the way the results are
+// produced: packages on top (the status glyph, then the package progress bar), and the tests from those packages
+// branching underneath. Once the run ends or is canceled the package level goes away, collapsing to the tests line.
+//
+//	⣧       ━━━━━━━━━━━━────────  43/89 pkgs completed (10 failed)
+//	        └─ 459 passed / 41 failed / 5 skipped tests       9.59s   (6 pkgs w/o tests)
+//
+//	PASS    812 passed / 5 skipped tests                      14.2s   (6 pkgs w/o tests)
 func (s GoTestResultSummary) summaryFooter() string {
-	result := s.footerStatus()
+	var result string
+	if packages, ok := s.packageProgressLine(); ok {
+		// the branch indents the tests line, so its summary column narrows by the same amount to keep the elapsed time
+		// on the tab stop the package rows use
+		result = s.footerStatus() + packages + "\n" +
+			statusColumn("") + s.style.Aux.Render(footerBranch) + s.testsLine(s.config.PackageNameWidth-lipgloss.Width(footerBranch))
+	} else {
+		result = s.footerStatus() + s.testsLine(s.config.PackageNameWidth)
+	}
+
+	if s.config.Canceled {
+		// call out the interruption in red on its own trailer line, since the glyph alone is ambiguous
+		result += "\n" + s.style.Failed.Render("└──▶ canceled by user")
+	}
+
+	return result
+}
+
+// testsLine renders the test counts padded to colWidth, then the elapsed time and the extras that follow it. The
+// caller supplies whatever leads the line (a status column, or a branch).
+func (s GoTestResultSummary) testsLine(colWidth int) string {
 	var sections []string
 
 	if s.config.ShowPackageCount {
@@ -524,15 +555,12 @@ func (s GoTestResultSummary) summaryFooter() string {
 	sections = append(sections, s.renderStats(stats, false))
 
 	summary := strings.Join(sections, " ")
-	// pad to the package-name column width, but never below the content width, else
-	// lipgloss word-wraps a summary wider than the column (e.g. the waiting state).
-	colWidth := s.config.PackageNameWidth
+	// pad to the column width, but never below the content width, else lipgloss word-wraps a summary wider than the
+	// column (e.g. the waiting state).
 	if w := lipgloss.Width(summary); w > colWidth {
 		colWidth = w
 	}
-	wideSummary := lipgloss.NewStyle().Width(colWidth).Render(summary)
-
-	result += wideSummary
+	result := lipgloss.NewStyle().Width(colWidth).Render(summary)
 
 	if elapsed := s.elapsed(); elapsed > 0 {
 		result += "\t" + s.style.Aux.Render(formatElapsed(elapsed, false))
@@ -547,15 +575,6 @@ func (s GoTestResultSummary) summaryFooter() string {
 		// this lives after the elapsed column (not in the summary column) so a long summary doesn't push the
 		// elapsed time out of alignment with the package lines above it.
 		result += "\t" + s.style.Aux.Render(fmt.Sprintf("(%s w/o tests)", plural(stats.PackagesWithNoTests, "pkg")))
-	}
-
-	if line, ok := s.packageProgressLine(); ok {
-		result += "\n" + statusColumn("") + line
-	}
-
-	if s.config.Canceled {
-		// call out the interruption in red on its own trailer line, since the glyph alone is ambiguous
-		result += "\n" + s.style.Failed.Render("└──▶ canceled by user")
 	}
 
 	return result
@@ -615,12 +634,9 @@ func (s GoTestResultSummary) packageCounts() packageCounts {
 	return c
 }
 
-// packageProgressLine renders the line under the summary that tracks the run's packages: a stacked bar showing the
-// split of packages by state, then the counts, e.g.
-//
-//	└─ ━━━━━━━━━━━━━━━━━━━━  28/59 packages done · 4 running · 7 starting · 20 waiting
-//
-// It only exists mid-run, so it never appears in the final summary.
+// packageProgressLine renders the package level of the footer: a stacked bar showing the split of packages by state,
+// then how many are done, e.g. "━━━━━━━━━━━━────────  43/89 pkgs completed (10 failed)". It only exists mid-run, so it
+// never appears in the final summary.
 func (s GoTestResultSummary) packageProgressLine() (string, bool) {
 	if !s.config.Running || s.config.Canceled {
 		return "", false
@@ -631,7 +647,7 @@ func (s GoTestResultSummary) packageProgressLine() (string, bool) {
 		return "", false
 	}
 
-	return s.style.Aux.Render("└─ ") + s.packageBar(c) + "  " + s.packageLegend(c), true
+	return s.packageBar(c) + "  " + s.packageLegend(c), true
 }
 
 // packageBar is a horizontal stacked bar chart of the packages by state: grouped and in phase order (passed, failed,
@@ -675,13 +691,12 @@ func (s GoTestResultSummary) packageBar(c packageCounts) string {
 }
 
 // packageLegend is the text beside the bar: how many packages are done out of the total, with failures called out,
-// e.g. "43/89 pkgs done (10 failed)". The in-flight states (running, starting, waiting) are left to the bar's
+// e.g. "43/89 pkgs completed (10 failed)". The in-flight states (running, starting, waiting) are left to the bar's
 // segments. It says pkgs so the count can't be mistaken for tests.
 //
-// This is supporting information, not the primary status, so it stays faint to keep out of the way. Only the
-// failures are red.
+// Now that it leads the footer it is plain text, like the test counts below it. Only the failures are red.
 func (s GoTestResultSummary) packageLegend(c packageCounts) string {
-	done := s.style.Aux.Render(fmt.Sprintf("%d/%d pkgs done", c.done(), c.total()))
+	done := fmt.Sprintf("%d/%d pkgs completed", c.done(), c.total())
 	if c.failed > 0 {
 		done += s.style.Failed.Render(fmt.Sprintf(" (%d failed)", c.failed))
 	}

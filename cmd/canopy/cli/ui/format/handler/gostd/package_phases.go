@@ -20,8 +20,9 @@ func withTestsElapsed(result *gotest.Result, pkgRef gotest.Reference, e gotest.E
 	}
 
 	return editSummaryLine(e, func(fields []string) []string {
-		// match go's own "%.3fs" so the two times read the same. The line formatter brackets it like other extras.
-		tests := fmt.Sprintf("tests %.3fs", phases.Tests.Seconds())
+		// two decimals, the same as go's elapsed time is shown with on this line. The line formatter brackets it like
+		// other extras.
+		tests := fmt.Sprintf("tests %.2fs", phases.Tests.Seconds())
 		return append(fields[:3], append([]string{tests}, fields[3:]...)...)
 	})
 }
@@ -77,7 +78,7 @@ func (n *firstTestNote) annotate(result *gotest.Result, pkgRef gotest.Reference,
 
 	return editSummaryLine(e, func(fields []string) []string {
 		// the parentheses tell the line formatter this field is already formatted (no brackets)
-		return append(fields, fmt.Sprintf("(started after %s)", delay.Truncate(10*time.Millisecond)))
+		return append(fields, fmt.Sprintf("(started after %.2fs)", delay.Seconds()))
 	})
 }
 
