@@ -30,6 +30,7 @@ type Result struct {
 	referencesByAction     map[Action]*orderedset.OrderedSet[Reference] // all action types except "output"
 	testReferencesByAction map[Action]*orderedset.OrderedSet[Reference]
 	conclusionEvent        map[Reference]Event
+	testSpanByPackage      map[string]timeSpan // first and last test event per package, see PackagePhases
 	start                  time.Time
 	startOffset            time.Duration
 	lastEventTime          time.Time
@@ -83,9 +84,14 @@ func NewResult(config ResultConfig) *Result {
 		referencesByAction:     referencesByAction,
 		testReferencesByAction: testReferencesByAction,
 		conclusionEvent:        make(map[Reference]Event),
+		testSpanByPackage:      make(map[string]timeSpan),
 	}
 }
 
+// ReferenceElapsed is the time from the reference's first event until its conclusion, or until now while it is still
+// in flight and live is set. For a package the first event is go test's "start", written just before the cache check
+// and exec of the test binary, so the time includes the binary launching (and any init or TestMain) before tests
+// report. That is the same baseline go test uses for its own package elapsed time.
 func (r *Result) ReferenceElapsed(ref Reference, live bool) time.Duration {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
@@ -101,7 +107,13 @@ func (r *Result) ReferenceElapsed(ref Reference, live bool) time.Duration {
 
 	start := events[0].Time
 	end := events[len(events)-1].Time
-	if len(events) == 1 {
+	_, concluded := r.conclusionEvent[ref]
+	switch {
+	case live && !concluded:
+		// still in flight, so keep counting. Stopping at the last event would freeze the timer whenever a
+		// reference has more than one event, e.g. a package that wrote output before its first test.
+		end = time.Now()
+	case len(events) == 1:
 		if live {
 			end = time.Now()
 		} else {
@@ -185,6 +197,13 @@ func (r *Result) Update(e Event) {
 	r.references.Add(e.Reference)
 	if e.Reference.IsPackage() {
 		r.packages.Add(e.Reference)
+	} else {
+		span, ok := r.testSpanByPackage[e.Reference.Package]
+		if !ok {
+			span.first = e.Time
+		}
+		span.last = e.Time
+		r.testSpanByPackage[e.Reference.Package] = span
 	}
 
 	// process conclusion

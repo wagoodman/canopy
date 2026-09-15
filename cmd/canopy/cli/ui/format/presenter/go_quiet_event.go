@@ -3,12 +3,18 @@ package presenter
 import (
 	"fmt"
 	"io"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 )
+
+// packageElapsedPattern matches the elapsed time go test puts at the start of the third field of a package's
+// "ok"/"FAIL" line, e.g. "2.542s", including when a note follows it ("0.010s [no tests to run]").
+var packageElapsedPattern = regexp.MustCompile(`^\d+\.\d+s\b`)
 
 type GoQuietEventFactory struct {
 	config GoEventConfig
@@ -95,6 +101,14 @@ func parseAndFormatPackageLine(s string, st style.Go, maxTestName int, stripPack
 
 	if len(fields) > 2 {
 		aux = fields[2:]
+		// go prints the elapsed time with three decimals ("2.542s"). Two is plenty to read and quieter.
+		aux[0] = packageElapsedPattern.ReplaceAllStringFunc(aux[0], func(elapsed string) string {
+			seconds, err := strconv.ParseFloat(strings.TrimSuffix(elapsed, "s"), 64)
+			if err != nil {
+				return elapsed
+			}
+			return fmt.Sprintf("%.2fs", seconds)
+		})
 	}
 
 	return Package{

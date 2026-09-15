@@ -2,6 +2,7 @@ package gosummary
 
 import (
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	mapset "github.com/deckarep/golang-set/v2"
@@ -26,6 +27,12 @@ type Model struct {
 	// pending holds the requested runs that have not published a run-end event yet
 	pending mapset.Set[uuid.UUID]
 	common  state.Common
+
+	// wall clock marks for the footer timer (see the timing model in presenter/go_summary.go). startedAt stands in
+	// for launch: the run request is published right after canopy starts the go test process, and this model is
+	// created when that request arrives. endedAt is when the last pending run-end event arrived.
+	startedAt time.Time
+	endedAt   time.Time
 }
 
 func NewModel(config presenter.GoSummaryConfig, common state.Common, runID uuid.UUID, runCfg gotest.RunnerConfig) *Model {
@@ -37,11 +44,12 @@ func NewModel(config presenter.GoSummaryConfig, common state.Common, runID uuid.
 	run.ID = runID
 	run.Config = runCfg
 	return &Model{
-		config:  config,
-		runs:    []gotest.Run{*run},
-		ids:     mapset.NewSet[uuid.UUID](runID),
-		pending: mapset.NewSet[uuid.UUID](runID),
-		common:  common,
+		config:    config,
+		runs:      []gotest.Run{*run},
+		ids:       mapset.NewSet[uuid.UUID](runID),
+		pending:   mapset.NewSet[uuid.UUID](runID),
+		common:    common,
+		startedAt: time.Now(),
 	}
 }
 
@@ -101,6 +109,9 @@ func (m *Model) handleGoTestRunEvent(msg partybus.Event) {
 
 	// the run-end event is the only reliable signal that a run has concluded
 	m.pending.Remove(runEvent.ID)
+	if m.pending.Cardinality() == 0 && m.endedAt.IsZero() {
+		m.endedAt = time.Now()
+	}
 
 	// the run-end event carries the final run state, including whether it was interrupted
 	if runEvent.Canceled {
@@ -159,6 +170,8 @@ func (m Model) View() string {
 	// an interrupt keypress (tracked on common) or a canceled run-end event both mean the results are incomplete
 	m.config.Canceled = m.canceled || m.common.Canceled
 	m.config.Running = m.pending.Cardinality() > 0
+	m.config.StartedAt = m.startedAt
+	m.config.EndedAt = m.endedAt
 	err := m.config.New(m.runs...).Present(&sb, &sb)
 	if err != nil {
 		// TODO

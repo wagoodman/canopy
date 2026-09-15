@@ -56,6 +56,9 @@ type quietHandler struct {
 
 	// executionMarkers controls visibility of test state markers (=== RUN/PAUSE/CONT).
 	executionMarkers string
+
+	// firstTest notes on the first package result line how long the run took to reach its first test.
+	firstTest firstTestNote
 }
 
 // NewQuietHandler creates a handler that formats output in quiet mode, showing
@@ -109,6 +112,8 @@ func (h *quietHandler) Handle(e partybus.Event) error {
 		}
 
 		return h.OnGoTestEvent(goTestEvent)
+	case event.GoTestRunRequestType:
+		h.firstTest.observeRunRequest()
 	}
 	return nil
 }
@@ -122,6 +127,7 @@ func (h *quietHandler) OnGoTestEvent(e gotest.Event) error {
 	}
 
 	h.result.Update(e)
+	h.firstTest.observe(e)
 	if e.Reference.IsPackage() {
 		h.packages.Add(e.Reference)
 	}
@@ -164,7 +170,8 @@ func (h *quietHandler) render() {
 
 		if !action.Completed() {
 			if h.config.LoosePackageOrder {
-				// attempt alphabetical order... unless a package is running for "too long"
+				// attempt alphabetical order... unless a package is running for "too long". This counts from the
+				// package's "start" event, so a binary that is slow to launch can go stale before any test runs.
 				elapsed := h.result.ReferenceElapsed(pkgRef, true)
 				if elapsed > h.config.StalePackageDuration {
 					// this package has been running for too long, blocking the result output of other packages.
@@ -262,7 +269,8 @@ func (h *quietHandler) outputPackageToWriter(pkgRef gotest.Reference, writer io.
 		if !render(e) {
 			continue
 		}
-		fmtr := h.formatter(e, h.panic[e.Reference])
+		annotated := withTestsElapsed(h.result, pkgRef, h.firstTest.annotate(h.result, pkgRef, e))
+		fmtr := h.formatter(annotated, h.panic[e.Reference])
 		if strings.TrimSpace(e.Output) != "" {
 			fmt.Fprint(writer, fmtr.String())
 		}
