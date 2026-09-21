@@ -83,13 +83,15 @@ canopy open flaky-hunt
 
 ### Browsing history
 
-- `canopy list runs`          list stored runs (run IDs on stdout, metadata on stderr)
-- `canopy session list [NAME]` list sessions and their run counts
-- `canopy show [RUN-ID]`       replay a run's formatted output (defaults to the last run)
-- `canopy open [NAME]`         open a session in the interactive UI (defaults to `@branch`)
+- `canopy list runs`              list stored runs (`-o id` for bare run IDs, `-o json` for scripting)
+- `canopy list sessions [NAME]`   list sessions and the runs grouped under each
+- `canopy show [RUN-ID]`          replay a run's formatted output (defaults to the last run)
+- `canopy open [NAME]`            open a session in the interactive UI (defaults to `@branch`)
 
 History is stored in a per-repo `.canopy` SQLite DB, enabled with `--store` (override the
-location with `--store-dir`). Retention is controlled by `--max-runs` / `--max-age`.
+location with `--store-dir`). Retention comes from the `store.max-runs` / `store.max-age`
+config keys, applied by `canopy db prune` (or override them per-invocation with
+`--keep-last` / `--older-than`).
 
 ## `triage` vs `verify`
 
