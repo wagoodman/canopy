@@ -32,11 +32,11 @@ tools:
       repo: anchore/syft
 
   # used for keyless signing of release checksums during release.
-  # pinned to 2.x: install.sh verifies with the legacy --certificate/--signature
-  # (.pem/.sig) flow, which cosign 3.x drops in favor of --bundle. see .goreleaser.yaml signs.
+  # constrained to 3.x: a major bump has broken signing before (see .goreleaser.yaml signs).
   - name: cosign
     version:
       want: v3.1.3
+      constraint: < v4.0.0
     method: github-release
     with:
       repo: sigstore/cosign
