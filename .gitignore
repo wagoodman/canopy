@@ -15,6 +15,7 @@ hack/
 mise.toml
 .claude/
 .op/
+docs/
 
 # builds
 snapshot
