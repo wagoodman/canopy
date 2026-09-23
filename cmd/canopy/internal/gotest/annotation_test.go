@@ -23,6 +23,16 @@ func TestExtractAnnotations(t *testing.T) {
 			want:   []Annotation{NoTestFiles},
 		},
 		{
+			name:   "no test files under -cover",
+			output: "\tgithub.com/x/y\t\tcoverage: 0.0% of statements\n",
+			want:   []Annotation{NoTestFiles},
+		},
+		{
+			name:   "tested package with zero coverage",
+			output: "ok  \tgithub.com/x/y\t0.01s\tcoverage: 0.0% of statements\n",
+			want:   []Annotation{},
+		},
+		{
 			name:   "no tests to run",
 			output: "?   \tthis is a normal output\t[no tests to run]\n",
 			want:   []Annotation{NoTestsToRun},

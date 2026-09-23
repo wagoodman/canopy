@@ -130,7 +130,7 @@ func TestGoTestResultSummary_Extras(t *testing.T) {
 	require.Equal(t,
 		// two of three packages done fills 13 of the 20 cells
 		"⠋\t\t━━━━━━━━━━━━━───────  2/3 pkgs completed\n"+
-			"\t\t└─ 1 passed tests                       \t6s   \t(1 pkg w/o tests)",
+			"\t\t└─ 1 passed tests                       \t    6s  \t(1 pkg w/o tests)",
 		subject.summaryFooter(),
 	)
 }
@@ -495,7 +495,7 @@ func TestElapsedPlaceholderWidth(t *testing.T) {
 	// the unrendered-packages rollup line has no elapsed time, but its placeholder must still occupy the same
 	// number of columns as a rendered elapsed value, otherwise the trailing tab lands on a different tab stop
 	// and the stats column is offset from the running-package lines.
-	require.Equal(t, lipgloss.Width(formatElapsed(time.Second, true)), lipgloss.Width(elapsedPlaceholder))
+	require.Equal(t, lipgloss.Width(elapsedColumn(formatElapsed(time.Second, true))), lipgloss.Width(elapsedPlaceholder))
 }
 
 func fixtureRun(t testing.TB, name string) *gotest.Run {

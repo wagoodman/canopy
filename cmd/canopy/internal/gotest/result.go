@@ -447,6 +447,10 @@ func (r *Result) SetCoverage(coverage *float64) {
 }
 
 func (r Result) Coverage() (float64, bool) {
+	// a zero Result (e.g. a run-end event for a run that never got one) has no coverage and no lock
+	if r.lock == nil {
+		return 0, false
+	}
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 

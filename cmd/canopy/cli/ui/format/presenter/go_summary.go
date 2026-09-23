@@ -40,10 +40,10 @@ var _ Presenter = (*GoTestResultSummary)(nil)
 //	              to exit, and the JSON pass/fail Elapsed counts from the "start" event itself. The two differ only
 //	              by the cache check. Switching a row from starting to running changes its glyph, never its timer,
 //	              so the live row hands off to the same number go prints when the package finishes.
-//	tests         per finished package, from its first test event to its last, shown after go's number on the
-//	              "ok"/"FAIL" line as "[tests 0.021s]" (see gotest.PackagePhases and gostd.withTestsElapsed). Only
-//	              shown when that package's startup reaches gotest.NotableStartup, the same bar the started after note
-//	              uses.
+//	tests         per finished package, from its first test event to its last. Go's number on the "ok"/"FAIL" line
+//	              is replaced by startup+tests, e.g. "7.81+0.02s" (see gotest.PackagePhases and
+//	              gostd.withTestsElapsed). Only split when that package's startup reaches gotest.NotableStartup, the
+//	              same bar the started after note uses.
 //
 // Startup, as split out by gotest.PackagePhases, ends at the first test event, while the starting state ends at the
 // binary's first event of any kind. They differ only when a package writes output before its first test (e.g.
@@ -63,8 +63,9 @@ const (
 )
 
 // elapsedPlaceholder fills the elapsed column for lines that have no elapsed time. It must be the same width as a
-// rendered elapsed value, otherwise the following tab lands on a different tab stop and the stats column is offset.
-var elapsedPlaceholder = strings.Repeat(" ", len(formatElapsed(0, true)))
+// rendered elapsed value (see elapsedColumn), otherwise the following tab lands on a different tab stop and the
+// stats column is offset.
+var elapsedPlaceholder = elapsedColumn("")
 
 type GoSummaryConfig struct {
 	// Color enables/ disables color output
@@ -298,8 +299,7 @@ func (s GoTestResultSummary) runningRows() []string {
 
 		var aux []string
 		if s.config.ShowElapsedForRunningPackages {
-			elapsedStr := formatElapsed(elapsed, true)
-			aux = append(aux, elapsedStr)
+			aux = append(aux, elapsedColumn(formatElapsed(elapsed, true)))
 		}
 
 		if s.config.ShowTestStatsForRunningPackages {
@@ -562,13 +562,13 @@ func (s GoTestResultSummary) testsLine(colWidth int) string {
 	}
 	result := lipgloss.NewStyle().Width(colWidth).Render(summary)
 
+	// the same elapsed column as the package lines above it, so the time and coverage line up with theirs
 	if elapsed := s.elapsed(); elapsed > 0 {
-		result += "\t" + s.style.Aux.Render(formatElapsed(elapsed, false))
+		result += "\t" + s.style.Aux.Render(elapsedColumn(formatElapsed(elapsed, false)))
 	}
 
 	if coverage, ok := s.results.Coverage(); ok {
-		// match the same format changes used in the gostd handlers
-		result += "\t" + s.style.Aux.Render(fmt.Sprintf("[%0.1f%% coverage]", coverage))
+		result += "\t" + s.style.Aux.Render(fmt.Sprintf("%.1f%% covered", coverage))
 	}
 
 	if s.config.HidePackagesWithNoTests && stats.PackagesWithNoTests > 0 {

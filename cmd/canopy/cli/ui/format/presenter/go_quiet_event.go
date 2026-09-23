@@ -16,6 +16,13 @@ import (
 // "ok"/"FAIL" line, e.g. "2.542s", including when a note follows it ("0.010s [no tests to run]").
 var packageElapsedPattern = regexp.MustCompile(`^\d+\.\d+s\b`)
 
+// elapsedTimeWidth fits an elapsed time up to "99.99s", and elapsedColumnWidth that plus a startup mark (" ◕").
+// ponytail: 100s+ packages push the columns after it over on that line only.
+const (
+	elapsedTimeWidth   = 6
+	elapsedColumnWidth = elapsedTimeWidth + 2
+)
+
 type GoQuietEventFactory struct {
 	config GoEventConfig
 }
@@ -99,6 +106,13 @@ func parseAndFormatPackageLine(s string, st style.Go, maxTestName int, stripPack
 		pkgName = fields[1]
 	}
 
+	// with -cover, go prints a package with no test files (but some statements) as "\tpkg\t\tcoverage: 0.0% of
+	// statements" instead of its usual "?   \tpkg\t[no test files]". Say so, the way go would have.
+	if len(fields) == 4 && fields[0] == "" && fields[2] == "" && output.HasPackageCoverageMarking(fields[3]) {
+		status = "?   "
+		fields = append(fields, "[no test files]")
+	}
+
 	if len(fields) > 2 {
 		aux = fields[2:]
 		// go prints the elapsed time with three decimals ("2.542s"). Two is plenty to read and quieter.
@@ -109,6 +123,7 @@ func parseAndFormatPackageLine(s string, st style.Go, maxTestName int, stripPack
 			}
 			return fmt.Sprintf("%.2fs", seconds)
 		})
+		aux[0] = elapsedColumn(aux[0])
 	}
 
 	return Package{
@@ -122,4 +137,19 @@ func parseAndFormatPackageLine(s string, st style.Go, maxTestName int, stripPack
 		MaxTestName:    maxTestName,
 		StripPrefix:    stripPackagePrefix,
 	}.String()
+}
+
+// elapsedColumn is the one layout of the elapsed column, shared by package result lines, the live rows for running
+// packages, and the summary footer, so their columns line up. It is always elapsedColumnWidth wide: a time is right
+// aligned with a slot after it for a startup mark ("1.88s  " vs "6.20s ◕"), so times line up too, and anything else
+// like "(cached)" or nothing at all (packages with no tests) is right aligned to the whole column.
+func elapsedColumn(field string) string {
+	elapsed, mark, _ := strings.Cut(strings.TrimSpace(field), " ")
+	if !output.HasTimeMarker(elapsed) {
+		return fmt.Sprintf("%*s", elapsedColumnWidth, strings.TrimSpace(field))
+	}
+	if mark == "" {
+		mark = " "
+	}
+	return fmt.Sprintf("%*s %s", elapsedTimeWidth, elapsed, mark)
 }

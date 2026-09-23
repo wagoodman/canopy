@@ -121,6 +121,18 @@ func (m *Model) handleGoTestRunEvent(msg partybus.Event) {
 	if !m.ids.Contains(runEvent.ID) {
 		m.runs = append(m.runs, *runEvent)
 		m.ids.Add(runEvent.ID)
+		return
+	}
+
+	// a run this model already tracks was built up from its test events, which don't carry coverage. That is only
+	// calculated once the run is over, so take it from the run-end event.
+	if cov, ok := runEvent.Result.Coverage(); ok {
+		for i := range m.runs {
+			if m.runs[i].ID == runEvent.ID {
+				m.runs[i].Result.SetCoverage(&cov)
+				break
+			}
+		}
 	}
 }
 

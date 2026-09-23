@@ -3,6 +3,8 @@ package presenter
 import (
 	"fmt"
 	"io"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -69,8 +71,7 @@ func (p Package) String() string {
 
 	if p.Name != "" {
 		if p.StripPrefix != "" {
-			p.Name = strings.TrimPrefix(p.Name, p.StripPrefix)
-			p.Name = strings.TrimPrefix(p.Name, "/")
+			p.Name = stripPackagePrefix(p.Name, p.StripPrefix)
 		}
 
 		// make all test names the same width
@@ -83,20 +84,22 @@ func (p Package) String() string {
 
 	for i, a := range aux {
 		switch {
-		case output.IsWhitespace(a):
+		case a == "" || output.IsWhitespace(a):
 			// allow whitespace to occur...
 			break
 
-		case output.HasTimeMarker(a):
+		case output.HasTimeMarker(a), i == 0 && packageElapsedPattern.MatchString(strings.TrimSpace(a)):
+			// elapsed, possibly with a startup mark after it ("6.20s ◕")
 			break
 
 		case strings.ContainsAny(a, "(["):
 			// TODO: why!?
 			// already formatted
 			break
+
 		case output.HasPackageCoverageMarking(a):
-			// TODO: does this cover "coverage: [no statements]"? (no)
-			a = strings.ReplaceAll(strings.ReplaceAll(a, "coverage: ", "[")+"]", "of statements", "coverage")
+			// on nearly every line, so no brackets
+			a = formatCoverage(a)
 
 		default:
 			a = "[" + a + "]"
@@ -106,4 +109,34 @@ func (p Package) String() string {
 	}
 
 	return status + strings.Join(append([]string{p.Name}, aux...), "\t") + p.Trailer
+}
+
+// coveragePercentPattern pulls the percentage out of go's "coverage: 61.2% of statements [in <pattern>]".
+var coveragePercentPattern = regexp.MustCompile(`^coverage: (\d+(?:\.\d+)?)% of statements`)
+
+// formatCoverage rewrites go's coverage field as "61.2% covered". It isn't padded, so it starts at the column's edge
+// the same as the live rows' stats do in that column. With -coverpkg go also appends " in <pattern>", which is the
+// same on every line, so it is dropped.
+func formatCoverage(a string) string {
+	m := coveragePercentPattern.FindStringSubmatch(strings.TrimSpace(a))
+	if m == nil {
+		return a
+	}
+	pct, err := strconv.ParseFloat(m[1], 64)
+	if err != nil {
+		return a
+	}
+	return fmt.Sprintf("%.1f%% covered", pct)
+}
+
+// stripPackagePrefix makes a package path relative to prefix (usually the module path). The prefix itself becomes "."
+// rather than nothing, and only whole path segments are stripped, so a sibling like "<prefix>-extra" is left alone.
+func stripPackagePrefix(name, prefix string) string {
+	if name == prefix {
+		return "."
+	}
+	if rest, ok := strings.CutPrefix(name, strings.TrimSuffix(prefix, "/")+"/"); ok {
+		return rest
+	}
+	return name
 }

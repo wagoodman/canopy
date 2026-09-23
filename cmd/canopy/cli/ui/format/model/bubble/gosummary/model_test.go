@@ -62,3 +62,21 @@ func passingPackageEvents(runID uuid.UUID) []gotest.Event {
 		{RunID: runID, Time: now, Action: gotest.PassAction, Reference: pkg},
 	}
 }
+
+func TestModel_CoverageFromRunEnd(t *testing.T) {
+	// the model builds its run from test events, but coverage is only calculated once the run is over and arrives
+	// on the run-end event
+	id := uuid.New()
+	var m tea.Model = NewModel(presenter.DefaultGoTestResultSummaryConfig().WithColor(false), state.Common{}, id, gotest.RunnerConfig{})
+
+	for _, e := range passingPackageEvents(id) {
+		m, _ = m.Update(partybus.Event{Type: event.GoTestType, Value: e})
+	}
+
+	ended := gotest.Run{ID: id, Result: *gotest.NewResult(gotest.ResultConfig{})}
+	cov := 48.3
+	ended.Result.SetCoverage(&cov)
+	m, _ = m.Update(partybus.Event{Type: event.GoTestRunType, Value: ended})
+
+	require.Contains(t, m.View(), "48.3% covered")
+}

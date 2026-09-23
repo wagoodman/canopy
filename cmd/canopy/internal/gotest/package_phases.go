@@ -2,9 +2,9 @@ package gotest
 
 import "time"
 
-// NotableStartup is the shortest startup worth calling out: a package's startup before "[tests X]" is added to its
-// result line, or the run's wait for its first test before "(started after X)" is. Below this (e.g. a warm machine,
-// or Linux where exec is cheap) the note only repeats go's own number.
+// NotableStartup is the shortest startup worth calling out: a package's startup before its result line's elapsed time
+// is split into startup+tests, or the run's wait for its first test before "(started after X)" is. Below this (e.g. a
+// warm machine, or Linux where exec is cheap) the split only repeats go's own number.
 const NotableStartup = time.Second
 
 // PackagePhases splits a concluded package's time, as go test reports it, at the package's first test event. All
