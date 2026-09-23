@@ -442,6 +442,79 @@ func TestGoTestResultSummary_UnrenderedRowWithoutResults(t *testing.T) {
 	require.NotContains(t, rows[0], "waiting for test results")
 }
 
+func TestGoTestResultSummary_UnrenderedRowHiddenWithBlocker(t *testing.T) {
+	// the blocking package is too young for its own row, so the rollup it causes must wait for it
+	now := time.Now().Add(-500 * time.Millisecond)
+	run := gotest.NewRun(gotest.RunnerConfig{})
+	run.Result = *gotest.NewResult(gotest.ResultConfig{})
+	for _, e := range []gotest.Event{
+		{Reference: gotest.NewReference("example.com/a", ""), Action: gotest.StartAction, Time: now},
+		{Reference: gotest.NewReference("example.com/b", ""), Action: gotest.StartAction, Time: now},
+		{Reference: gotest.NewReference("example.com/b", ""), Action: gotest.SkipAction, Time: now},
+	} {
+		run.Result.Update(e)
+	}
+
+	subject := DefaultGoTestResultSummaryConfig().
+		WithColor(false).
+		WithPackageNameWidth(30).
+		WithRunningState("⠋").
+		New(*run).(GoTestResultSummary)
+	subject.config.Running = true
+
+	require.Empty(t, subject.runningRows())
+}
+
+func TestGoTestResultSummary_UnrenderedRowAfterStalePackage(t *testing.T) {
+	// with loose ordering a stale package is skipped over, so the rollup's blocker is the next in-flight package and
+	// the rollup must wait on that package's row, not the stale one's
+	tests := []struct {
+		name         string
+		blockerAge   time.Duration
+		wantRows     int
+		wantUnrender bool
+	}{
+		{name: "young blocker hides rollup", blockerAge: 200 * time.Millisecond, wantRows: 1},
+		{name: "visible blocker shows rollup", blockerAge: 1500 * time.Millisecond, wantRows: 3, wantUnrender: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stale := time.Now().Add(-5 * time.Second)
+			young := time.Now().Add(-tt.blockerAge)
+			run := gotest.NewRun(gotest.RunnerConfig{})
+			run.Result = *gotest.NewResult(gotest.ResultConfig{})
+			for _, e := range []gotest.Event{
+				{Reference: gotest.NewReference("example.com/a", ""), Action: gotest.StartAction, Time: stale},
+				{Reference: gotest.NewReference("example.com/b", ""), Action: gotest.StartAction, Time: stale},
+				{Reference: gotest.NewReference("example.com/b", ""), Action: gotest.SkipAction, Time: stale},
+				{Reference: gotest.NewReference("example.com/c", ""), Action: gotest.StartAction, Time: young},
+				{Reference: gotest.NewReference("example.com/d", ""), Action: gotest.StartAction, Time: young},
+				{Reference: gotest.NewReference("example.com/d", ""), Action: gotest.SkipAction, Time: young},
+			} {
+				run.Result.Update(e)
+			}
+
+			subject := DefaultGoTestResultSummaryConfig().
+				WithColor(false).
+				WithPackageNameWidth(30).
+				WithRunningState("⠋").
+				New(*run).(GoTestResultSummary)
+			subject.config.Running = true
+
+			rows := subject.runningRows()
+			require.Len(t, rows, tt.wantRows)
+			if tt.wantUnrender {
+				// only d is behind the blocker, b sits behind the stale package and the body has already skipped past it
+				require.Contains(t, rows[0], "(1 unrendered pkgs)")
+				require.Contains(t, rows[2], "example.com/c")
+			} else {
+				require.NotContains(t, strings.Join(rows, "\n"), "unrendered")
+			}
+			require.Contains(t, strings.Join(rows, "\n"), "example.com/a")
+		})
+	}
+}
+
 func TestGoTestResultSummary_WallClockFooter(t *testing.T) {
 	started := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	pkg := gotest.NewReference("example.com/a", "")
