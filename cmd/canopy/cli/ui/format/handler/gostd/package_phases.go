@@ -2,6 +2,7 @@ package gostd
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -9,10 +10,14 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest/output"
 )
 
-// withTestsElapsed adds how long a package's tests ran to go test's "ok"/"FAIL" summary line, right after go's own
-// elapsed time (e.g. "7.832s [tests 0.021s]"). Go's number covers the whole test binary process, so when startup
-// dominates it hides how fast the tests themselves were. The note is only added when startup is notable (see
-// gotest.NotableStartup); any other event is returned unchanged.
+// startupPie marks how much of a package's elapsed time went to startup, to the nearest quarter: ◔ ◑ ◕ ●.
+var startupPie = []string{"", "◔", "◑", "◕", "●"}
+
+// withTestsElapsed marks go test's elapsed time on a package's "ok"/"FAIL" summary line with how much of it was
+// startup, e.g. "7.832s" becomes "7.832s ●". Go's number covers the whole test binary process, so when startup
+// dominates it hides how fast the tests themselves were. The time itself stays go's wall clock, so it still means
+// the same thing on every line. It is only marked when startup is notable (see gotest.NotableStartup) and at least
+// the nearest quarter; any other event is returned unchanged.
 func withTestsElapsed(result *gotest.Result, pkgRef gotest.Reference, e gotest.Event) gotest.Event {
 	phases, ok := result.PackagePhases(pkgRef)
 	if !ok || phases.Startup < gotest.NotableStartup {
@@ -20,10 +25,15 @@ func withTestsElapsed(result *gotest.Result, pkgRef gotest.Reference, e gotest.E
 	}
 
 	return editSummaryLine(e, func(fields []string) []string {
-		// two decimals, the same as go's elapsed time is shown with on this line. The line formatter brackets it like
-		// other extras.
-		tests := fmt.Sprintf("tests %.2fs", phases.Tests.Seconds())
-		return append(fields[:3], append([]string{tests}, fields[3:]...)...)
+		total, err := time.ParseDuration(fields[2])
+		if err != nil || total <= 0 {
+			return fields
+		}
+		quarters := int(math.Round(4 * min(1, phases.Startup.Seconds()/total.Seconds())))
+		if quarters > 0 {
+			fields[2] += " " + startupPie[quarters]
+		}
+		return fields
 	})
 }
 

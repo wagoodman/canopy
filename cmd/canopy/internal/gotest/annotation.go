@@ -20,10 +20,11 @@ type Annotation string
 // These annotations help distinguish between different types of test failures
 // and special states like cached results.
 func ExtractAnnotations(output string) []Annotation {
+	coverOnly := isCoverOnlyNoTestFiles(output)
 	output = strings.TrimSpace(output)
 	var annotations []Annotation
 
-	if strings.HasSuffix(output, "[no test files]") {
+	if coverOnly || strings.HasSuffix(output, "[no test files]") {
 		annotations = append(annotations, NoTestFiles)
 	}
 
@@ -46,4 +47,11 @@ func ExtractAnnotations(output string) []Annotation {
 	}
 
 	return annotations
+}
+
+// isCoverOnlyNoTestFiles reports whether the output is the line go prints under -cover for a package with no test
+// files but some statements: "\tpkg\t\tcoverage: 0.0% of statements" (no status, no elapsed, no "[no test files]").
+func isCoverOnlyNoTestFiles(output string) bool {
+	fields := strings.Split(strings.TrimRight(output, "\n"), "\t")
+	return len(fields) == 4 && fields[0] == "" && fields[2] == "" && strings.HasPrefix(fields[3], "coverage:")
 }

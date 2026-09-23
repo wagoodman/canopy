@@ -194,7 +194,11 @@ func (j joinedResult) SetCoverage(_ *float64) {
 }
 
 func (j joinedResult) Coverage() (float64, bool) {
-	// coverage is not possible for joined results, return zero and false (as if it was never enabled)
+	// a single run's coverage is its own. Percentages from several runs can't be combined, so there is none then (as
+	// if it was never enabled).
+	if len(j.runs) == 1 {
+		return j.runs[0].Result.Coverage()
+	}
 	return 0, false
 }
 
