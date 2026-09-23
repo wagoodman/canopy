@@ -272,6 +272,9 @@ func (s GoTestResultSummary) Present(stdout, stderr io.Writer) error {
 	return nil
 }
 
+// minRunningRowElapsed is how long a package must be in flight before it gets a live row.
+const minRunningRowElapsed = 1 * time.Second
+
 // runningRows renders one row per in-flight package in presentation order, preceded by a rollup row for completed
 // packages that aren't shown individually. The caller places these above the footer.
 func (s GoTestResultSummary) runningRows() []string {
@@ -286,7 +289,7 @@ func (s GoTestResultSummary) runningRows() []string {
 		// counted from the package's "start" event, so the starting phase is included. This is deliberate: it is the
 		// same baseline go test uses for the "ok pkg 3.4s" line that replaces this row (see the timing model above).
 		elapsed := s.results.ReferenceElapsed(runningPkgRef, !s.config.DurationFromEvents)
-		if elapsed < 1*time.Second {
+		if elapsed < minRunningRowElapsed {
 			// low pass filter for events... otherwise we'll see a jitter of a lot of packages that show up briefly
 			// as running, but may be removed when completed without printing the final result in cases where
 			// a previous package in sort order is still running.
@@ -334,7 +337,13 @@ func (s GoTestResultSummary) unrenderedRow(inFlightPkgRefs []gotest.Reference) (
 		return "", false
 	}
 
-	completedPkgRefsAfter, pkgStats := s.completedPkgsAfter(s.firstNonStaleRunningRef(inFlightPkgRefs))
+	blocker := s.firstNonStaleRunningRef(inFlightPkgRefs)
+	// the blocker's own row is held back by the low pass filter at first, and the rollup would have no visible cause
+	if blocker != nil && s.results.ReferenceElapsed(*blocker, !s.config.DurationFromEvents) < minRunningRowElapsed {
+		return "", false
+	}
+
+	completedPkgRefsAfter, pkgStats := s.completedPkgsAfter(blocker)
 	if len(completedPkgRefsAfter) == 0 {
 		return "", false
 	}
