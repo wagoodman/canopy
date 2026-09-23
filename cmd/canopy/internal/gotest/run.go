@@ -12,8 +12,8 @@ type Run struct {
 
 	Config           RunnerConfig
 	Result           Result
-	PackageCoverage  []cover.PackageResult  // per-package coverage from covdata
-	FunctionCoverage []cover.FunctionResult // per-function coverage from covdata
+	PackageCoverage  []cover.PackageResult  // per-package coverage from the text profile
+	FunctionCoverage []cover.FunctionResult // per-function coverage from `go tool cover -func`
 
 	// Canceled indicates the run was interrupted before completion (e.g. ctrl-c / context cancellation).
 	Canceled bool

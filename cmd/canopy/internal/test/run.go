@@ -65,7 +65,7 @@ func (r run) addEvent(event gotest.Event) error {
 }
 
 // setCoverageDir records the on-disk coverage directory as soon as it's created,
-// so it can always be cleaned up regardless of whether covdata produces data.
+// so it can always be cleaned up regardless of whether a coverage profile gets written.
 func (r *run) setCoverageDir(dir string) error {
 	if r.session == nil || r.session.store == nil {
 		return nil

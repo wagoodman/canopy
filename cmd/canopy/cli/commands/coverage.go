@@ -118,7 +118,7 @@ Examples:
 type coverageOutput struct {
 	RunID       string          `json:"run_id"`
 	Timestamp   time.Time       `json:"timestamp"`
-	CovdataPath string          `json:"covdata_path"`
+	CoverageDir string          `json:"coverage_dir"`
 	Total       coverageTotal   `json:"total"`
 	Packages    []packageOutput `json:"packages"`
 }
@@ -350,7 +350,7 @@ func writeCoverageJSON(w io.Writer, runInfo test.RunInfo, testRun db.TestRun, pk
 	output := coverageOutput{
 		RunID:       runInfo.UUID.String(),
 		Timestamp:   runInfo.Started,
-		CovdataPath: testRun.CoverageDir,
+		CoverageDir: testRun.CoverageDir,
 		Total: coverageTotal{
 			Percent: safePercent(runInfo.Coverage),
 		},

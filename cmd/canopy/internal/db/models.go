@@ -82,7 +82,7 @@ type TestRun struct {
 	// Coverage is the overall code coverage percentage for this run (nil if not calculated).
 	Coverage *float64 `gorm:"column:coverage" json:"coverage"`
 
-	// CoverageDir is the absolute path to the persistent binary coverage directory for this run.
+	// CoverageDir is the absolute path to the persistent coverage directory for this run (holds the text profile; older runs hold binary covdata).
 	CoverageDir string `gorm:"column:coverage_dir" json:"coverage_dir,omitempty"`
 }
 
@@ -188,7 +188,7 @@ type FailedTestDetails struct {
 	Fingerprint string `gorm:"column:fingerprint;index" json:"fingerprint"`
 }
 
-// PackageCoverage stores per-package coverage data from `go tool covdata percent`.
+// PackageCoverage stores per-package coverage data calculated from the run's text coverage profile.
 type PackageCoverage struct {
 	// ID is the primary key for database relationships.
 	ID int64 `gorm:"primaryKey" json:"-"`
@@ -203,7 +203,7 @@ type PackageCoverage struct {
 	Percent float64 `gorm:"column:percent" json:"percent"`
 }
 
-// FunctionCoverage stores per-function coverage data from `go tool covdata func`.
+// FunctionCoverage stores per-function coverage data from `go tool cover -func`.
 type FunctionCoverage struct {
 	// ID is the primary key for database relationships.
 	ID int64 `gorm:"primaryKey" json:"-"`
