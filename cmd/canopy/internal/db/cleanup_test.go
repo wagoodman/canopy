@@ -355,7 +355,7 @@ func TestDeleteRun_CascadesAllData_StructComparison(t *testing.T) {
 }
 
 // TestSetRunCoverageDir_OrphanCleanup covers the orphan scenario: a coverage-enabled run
-// creates its on-disk dir but covdata produces no data (so EndTestRun gets nil coverage).
+// creates its on-disk dir but go test writes no profile data (so EndTestRun gets nil coverage).
 // The dir must still be tracked and removed by DeleteRuns.
 func TestSetRunCoverageDir_OrphanCleanup(t *testing.T) {
 	store, err := New(":memory:")

@@ -7,68 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParsePercentOutput(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		want    []PackageResult
-		wantErr require.ErrorAssertionFunc
-	}{
-		{
-			name: "multiple packages",
-			input: `	example.com/pkg1		coverage: 41.1% of statements
-	example.com/pkg2		coverage: 87.5% of statements`,
-			want: []PackageResult{
-				{PackagePath: "example.com/pkg1", Percent: 41.1},
-				{PackagePath: "example.com/pkg2", Percent: 87.5},
-			},
-		},
-		{
-			name:  "single package",
-			input: `	example.com/main		coverage: 100.0% of statements`,
-			want: []PackageResult{
-				{PackagePath: "example.com/main", Percent: 100.0},
-			},
-		},
-		{
-			name:  "zero coverage",
-			input: `	example.com/pkg		coverage: 0.0% of statements`,
-			want: []PackageResult{
-				{PackagePath: "example.com/pkg", Percent: 0.0},
-			},
-		},
-		{
-			name:  "empty output",
-			input: "",
-			want:  nil,
-		},
-		{
-			name:    "malformed line - no percentage",
-			input:   `example.com/pkg	no-coverage-here`,
-			wantErr: require.Error,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.wantErr == nil {
-				tt.wantErr = require.NoError
-			}
-
-			got, err := parsePercentOutput(tt.input)
-			tt.wantErr(t, err)
-
-			if err != nil {
-				return
-			}
-
-			if d := cmp.Diff(tt.want, got); d != "" {
-				t.Errorf("parsePercentOutput mismatch (-want +got):\n%s", d)
-			}
-		})
-	}
-}
-
 func TestParseFuncOutput(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -133,52 +71,6 @@ total:					(statements)	75.5%`,
 				t.Errorf("parseFuncOutput funcs mismatch (-want +got):\n%s", d)
 			}
 			require.InDelta(t, tt.wantOverall, gotOverall, 0.01)
-		})
-	}
-}
-
-func TestExtractPercent(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		want    float64
-		wantErr require.ErrorAssertionFunc
-	}{
-		{
-			name:  "standard coverage string",
-			input: "coverage: 41.1% of statements",
-			want:  41.1,
-		},
-		{
-			name:  "100 percent",
-			input: "coverage: 100.0% of statements",
-			want:  100.0,
-		},
-		{
-			name:  "zero percent",
-			input: "coverage: 0.0% of statements",
-			want:  0.0,
-		},
-		{
-			name:    "no percent sign",
-			input:   "no percentage here",
-			wantErr: require.Error,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.wantErr == nil {
-				tt.wantErr = require.NoError
-			}
-
-			got, err := extractPercent(tt.input)
-			tt.wantErr(t, err)
-
-			if err != nil {
-				return
-			}
-			require.InDelta(t, tt.want, got, 0.01)
 		})
 	}
 }

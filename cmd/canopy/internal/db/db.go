@@ -198,7 +198,7 @@ func (s Store) EndTestRun(runID uuid.UUID, coverage *CoverageInput) error {
 	if coverage != nil {
 		run.Coverage = &coverage.Percent
 		// don't clobber a CoverageDir already recorded at creation time (see SetRunCoverageDir):
-		// covdata may produce no data, but the dir still exists on disk and must stay tracked for cleanup.
+		// go test may write no profile data, but the dir still exists on disk and must stay tracked for cleanup.
 		if coverage.CoverageDir != "" {
 			run.CoverageDir = coverage.CoverageDir
 		}
@@ -225,7 +225,7 @@ func (s Store) EndTestRun(runID uuid.UUID, coverage *CoverageInput) error {
 }
 
 // SetRunCoverageDir records the on-disk coverage directory for a run as soon as it's created,
-// so orphaned dirs get cleaned up by DeleteRuns even when covdata produces no data. Targeted
+// so orphaned dirs get cleaned up by DeleteRuns even when go test writes no profile data. Targeted
 // single-column update to avoid Save cascading has-many writes.
 func (s Store) SetRunCoverageDir(runID uuid.UUID, dir string) error {
 	if err := s.db.Model(&TestRun{}).Where("uuid = ?", runID.String()).Update("coverage_dir", dir).Error; err != nil {

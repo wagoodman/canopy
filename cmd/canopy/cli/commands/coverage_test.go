@@ -277,7 +277,7 @@ func TestWriteCoverageJSON(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, "12345678-1234-1234-1234-123456789abc", output.RunID)
-	require.Equal(t, "/tmp/coverage/12345678", output.CovdataPath)
+	require.Equal(t, "/tmp/coverage/12345678", output.CoverageDir)
 	require.Equal(t, 75.5, output.Total.Percent)
 	require.Len(t, output.Packages, 1)
 	require.Equal(t, "github.com/org/repo/internal/auth", output.Packages[0].Path)

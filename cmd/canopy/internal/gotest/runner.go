@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"math"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -16,6 +19,9 @@ import (
 	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 )
+
+// coverProfileName is the text profile written into the run's coverage dir.
+const coverProfileName = "profile.out"
 
 type ErrRunStderr struct {
 	Output string
@@ -29,7 +35,7 @@ func (e ErrRunStderr) Error() string {
 type RunnerConfig struct {
 	Packages    *golist.PackageCollection
 	Coverage    bool
-	CoverageDir string // absolute path to persistent binary coverage directory (set externally when Coverage is true)
+	CoverageDir string // absolute path to the persistent per-run coverage directory holding the profile (set externally when Coverage is true)
 	NoCache     bool
 	UserArgs    []string
 	OnlyRefs    []Reference
@@ -129,6 +135,11 @@ func (r *Runner) Start(ctx context.Context, resultConfig ResultConfig, onEvent .
 	return run, done
 }
 
+// profilePath is where `go test -coverprofile` writes the merged text profile for this run.
+func (r *Runner) profilePath() string {
+	return filepath.Join(r.config.CoverageDir, coverProfileName)
+}
+
 // recordCoverage calculates and attaches package/function coverage to run when a coverage dir
 // is configured. it is a no-op when coverage is disabled.
 func (r *Runner) recordCoverage(run *Run) error {
@@ -136,19 +147,24 @@ func (r *Runner) recordCoverage(run *Run) error {
 		return nil
 	}
 
-	pkgs, err := cover.PackageCoverage(r.config.CoverageDir)
+	// go test may exit before writing a profile (e.g. bad flags, nothing to test).
+	if _, err := os.Stat(r.profilePath()); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+
+	pkgs, err := cover.PackageCoverage(r.profilePath())
 	if err != nil {
 		return fmt.Errorf("error calculating package coverage: %v", err)
 	}
 
-	funcs, overallPercent, err := cover.FunctionCoverage(r.config.CoverageDir)
+	funcs, overallPercent, err := cover.FunctionCoverage(r.profilePath())
 	if err != nil {
 		return fmt.Errorf("error calculating function coverage: %v", err)
 	}
 
-	// only record coverage when covdata actually produced data. an empty coverage dir
-	// (e.g. a build failure) yields empty results with a nil error; setting coverage
-	// anyway would fabricate a bogus 0.0%. leave it unset so Coverage() returns (_, false).
+	// only record coverage when the profile actually has data. a header-only profile (e.g. every
+	// package failed to build) yields empty results with a nil error; setting coverage anyway
+	// would fabricate a bogus 0.0%. leave it unset so Coverage() returns (_, false).
 	if len(pkgs) > 0 || len(funcs) > 0 {
 		run.Result.coverage = &overallPercent
 	}
@@ -165,6 +181,12 @@ func (r *Runner) startEventStream(ctx context.Context) (<-chan JSONL, error) { /
 	if r.config.Coverage {
 		initArgs = append(initArgs, "-cover")
 	}
+	// use the text profile rather than -test.gocoverdir: it's what `go test` itself merges (untested
+	// main packages at 0%, no cross-package credit without -coverpkg), and passing a test binary
+	// flag via -args would make every run uncacheable.
+	if r.config.CoverageDir != "" {
+		initArgs = append(initArgs, "-coverprofile="+r.profilePath())
+	}
 	initArgs = append(initArgs, "-json")
 
 	if r.config.NoCache {
@@ -177,11 +199,6 @@ func (r *Runner) startEventStream(ctx context.Context) (<-chan JSONL, error) { /
 	args = append(args, initArgs...)
 	args = append(args, r.config.UserArgs...)
 	args = append(args, runFilters(r.config.OnlyRefs)...)
-
-	// -args must come last: it separates `go test` flags from test binary flags
-	if r.config.CoverageDir != "" {
-		args = append(args, "-args", fmt.Sprintf("-test.gocoverdir=%s", r.config.CoverageDir))
-	}
 
 	// use CommandContext so a cancelled ctx kills the child `go test` (and its process group)
 	// instead of orphaning it.
