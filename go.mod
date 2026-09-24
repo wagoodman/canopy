@@ -4,10 +4,10 @@ go 1.26.0
 
 require (
 	github.com/anchore/bubbly v0.0.0-20250717181826-8a411f9d8cbf
-	github.com/anchore/clio v0.0.0-20260121204944-b804fea6ab43
-	github.com/anchore/fangs v0.0.0-20260121185152-7c80b632e334
-	github.com/anchore/go-homedir v0.0.0-20250319154043-c29668562e4d
-	github.com/anchore/go-logger v0.0.0-20260121204825-e2a682192337
+	github.com/anchore/clio v0.1.1
+	github.com/anchore/fangs v0.1.1
+	github.com/anchore/go-homedir v0.1.1
+	github.com/anchore/go-logger v0.1.1
 	github.com/anchore/go-sync v0.0.0-20251016141314-9644b03ca06e
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/cespare/xxhash/v2 v2.3.0
