@@ -15,8 +15,8 @@ github.com/anchore/clio v0.0.0-20260121204944-b804fea6ab43 h1:TjPUlIESx6Ooyy924C
 github.com/anchore/clio v0.0.0-20260121204944-b804fea6ab43/go.mod h1:+4wHgwhQMJJ3/s6WiLw9WfG3scGPSxqjcHDe3oJH+jY=
 github.com/anchore/fangs v0.0.0-20260121185152-7c80b632e334 h1:qPu9JLcNwLPeWETKfNLMoHre1dbiNxa21x9/gPrsJxE=
 github.com/anchore/fangs v0.0.0-20260121185152-7c80b632e334/go.mod h1:yYsgDLrzipKlyDAzrjtd35lMcXyZ60b8Ko8vTaMwqoU=
-github.com/anchore/go-homedir v0.0.0-20250319154043-c29668562e4d h1:gT69osH9AsdpOfqxbRwtxcNnSZ1zg4aKy2BevO3ZBdc=
-github.com/anchore/go-homedir v0.0.0-20250319154043-c29668562e4d/go.mod h1:PhSnuFYknwPZkOWKB1jXBNToChBA+l0FjwOxtViIc50=
+github.com/anchore/go-homedir v0.1.1 h1:KpaO5BPrVT7cVMcEZ9KfFfEi0iuo3DtagPGl0C744X0=
+github.com/anchore/go-homedir v0.1.1/go.mod h1:9B0DGhbmMAJVGGEbrlb+PkORM5eDFCEOtZ3xQ22qaLA=
 github.com/anchore/go-logger v0.0.0-20260121204825-e2a682192337 h1:LU5ky09vrO2Sl7LzTw9SyE0nYUcbFwSrXFnrVm8aCJ0=
 github.com/anchore/go-logger v0.0.0-20260121204825-e2a682192337/go.mod h1:oFuE8YuTCM+spgMXhePGzk3asS94yO9biUfDzVTFqNw=
 github.com/anchore/go-sync v0.0.0-20251016141314-9644b03ca06e h1:FNSXJXZblzixi4TGHYdYm+XWW8MRcb6PSGtjVvs1ygo=
