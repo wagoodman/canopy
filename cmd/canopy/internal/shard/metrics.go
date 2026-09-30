@@ -60,7 +60,13 @@ func LoadMetrics(path string) (*Metrics, string, error) {
 // WriteMetrics writes m atomically. The same metrics always produce the same bytes (json sorts map
 // keys, and there are no timestamps).
 func WriteMetrics(path string, m *Metrics) error {
-	b, err := json.MarshalIndent(m, "", "  ")
+	return writeJSON(path, m)
+}
+
+// writeJSON writes v as indented JSON through a temp file and a rename, so a crash never leaves a
+// half-written file behind.
+func writeJSON(path string, v any) error {
+	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -70,7 +76,7 @@ func WriteMetrics(path string, m *Metrics) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(dir, ".metrics-*.json")
+	f, err := os.CreateTemp(dir, ".tmp-*.json")
 	if err != nil {
 		return err
 	}
