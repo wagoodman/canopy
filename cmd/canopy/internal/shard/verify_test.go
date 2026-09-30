@@ -64,6 +64,7 @@ func newJoinFixture(metricsFile string) *joinFixture {
 			Runner:        ReceiptRunner{CPUs: 2},
 			Units:         allPkgs,
 			Planned:       planned,
+			LoadMS:        int64(100 * len(planned)),
 			Reported:      planned,
 			Passed:        true,
 			ElapsedMS:     int64(2000 + 100*i),

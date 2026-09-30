@@ -11,6 +11,7 @@ import (
 // shared output-format and detail-unit identifiers used across list/coverage commands.
 const (
 	formatJSON     = "json"
+	formatText     = "text"
 	formatTable    = "table"
 	formatID       = "id"
 	formatPackage  = "package"

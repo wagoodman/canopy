@@ -8,3 +8,9 @@ type SilentError interface {
 	// IsSilent returns true if the error message should not be displayed to the user.
 	IsSilent() bool
 }
+
+// ExitCoder is an error that sets the process exit code. Any other error exits 1.
+type ExitCoder interface {
+	error
+	ExitCode() int
+}

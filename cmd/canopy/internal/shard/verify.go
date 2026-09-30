@@ -124,12 +124,12 @@ func join(r *Report, in JoinInput) error {
 	}
 	complete := len(present) == r.Total && len(rs) == r.Total
 
-	old, oldDigest, err := LoadMetrics(filepath.Join(in.ShardDir, "metrics.json"))
+	old, _, err := LoadMetrics(filepath.Join(in.ShardDir, "metrics.json"))
 	if err != nil {
 		old = nil
 	}
 	for _, rc := range present {
-		r.Shards[rc.Index-1] = shardReport(rc, old, oldDigest)
+		r.Shards[rc.Index-1] = shardReport(rc)
 		r.Checks.Tests.Passed += rc.Tests.Passed
 		r.Checks.Tests.Failed += rc.Tests.Failed
 		r.Checks.Tests.Skipped += rc.Tests.Skipped
@@ -258,7 +258,7 @@ func (r *Report) problem(p Problem) {
 	r.Problems = append(r.Problems, p)
 }
 
-func shardReport(rc *Receipt, old *Metrics, oldDigest string) ShardReport {
+func shardReport(rc *Receipt) ShardReport {
 	w := rc.Inputs["weights"]
 	res := &ShardResult{
 		CanopyVersion: rc.CanopyVersion,
@@ -276,23 +276,10 @@ func shardReport(rc *Receipt, old *Metrics, oldDigest string) ShardReport {
 		FailedPackages: rc.FailedPkgs,
 		Coverprofile:   rc.Coverprofile,
 	}
-	// ponytail: the receipt has no planned load, so the estimate is rebuilt from the metrics file the
-	// shard read, and only when every planned package was measured. Record the load in the receipt if
-	// the est. column needs to cover estimated packages too.
-	if w.Source == SourceMetrics && old != nil && oldDigest == rc.Metrics.File {
-		var est int64
-		ok := true
-		for _, p := range rc.Planned {
-			ms := old.Packages[p].MS
-			if len(ms) == 0 {
-				ok = false
-				break
-			}
-			est += lowerMedian(ms)
-		}
-		if ok {
-			res.EstimatedMS = &est
-		}
+	// the load is only ms with metrics; test counts aren't a time estimate
+	if w.Source == SourceMetrics && rc.LoadMS > 0 {
+		est := rc.LoadMS
+		res.EstimatedMS = &est
 	}
 	return ShardReport{Index: rc.Index, Present: true, ShardResult: res}
 }
@@ -405,26 +392,18 @@ func suggest(m *Metrics, units []string, total int, overhead time.Duration, p in
 	if len(units) == 0 {
 		return nil
 	}
-	s := &Suggestion{Current: total, Estimates: []SuggestionEstimate{}}
 	var measured []int64
 	weights := map[string]int64{}
 	for _, u := range units {
 		if m != nil && len(m.Packages[u].MS) > 0 {
 			weights[u] = lowerMedian(m.Packages[u].MS)
 			measured = append(measured, weights[u])
-			if weights[u] > s.SlowestMS {
-				s.Slowest, s.SlowestMS = u, weights[u]
-			}
 		}
 	}
 
 	fill := int64(1)
-	switch {
-	case len(measured) == 0:
-		s.Static, s.Note = true, StaticSuggestionNote
-	case len(measured) < len(units):
+	if len(measured) > 0 {
 		fill = lowerMedian(measured)
-		s.Note = fmt.Sprintf("%s without timing data assumed to take the median package time", plural(len(units)-len(measured), "package"))
 	}
 	us := make([]Unit, 0, len(units))
 	for _, u := range units {
@@ -433,6 +412,26 @@ func suggest(m *Metrics, units []string, total int, overhead time.Duration, p in
 			w = fill
 		}
 		us = append(us, Unit{Package: u, Weight: w, Estimated: !ok})
+	}
+
+	s := NewSuggestion(us, total, overhead, p)
+	if len(measured) > 0 && len(measured) < len(units) {
+		s.Note = fmt.Sprintf("%s without timing data assumed to take the median package time", plural(len(units)-len(measured), "package"))
+	}
+	return s
+}
+
+// NewSuggestion builds the shard count suggestion for units weighted in ms. When no unit was
+// measured (all Estimated) it is Static and only the package counts per shard count mean anything.
+func NewSuggestion(us []Unit, current int, overhead time.Duration, p int) *Suggestion {
+	s := &Suggestion{Current: current, Estimates: []SuggestionEstimate{}, Static: true, Note: StaticSuggestionNote}
+	for _, u := range us {
+		if !u.Estimated {
+			s.Static, s.Note = false, ""
+			if u.Weight > s.SlowestMS {
+				s.Slowest, s.SlowestMS = u.Package, u.Weight
+			}
+		}
 	}
 
 	var table []Estimate

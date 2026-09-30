@@ -133,8 +133,7 @@ type ShardResult struct {
 	CanopyVersion string       `json:"canopy_version"`
 	Digest        string       `json:"digest"`
 	Weights       ShardWeights `json:"weights"`
-	// EstimatedMS is the planned load in ms, set only when weights came from metrics and every
-	// planned package had samples in the metrics file the shard used.
+	// EstimatedMS is the shard's planned load in ms, set only when weights came from metrics.
 	EstimatedMS    *int64    `json:"estimated_ms,omitempty"`
 	Planned        []string  `json:"planned"`
 	Reported       []string  `json:"reported"`
