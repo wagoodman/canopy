@@ -6,5 +6,5 @@ import (
 )
 
 func TestSleep1(t *testing.T) {
-	time.Sleep(2000 * time.Millisecond)
+	time.Sleep(5000 * time.Millisecond)
 }

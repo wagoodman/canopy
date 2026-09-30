@@ -358,10 +358,8 @@ jobs:
           jq -e '.exit_code == 0 and .problems == []' report.json
           jq -e '[.shards[].weights.source] | all(. == "metrics")' report.json
 
-          # measured times changed the plan: wide no longer is alone, and slow (2s) is on a lighter shard than the
-          # test-count plan gave it (5 packages). Not asserted alone: measured times include per-package build
-          # overhead, so slow can share a shard with a couple of near-empty packages
-          jq -e '[.shards[] | select(.planned | any(endswith("/slow")))] | length == 1 and (.[0].planned | length <= 3)' report.json
+          # measured times changed the plan: slow (5s) is alone on its shard, and wide no longer is
+          jq -e '[.shards[] | select(.planned | any(endswith("/slow")))] | length == 1 and (.[0].planned | length == 1)' report.json
           jq -e '[.shards[] | select(.planned | any(endswith("/wide")))] | length == 1 and (.[0].planned | length > 1)' report.json
 
   failing-tests:
