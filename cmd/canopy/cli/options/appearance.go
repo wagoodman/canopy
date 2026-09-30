@@ -28,6 +28,8 @@ const (
 type Appearance struct {
 	// CombineMultipleRuns controls whether to show a single summary for multiple test run sessions.
 	CombineMultipleRuns bool `yaml:"-" json:"-" mapstructure:"-"`
+	// ShardTrailer is the shard note shown under the summary of a sharded run (set at runtime).
+	ShardTrailer string `yaml:"-" json:"-" mapstructure:"-"`
 	// Color controls colorized output: "auto" (detect terminal/CI), "on" (force color), "off" (disable color).
 	Color string `yaml:"color" json:"color" mapstructure:"color"`
 	// ShowPackagesWithNoTests controls whether to display packages that have no test files.

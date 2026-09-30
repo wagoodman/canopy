@@ -2,6 +2,7 @@ package options
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -76,15 +77,21 @@ func (o *Shard) PostLoad() error {
 	return nil
 }
 
-// ShardIndex is the --shard flag on `canopy test`. It deliberately never comes from a config file or
-// env var (the owning field is tagged mapstructure:"-"): the index changes per job, and a checked-in
-// value would quietly shard every local run.
+// ShardEnv is the env var read when --shard isn't given. fangs doesn't bind it (the field is
+// mapstructure:"-"), so PostLoad looks it up directly.
+const ShardEnv = "CANOPY_TEST_SHARD"
+
+// ShardIndex is the --shard flag on `canopy test`. It deliberately never comes from a config file
+// (the owning field is tagged mapstructure:"-"): the index changes per job, and a checked-in value
+// would quietly shard every local run. CANOPY_TEST_SHARD is the only fallback.
 type ShardIndex struct {
 	// Disabled prevents the --shard flag from being added to the command.
 	Disabled bool `yaml:"-" json:"-" mapstructure:"-"`
 
 	// Value is the raw flag value: "i/n", "auto", or empty when not sharding.
 	Value string `yaml:"-" json:"-" mapstructure:"-"`
+	// FromEnv is set when Value came from CANOPY_TEST_SHARD instead of the flag.
+	FromEnv bool `yaml:"-" json:"-" mapstructure:"-"`
 
 	// Index and Total are the parsed i/n (1-based), zero for "auto" until Resolve.
 	Index int `yaml:"-" json:"-" mapstructure:"-"`
@@ -106,6 +113,11 @@ func (o *ShardIndex) AddFlags(flags fangs.FlagSet) {
 
 // PostLoad parses and validates the flag value.
 func (o *ShardIndex) PostLoad() error {
+	if o.Value == "" && !o.Disabled {
+		if v := os.Getenv(ShardEnv); v != "" {
+			o.Value, o.FromEnv = v, true
+		}
+	}
 	if o.Value == "" || o.Value == ShardAuto {
 		return nil
 	}
@@ -123,10 +135,13 @@ func (o ShardIndex) Enabled() bool {
 }
 
 // Resolve returns the 1-based shard index and total, reading the CI provider's variables for
-// "auto". source is "flag", the CI variable pair used, or empty when auto found no parallelism
+// "auto". source is "flag", "CANOPY_TEST_SHARD (env)", the CI variable pair used, or empty when auto found no parallelism
 // (and resolved to 1/1).
 func (o ShardIndex) Resolve(e env.EnvironmentGetter) (index, total int, source string, err error) {
 	if o.Value != ShardAuto {
+		if o.FromEnv {
+			return o.Index, o.Total, ShardEnv + " (env)", nil
+		}
 		return o.Index, o.Total, "flag", nil
 	}
 	i, n, src, err := ci.ShardFromEnv(e)
