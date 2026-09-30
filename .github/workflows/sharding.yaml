@@ -126,13 +126,12 @@ jobs:
 
       - name: Run rogue shard
         env:
-          # the env var is the realistic way this happens; --run is passed too so the job stays rogue even if
-          # env binding for test.run ever changes (either way the receipt records test-flag -run=...)
+          # the env var is the realistic way this happens (the receipt records test-flag -run=...)
           CANOPY_TEST_RUN: TestDoesNotExist
         run: |
           set -euo pipefail
           mkdir -p .canopy/shard/out
-          canopy test "$FIXTURE" --no-cache --cover --shard 2/3 --run TestDoesNotExist -o go
+          canopy test "$FIXTURE" --no-cache --cover --shard 2/3 -o go
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -359,8 +358,10 @@ jobs:
           jq -e '.exit_code == 0 and .problems == []' report.json
           jq -e '[.shards[].weights.source] | all(. == "metrics")' report.json
 
-          # measured times changed the plan: slow (2s) is alone on its shard, wide no longer is
-          jq -e '[.shards[] | select(.planned | any(endswith("/slow")))] | length == 1 and (.[0].planned | length == 1)' report.json
+          # measured times changed the plan: wide no longer is alone, and slow (2s) is on a lighter shard than the
+          # test-count plan gave it (5 packages). Not asserted alone: measured times include per-package build
+          # overhead, so slow can share a shard with a couple of near-empty packages
+          jq -e '[.shards[] | select(.planned | any(endswith("/slow")))] | length == 1 and (.[0].planned | length <= 3)' report.json
           jq -e '[.shards[] | select(.planned | any(endswith("/wide")))] | length == 1 and (.[0].planned | length > 1)' report.json
 
   failing-tests:
@@ -386,6 +387,13 @@ jobs:
         run: |
           chmod +x bin/canopy
           echo "$GITHUB_WORKSPACE/bin" >> "$GITHUB_PATH"
+
+      - name: Plan puts wide alone
+        run: |
+          set -euo pipefail
+          canopy shard plan "$FIXTURE" --shards 3 -o json > plan.json
+          jq -e '.plans[0].total == 3 and .weights.source == "static"' plan.json
+          jq -e '[.plans[0].shards[] | select(.packages | any(.package | endswith("/wide")))] | length == 1 and (.[0].packages | length == 1)' plan.json
 
       - name: Run both shards, then join
         run: |
