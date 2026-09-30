@@ -222,9 +222,9 @@ If any of that fails the join fails, even when every test passed. A package that
 |---|---|---|
 | 0 | everything passed | |
 | 1 | tests failed (same as `canopy test`) | a shard reported a failure |
-| 2 | couldn't evaluate | no receipts, an unreadable receipt, bad flags |
+| 2 | couldn't evaluate | no receipts, an unreadable receipt |
 | 3 | verification failed, results can't be trusted | missing shard, different inputs, a package that never ran or ran twice |
-| 4 | a gate failed | coverage below `covermin`, shards disagreeing on a gate |
+| 4 | a gate failed | coverage below `covermin` (or no coverage to check), shards disagreeing on a gate |
 
 When several apply, the most fundamental one wins (2, 3, 4, then 1), and the output still lists all of them. Every failure line names its shard (`shard 3/4`) and, for different inputs, the exact lines that differed.
 
@@ -262,7 +262,7 @@ Shards and the join restore a cached `metrics.json`, and the join on main saves 
           key: canopy-shard-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}
 ```
 
-Packages with a measured time use it, and the rest get their test count converted to time at the rate the measured ones run. Missing, corrupt or foreign metrics make every shard fall back to test counts the same way, so losing the cache costs balance and nothing else. The join also prints a shard count suggestion with estimated wall and runner time for each option. It is only advice, so you edit the matrix list by hand.
+Packages with a measured time use it, and the rest get their test count converted to time at the rate the measured ones run. Missing, corrupt or foreign metrics make every shard fall back to test counts the same way, so losing the cache costs balance and nothing else. The join also prints a shard count suggestion with estimated wall and runner time for each option. It is only advice, so you edit the matrix list by hand. `canopy shard plan ./... --shards 4` shows how packages would be split without running anything (`-o json` for scripts).
 
 Caching notes:
 
@@ -296,7 +296,7 @@ test:
 - it's opt-in. Plain `canopy test` never shards, even inside a parallel job
 - with no parallelism variables it resolves to `1/1` and runs everything, so one job template works whether or not the job is parallel
 - an index without a valid total is an error, not a guess
-- the log says where the value came from: `shard 2/4 (from CI_NODE_INDEX/CI_NODE_TOTAL)`
+- the plan header says where the value came from: `shard source   CI_NODE_INDEX/CI_NODE_TOTAL (auto)`
 - on GitHub you can keep the same command line everywhere by setting `CANOPY_TEST_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}` in the job's `env:` and leaving the flag off
 
 Don't use `auto` with GitLab `parallel: matrix:`. It sets `CI_NODE_INDEX`/`CI_NODE_TOTAL` across every combination, so packages get split across your matrix values. Use plain `parallel: N` with one job per group.
