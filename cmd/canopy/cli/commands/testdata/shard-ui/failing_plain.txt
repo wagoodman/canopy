@@ -1,0 +1,12 @@
+shard 3/3: 3 of 6 packages, weights from metrics (5 measured, 1 estimated), inputs sha256:9f3c1a2b
+    shard source   --shard 3/3 (flag)
+    weights        metrics .canopy/shard/metrics.json (sha256:77d0e4c1), env linux/arm64, profile matches
+                   1 package estimated from test counts at 0.2s per test
+    config         go1.27.1 linux/arm64, -race -timeout=10m, covermin 80, commit a1b2c3d
+    est. load      43s (shards: 1m12s / 50s / 43s)
+    packages
+          24s  acme/sync
+          18s  acme/queue
+        ~1.4s  acme/newthing   (estimated, 6 tests)
+FAIL	1 failed tests                          	    3s  	79.4% covered (this shard)
+	└─ shard 3/3, 3 of 6 pkgs, coverage threshold 80.0% deferred to `canopy shard join`

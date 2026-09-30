@@ -1,0 +1,9 @@
+shard 1/3: 1 of 6 packages, weights from test counts (no metrics file), inputs sha256:9f3c1a2b
+    shard source   CI_NODE_INDEX/CI_NODE_TOTAL (auto)
+    weights        test counts (no metrics file)
+    config         go1.27.1 linux/arm64, -race -timeout=10m, commit a1b2c3d
+    est. load      72000 (shards: 72000 / 50400 / 43400)
+    packages
+      1 test     acme/store
+PASS	1 passed tests                          	    3s  	81.7% covered (this shard)
+	└─ shard 1/3, 1 of 6 pkgs

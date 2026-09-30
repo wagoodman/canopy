@@ -40,6 +40,7 @@ type shardRuntime struct {
 	Dir string
 
 	Weights     shard.WeightResult
+	Counts      map[string]int64 // test counts per package, for the plan header
 	Plan        shard.Plan
 	Inputs      shard.Inputs
 	Digest      string
@@ -59,6 +60,7 @@ func (s shardRuntime) Planned() []string {
 type shardInputs struct {
 	Inputs      shard.Inputs // every group but [plan]
 	Weights     shard.WeightResult
+	Counts      map[string]int64
 	Metrics     shard.ReceiptMetrics
 	MetricsPath string
 }
@@ -97,6 +99,7 @@ func resolveShardInputs(cfg testConfig) (*shardInputs, error) {
 			Weights:   shard.WeightLines(w.Source, w.Units),
 		},
 		Weights:     w,
+		Counts:      counts,
 		Metrics:     shard.ReceiptMetrics{File: metricsDigest, Env: goEnv, Profile: profile, Ignored: w.Ignored},
 		MetricsPath: metricsPath,
 	}, nil
@@ -142,6 +145,7 @@ func shardTestPackages(cfg *testConfig, canopyVersion string) error {
 		Auto:        auto,
 		Dir:         cfg.Shard.Dir,
 		Weights:     in.Weights,
+		Counts:      in.Counts,
 		Plan:        plan,
 		Inputs:      inputs,
 		Digest:      inputs.Digest(),
@@ -163,8 +167,7 @@ func shardTestPackages(cfg *testConfig, canopyVersion string) error {
 		narrowed.Add(all[p])
 	}
 
-	log.Infof("shard %d/%d: %d of %d packages, weights from %s, inputs %s",
-		index, total, narrowed.Size(), len(plan.Units), weightsSummary(in.Weights), shortDigest(sh.Digest))
+	log.Info(shardHeaderTitle(sh))
 	log.WithFields("packages", sh.Planned()).Debug("shard packages")
 
 	cfg.Runtime.Packages = narrowed

@@ -260,6 +260,12 @@ func Test(app clio.Application) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if sh := opts.Test.Runtime.shard; sh != nil {
+				opts.Test.Appearance.ShardTrailer = shardTrailer(sh)
+				if !writesJSONToStdout(opts.Test.Writers) {
+					printShardHeader(os.Stdout, opts.Test.Appearance.Grouping.ToAPIConfig().Formatter, sh)
+				}
+			}
 			if !proceed {
 				return nil
 			}
@@ -279,6 +285,9 @@ func Test(app clio.Application) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if opts.Test.Runtime.NothingToRun {
 				if sh := opts.Test.Runtime.shard; sh != nil {
+					if !writesJSONToStdout(opts.Test.Writers) {
+						printEmptyShard(os.Stdout, sh, opts.Test.Appearance.Color != "off")
+					}
 					return writeShardReceipt(sh, app.ID().Version, nil, true)
 				}
 				return nil
@@ -529,6 +538,7 @@ func getUIConfig(appearance options.Appearance, clioCfg clio.Config, format opti
 		CombineMultipleRuns:     appearance.CombineMultipleRuns,
 		ExecutionMarkers:        appearance.ExecutionMarkers,
 		Grouping:                appearance.Grouping.ToAPIConfig(),
+		ShardTrailer:            appearance.ShardTrailer,
 	}
 }
 
