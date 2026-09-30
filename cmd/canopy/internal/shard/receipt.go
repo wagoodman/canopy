@@ -23,6 +23,7 @@ type Receipt struct {
 	Runner        ReceiptRunner           `json:"runner"`
 	Units         []string                `json:"units"`
 	Planned       []string                `json:"planned"`
+	LoadMS        int64                   `json:"load_ms"` // this shard's planned load (ms with metrics, test counts without)
 	Reported      []string                `json:"reported"`
 	Passed        bool                    `json:"passed"`
 	ElapsedMS     int64                   `json:"elapsed_ms"`
