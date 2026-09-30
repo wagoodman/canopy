@@ -1,0 +1,16 @@
+canopy shard join: 3 shards, 6 packages, inputs sha256:a62ace69 (weights from metrics)
+
+  shard  pkgs  est.  actual  tests                  result
+  1/3    2     0s    2s      10 passed              ok
+  2/3    -     -     -       missing                FAIL
+  3/3    2     0s    2s      12 passed / 2 skipped  ok
+
+FAIL    verified   missing receipt for shard 2/3 (job failed before canopy finished, or artifact not uploaded)
+FAIL    coverage   coverage below threshold: 78.30% < 80.00%
+ok      metrics    6 packages updated in .canopy/shard/metrics.json
+
+FAIL    33 passed / 3 skipped tests   2s slowest shard   78.3% covered
+
+warning: canopy version differs between shards
+
+suggestion: 2 shards would be better than 3 (1 would be 1s, 2 would be 1s, 3 is 1s wall)
