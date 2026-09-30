@@ -203,6 +203,10 @@ func shardSelectionLines(cfg testConfig) ([]string, error) {
 	// the ref is resolved to a commit so shards that fetched it at different moments don't match
 	since := "-"
 	if cfg.Affected && cfg.AffectedSince != "" {
+		// a leading dash would be read by git as an option, not a ref
+		if strings.HasPrefix(cfg.AffectedSince, "-") {
+			return nil, fmt.Errorf("invalid --affected-since %q: refs can't start with '-'", cfg.AffectedSince)
+		}
 		out, err := exec.Command("git", "rev-parse", "--verify", "--quiet", cfg.AffectedSince+"^{commit}").Output() //nolint:gosec
 		if err != nil {
 			return nil, fmt.Errorf("unable to resolve --affected-since %q to a commit: %w", cfg.AffectedSince, err)

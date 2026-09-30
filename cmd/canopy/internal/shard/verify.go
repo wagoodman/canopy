@@ -369,16 +369,7 @@ func (r *Report) coverage(in JoinInput, present []*Receipt) error {
 		c.Threshold, c.ThresholdSource = recordedVal, ThresholdReceipts
 	}
 
-	var paths []string
-	var without []int
-	for _, rc := range present {
-		switch {
-		case rc.Coverprofile != "":
-			paths = append(paths, filepath.Join(in.OutDir, rc.Coverprofile))
-		case len(rc.Planned) > 0:
-			without = append(without, rc.Index)
-		}
-	}
+	paths, without := r.coverPaths(in.OutDir, present)
 	c.Enabled = len(paths) > 0
 	if c.Enabled && len(without) > 0 {
 		r.problem(Problem{Kind: KindCoverageMissing, Shards: without, Message: fmt.Sprintf("coverage enabled on some shards but not others (none from %s)", shardList(without))})
@@ -695,4 +686,25 @@ func nonNil[T any](s []T) []T {
 		return []T{}
 	}
 	return s
+}
+
+// isBareFileName reports whether name is a plain file name with no directory parts.
+func isBareFileName(name string) bool {
+	return name == filepath.Base(name) && name != "." && name != ".." && !strings.ContainsAny(name, `/\`)
+}
+
+// coverPaths lists the coverprofiles to merge, and the non-empty shards that didn't collect any.
+func (r *Report) coverPaths(outDir string, present []*Receipt) (paths []string, without []int) {
+	for _, rc := range present {
+		switch {
+		case rc.Coverprofile != "" && !isBareFileName(rc.Coverprofile):
+			// receipts come from CI artifacts, so never follow a path out of the out dir
+			r.problem(Problem{Kind: KindCoverageMissing, Shards: []int{rc.Index}, Message: fmt.Sprintf("shard %d coverprofile %q is not a file name in the receipts dir", rc.Index, rc.Coverprofile)})
+		case rc.Coverprofile != "":
+			paths = append(paths, filepath.Join(outDir, rc.Coverprofile))
+		case len(rc.Planned) > 0:
+			without = append(without, rc.Index)
+		}
+	}
+	return paths, without
 }

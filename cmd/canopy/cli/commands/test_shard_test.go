@@ -232,3 +232,10 @@ func TestShardReceipt(t *testing.T) {
 	assert.NotNil(t, empty.Failures)
 	assert.NotNil(t, empty.Observations)
 }
+
+func TestShardSelectionLines_RejectsOptionLikeRef(t *testing.T) {
+	cfg := testConfig{Affected: true, AffectedSince: "--output=/tmp/x"}
+	if _, err := shardSelectionLines(cfg); err == nil {
+		t.Fatal("expected an error for a ref starting with '-'")
+	}
+}

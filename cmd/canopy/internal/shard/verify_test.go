@@ -598,3 +598,18 @@ var pkgDir = func() string {
 	}
 	return wd
 }()
+
+func TestIsBareFileName(t *testing.T) {
+	for name, want := range map[string]bool{
+		"shard-1.coverprofile": true,
+		"../x.coverprofile":    false,
+		"/etc/passwd":          false,
+		"sub/x":                false,
+		`..\x`:                 false,
+		"..":                   false,
+	} {
+		if got := isBareFileName(name); got != want {
+			t.Errorf("isBareFileName(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
