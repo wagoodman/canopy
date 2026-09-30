@@ -206,7 +206,7 @@ func TestJoin(t *testing.T) {
 				assert.Empty(t, p.Hint)
 				assert.Len(t, r.Shards, 3)
 				assert.False(t, r.Shards[1].Present)
-				assert.Nil(t, r.Shards[1].ShardResult)
+				assert.Nil(t, r.Shards[1].ReportResult)
 			},
 		},
 		{

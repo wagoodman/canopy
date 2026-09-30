@@ -94,6 +94,7 @@ type shardJoinShardConfig struct {
 
 func defaultShardJoinOptions() *shardJoinConfig {
 	cov := options.DefaultCoverage()
+	cov.CoverFlagDisabled = true // the join only enforces covermin; shards decide what to collect
 	// NaN marks covermin as unset, so an explicit 0 on the join still overrides the receipts
 	cov.CoverMin = math.NaN()
 	return &shardJoinConfig{
@@ -310,9 +311,9 @@ ones it prints the digest every shard records. Without --shards only the suggest
 type shardPlanReport struct {
 	Packages int `json:"packages"`
 	// Weights says where the weights came from; loads and weights are ms with metrics, test counts without.
-	Weights    shard.ShardWeights `json:"weights"`
-	Plans      []shardPlanTotal   `json:"plans"`
-	Suggestion *shard.Suggestion  `json:"suggestion,omitempty"`
+	Weights    shard.ReportWeights `json:"weights"`
+	Plans      []shardPlanTotal    `json:"plans"`
+	Suggestion *shard.Suggestion   `json:"suggestion,omitempty"`
 }
 
 type shardPlanTotal struct {
@@ -346,7 +347,7 @@ func buildShardPlan(opts *shardPlanConfig, canopyVersion string) (*shardPlanRepo
 	w := in.Weights
 	r := &shardPlanReport{
 		Packages: len(w.Units),
-		Weights: shard.ShardWeights{
+		Weights: shard.ReportWeights{
 			Source: w.Source, Measured: w.Measured, Estimated: w.Estimated,
 			MetricsFile: in.Metrics.File, Ignored: w.Ignored,
 		},

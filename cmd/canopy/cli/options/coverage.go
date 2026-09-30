@@ -17,6 +17,8 @@ var (
 type Coverage struct {
 	// Disabled prevents coverage flags from being added to the command.
 	Disabled bool `yaml:"-" json:"-" mapstructure:"-"`
+	// CoverFlagDisabled drops --cover but keeps --covermin, for commands that only gate on coverage.
+	CoverFlagDisabled bool `yaml:"-" json:"-" mapstructure:"-"`
 
 	// Cover enables coverage analysis during test execution.
 	Cover bool `yaml:"cover" json:"cover" mapstructure:"cover"` // custom flag
@@ -59,7 +61,9 @@ func (o *Coverage) AddFlags(fangFlags fangs.FlagSet) {
 	flags := o.tracker
 
 	if !o.Disabled {
-		flags.BoolVarP(&o.Cover, "cover", "", "enable coverage analysis")
+		if !o.CoverFlagDisabled {
+			flags.BoolVarP(&o.Cover, "cover", "", "enable coverage analysis")
+		}
 
 		// custom flags
 		flags.WithNoTrack().Float64VarP(&o.CoverMin, "covermin", "", "minimum coverage to enforce (percentage)")

@@ -34,6 +34,12 @@ const (
 	CheckCoverage = "coverage"
 )
 
+// join results
+const (
+	ResultPass = "pass"
+	ResultFail = "fail"
+)
+
 // where the enforced covermin came from
 const (
 	ThresholdJoin     = "join"
@@ -63,7 +69,7 @@ var exitRank = map[int]int{ExitCannotRun: 4, ExitUnverified: 3, ExitGateFailed: 
 // and its JSON form is the versioned join report.
 type Report struct {
 	Version  int    `json:"version"`
-	Result   string `json:"result"` // "pass" or "fail"
+	Result   string `json:"result"` // ResultPass or ResultFail
 	ExitCode int    `json:"exit_code"`
 	Total    int    `json:"total"`
 	Packages int    `json:"packages"` // size of the unit list
@@ -71,7 +77,7 @@ type Report struct {
 	// means every shard ran the same plan.
 	Digests    []DigestGroup `json:"digests"`
 	Checks     Checks        `json:"checks"`
-	Shards     []ShardReport `json:"shards"` // always Total long, Shards[i] is shard i+1
+	Shards     []ReportShard `json:"shards"` // always Total long, Shards[i] is shard i+1
 	Problems   []Problem     `json:"problems"`
 	Warnings   []string      `json:"warnings"` // never affect the exit code (e.g. canopy version skew)
 	Suggestion *Suggestion   `json:"suggestion,omitempty"`
@@ -122,17 +128,17 @@ type MetricsCheck struct {
 	Warning  string `json:"warning,omitempty"`
 }
 
-type ShardReport struct {
+type ReportShard struct {
 	Index   int  `json:"index"`
 	Present bool `json:"present"`
-	*ShardResult
+	*ReportResult
 }
 
-// ShardResult is what a present shard's receipt said.
-type ShardResult struct {
-	CanopyVersion string       `json:"canopy_version"`
-	Digest        string       `json:"digest"`
-	Weights       ShardWeights `json:"weights"`
+// ReportResult is what a present shard's receipt said.
+type ReportResult struct {
+	CanopyVersion string        `json:"canopy_version"`
+	Digest        string        `json:"digest"`
+	Weights       ReportWeights `json:"weights"`
 	// EstimatedMS is the shard's planned load in ms, set only when weights came from metrics.
 	EstimatedMS    *int64    `json:"estimated_ms,omitempty"`
 	Planned        []string  `json:"planned"`
@@ -145,7 +151,7 @@ type ShardResult struct {
 	Coverprofile   string    `json:"coverprofile,omitempty"`
 }
 
-type ShardWeights struct {
+type ReportWeights struct {
 	Source      string `json:"source"` // SourceMetrics or SourceStatic
 	Measured    int    `json:"measured"`
 	Estimated   int    `json:"estimated"`
@@ -202,8 +208,8 @@ func (r *Report) finish() {
 			r.ExitCode = code
 		}
 	}
-	r.Result = "pass"
+	r.Result = ResultPass
 	if r.ExitCode != ExitPass {
-		r.Result = "fail"
+		r.Result = ResultFail
 	}
 }

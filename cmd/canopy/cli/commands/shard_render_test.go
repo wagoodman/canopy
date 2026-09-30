@@ -38,7 +38,7 @@ func assertJoinGolden(t *testing.T, name, ext string, got []byte) {
 func TestRenderJoin(t *testing.T) {
 	// missing shard 2 and coverage below the threshold, built from the passing fixture
 	missing := loadJoinFixture(t, "happy")
-	missing.Shards[1] = shard.ShardReport{Index: 2}
+	missing.Shards[1] = shard.ReportShard{Index: 2}
 	missing.Checks.Verified.OK, missing.Checks.Coverage.OK = false, false
 	missing.Result, missing.ExitCode = "fail", shard.ExitUnverified
 	pctBelow, threshold := 78.3, 80.0

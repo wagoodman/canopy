@@ -86,7 +86,7 @@ func resolveShardInputs(cfg testConfig) (*shardInputs, error) {
 	metricsPath := filepath.Join(cfg.Shard.Dir, "metrics.json")
 	m, metricsDigest, loadErr := shard.LoadMetrics(metricsPath)
 	// the profile is how tests run, not which packages run, so a subset run still matches main's metrics
-	profile := shard.Group{Name: "run", Lines: run}.Digest()
+	profile := shard.Group{Name: shard.GroupRun, Lines: run}.Digest()
 	w := shard.Weights(counts, m, loadErr, goEnv, profile)
 
 	return &shardInputs{
@@ -337,9 +337,9 @@ func shardReceipt(sh *shardRuntime, canopyVersion string, run *gotest.Run, passe
 	for _, g := range sh.Inputs.Groups() {
 		ri := shard.ReceiptInput{Digest: g.Digest()}
 		switch g.Name {
-		case "weights":
+		case shard.GroupWeights:
 			ri.Source, ri.Measured, ri.Estimated = sh.Weights.Source, sh.Weights.Measured, sh.Weights.Estimated
-		case "selection":
+		case shard.GroupSelection:
 			// package lines are too long to keep; the digest covers them
 			for _, l := range g.Lines {
 				if !strings.HasPrefix(l, "package ") {
@@ -407,4 +407,20 @@ func copyFile(from, to string) error {
 		return err
 	}
 	return os.WriteFile(to, b, 0o600) //nolint:gosec // the path is under the configured shard dir
+}
+
+// announceShard sets the trailer and prints the plan header before a sharded run starts.
+func announceShard(cfg *testConfig, sh *shardRuntime) {
+	cfg.ShardTrailer = shardTrailer(sh)
+	if !writesJSONToStdout(cfg.Writers) {
+		printShardHeader(os.Stdout, cfg.Grouping.ToAPIConfig().Formatter, sh)
+	}
+}
+
+// finishEmptyShard reports a shard that got no packages and still writes its receipt.
+func finishEmptyShard(cfg *testConfig, sh *shardRuntime, canopyVersion string) error {
+	if !writesJSONToStdout(cfg.Writers) {
+		printEmptyShard(os.Stdout, sh, cfg.Color != "off")
+	}
+	return writeShardReceipt(sh, canopyVersion, nil, true)
 }

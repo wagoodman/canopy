@@ -6,8 +6,8 @@ canopy shard join: 3 shards, 6 packages, inputs differ between shards
   3/3    2     -     2s      12 passed / 2 skipped  ok
 
 FAIL    verified   shards computed different plans
-        ├─ shards 1,2: metrics sha256:39947a22 (6 measured, 0 estimated)
-        └─ shard 3: static (no metrics file)
+        ├─ shards 1,2  weights from metrics (sha256:39947a22)       inputs sha256:a62ace69
+        └─ shard 3     weights from test counts (no metrics file)   inputs sha256:05307152
            a cache race, or a partial rerun after main saved new metrics; rerun all jobs
 ok      coverage   75.0%
 ok      metrics    6 packages updated in .canopy/shard/metrics.json

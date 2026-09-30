@@ -261,10 +261,7 @@ func Test(app clio.Application) *cobra.Command {
 				return err
 			}
 			if sh := opts.Test.Runtime.shard; sh != nil {
-				opts.Test.Appearance.ShardTrailer = shardTrailer(sh)
-				if !writesJSONToStdout(opts.Test.Writers) {
-					printShardHeader(os.Stdout, opts.Test.Appearance.Grouping.ToAPIConfig().Formatter, sh)
-				}
+				announceShard(&opts.Test, sh)
 			}
 			if !proceed {
 				return nil
@@ -285,10 +282,7 @@ func Test(app clio.Application) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if opts.Test.Runtime.NothingToRun {
 				if sh := opts.Test.Runtime.shard; sh != nil {
-					if !writesJSONToStdout(opts.Test.Writers) {
-						printEmptyShard(os.Stdout, sh, opts.Test.Appearance.Color != "off")
-					}
-					return writeShardReceipt(sh, app.ID().Version, nil, true)
+					return finishEmptyShard(&opts.Test, sh, app.ID().Version)
 				}
 				return nil
 			}

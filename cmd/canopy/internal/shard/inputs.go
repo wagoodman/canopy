@@ -23,6 +23,17 @@ type Inputs struct {
 	Weights   []string // see WeightLines
 }
 
+// group names, in the order Groups returns them
+const (
+	GroupPlan      = "plan"
+	GroupSelection = "selection"
+	GroupRun       = "run"
+	GroupGates     = "gates"
+	GroupGo        = "go"
+	GroupSource    = "source"
+	GroupWeights   = "weights"
+)
+
 // Group is one named section of Inputs.
 type Group struct {
 	Name  string
@@ -32,13 +43,13 @@ type Group struct {
 // Groups returns the groups in their fixed order.
 func (in Inputs) Groups() []Group {
 	return []Group{
-		{"plan", in.Plan},
-		{"selection", in.Selection},
-		{"run", in.Run},
-		{"gates", in.Gates},
-		{"go", in.Go},
-		{"source", in.Source},
-		{"weights", in.Weights},
+		{GroupPlan, in.Plan},
+		{GroupSelection, in.Selection},
+		{GroupRun, in.Run},
+		{GroupGates, in.Gates},
+		{GroupGo, in.Go},
+		{GroupSource, in.Source},
+		{GroupWeights, in.Weights},
 	}
 }
 
@@ -125,11 +136,15 @@ func DiffLines(shards map[int][]string) LineDiff {
 			d.Differing = append(d.Differing, i)
 		}
 	}
-	if len(clusters) < 2 {
-		return d
+	if len(clusters) >= 2 {
+		d.addDetails(shards, indexes)
 	}
+	return d
+}
 
-	// count how many shards have each line and each key
+// addDetails fills OnlyIn and Values with the lines that not every shard has.
+func (d *LineDiff) addDetails(shards map[int][]string, indexes []int) {
+	// count how many shards have each line, and how often each shard has each key
 	lineCount := map[string]int{}
 	keyCount := map[string]map[int]int{}
 	for _, i := range indexes {
@@ -144,6 +159,7 @@ func DiffLines(shards map[int][]string) LineDiff {
 			keyCount[k][i]++
 		}
 	}
+	// a key is single-valued when every shard has exactly one line for it
 	singleValued := func(k string) bool {
 		if len(keyCount[k]) != len(indexes) {
 			return false
@@ -161,25 +177,30 @@ func DiffLines(shards map[int][]string) LineDiff {
 			if lineCount[l] == len(indexes) {
 				continue
 			}
-			k := key(l)
-			if singleValued(k) {
-				if d.Values == nil {
-					d.Values = map[string]map[string][]int{}
-				}
-				if d.Values[k] == nil {
-					d.Values[k] = map[string][]int{}
-				}
-				v := strings.TrimPrefix(strings.TrimPrefix(l, k), " ")
-				d.Values[k][v] = append(d.Values[k][v], i)
-				continue
+			if k := key(l); singleValued(k) {
+				d.addValue(k, strings.TrimPrefix(strings.TrimPrefix(l, k), " "), i)
+			} else {
+				d.addOnlyIn(i, l)
 			}
-			if d.OnlyIn == nil {
-				d.OnlyIn = map[int][]string{}
-			}
-			d.OnlyIn[i] = append(d.OnlyIn[i], l)
 		}
 	}
-	return d
+}
+
+func (d *LineDiff) addValue(k, v string, shard int) {
+	if d.Values == nil {
+		d.Values = map[string]map[string][]int{}
+	}
+	if d.Values[k] == nil {
+		d.Values[k] = map[string][]int{}
+	}
+	d.Values[k][v] = append(d.Values[k][v], shard)
+}
+
+func (d *LineDiff) addOnlyIn(shard int, line string) {
+	if d.OnlyIn == nil {
+		d.OnlyIn = map[int][]string{}
+	}
+	d.OnlyIn[shard] = append(d.OnlyIn[shard], line)
 }
 
 func key(line string) string {
