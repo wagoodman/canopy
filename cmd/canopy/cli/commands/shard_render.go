@@ -400,13 +400,6 @@ func fmtMS(ms int64) string {
 	return fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
 }
 
-func shortDigest(d string) string {
-	if len(d) > len("sha256:")+8 {
-		return d[:len("sha256:")+8]
-	}
-	return d
-}
-
 func pct(v float64) string { return fmt.Sprintf("%.1f%%", v) }
 
 func countOf(n int, noun string) string {
