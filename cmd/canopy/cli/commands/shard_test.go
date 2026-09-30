@@ -31,6 +31,9 @@ func newTestApp() clio.Application {
 // runCanopy runs the CLI the way main does, returning the error main would turn into an exit code.
 func runCanopy(t *testing.T, args ...string) error {
 	t.Helper()
+	// in CI, resolving the appearance would otherwise force a truecolor lipgloss profile for the
+	// whole package and leak ANSI codes into other tests
+	t.Setenv("NO_COLOR", "1")
 	app := newTestApp()
 	root := Root(app)
 	root.AddCommand(Test(app), Shard(app))
