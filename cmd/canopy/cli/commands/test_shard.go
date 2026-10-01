@@ -170,19 +170,12 @@ func shardTestPackages(cfg *testConfig, canopyVersion string) error {
 		narrowed.Add(all[p])
 	}
 
-	log.Info(shardHeaderTitle(sh))
-	log.WithFields("packages", sh.Planned()).Debug("shard packages")
+	log.Info(strings.Replace(shardHeaderTitle(sh), "\t", " ", 1))
+	logShardDetails(sh)
 
 	cfg.Runtime.Packages = narrowed
 	cfg.Runtime.shard = sh
 	return nil
-}
-
-func weightsSummary(w shard.WeightResult) string {
-	if w.Source == shard.SourceMetrics {
-		return fmt.Sprintf("metrics (%d measured, %d estimated)", w.Measured, w.Estimated)
-	}
-	return fmt.Sprintf("test counts (%s)", w.Ignored)
 }
 
 // shortDigest trims "sha256:<hex>" to "sha256:<8 hex chars>" for display.
@@ -453,7 +446,7 @@ func copyFile(from, to string) error {
 func announceShard(cfg *testConfig, sh *shardRuntime) {
 	cfg.ShardTrailer = shardTrailer(sh)
 	if !writesJSONToStdout(cfg.Writers) {
-		printShardHeader(os.Stdout, cfg.Grouping.ToAPIConfig().Formatter, sh)
+		printShardHeader(os.Stdout, sh, cfg.Color != "off")
 	}
 }
 

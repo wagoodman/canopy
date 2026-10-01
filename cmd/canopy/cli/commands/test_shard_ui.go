@@ -8,36 +8,57 @@ import (
 	"strings"
 
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/group"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
+	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/shard"
 )
 
+// shardSummary is the shard and how it was split, shared by the header and the trailer so they read the same.
+func shardSummary(sh *shardRuntime) string {
+	by := "test count"
+	switch {
+	case sh.Weights.Source == shard.SourceMetrics:
+		by = "time"
+	case sh.Weights.FellBack():
+		by += ", metrics ignored"
+	}
+	return fmt.Sprintf("%d/%d (%d/%d pkgs, split by %s)", sh.Index, sh.Total, len(sh.Planned()), len(sh.Plan.Units), by)
+}
+
 // shardTrailer is the line under the footer of a sharded run.
 func shardTrailer(sh *shardRuntime) string {
-	s := fmt.Sprintf("shard %d/%d, %d of %d pkgs", sh.Index, sh.Total, len(sh.Planned()), len(sh.Plan.Units))
+	s := "shard " + shardSummary(sh)
 	if sh.Gates.CoverMin != nil {
 		s += fmt.Sprintf(", coverage threshold %.1f%% deferred to `canopy shard join`", *sh.Gates.CoverMin)
 	}
 	return s
 }
 
-// shardHeaderTitle is the one-line plan summary (also what the log line carries).
+// shardHeaderTitle is the one line written before the run starts, with the shard in the status column.
 func shardHeaderTitle(sh *shardRuntime) string {
-	return fmt.Sprintf("shard %d/%d: %d of %d packages, weights from %s, inputs %s",
-		sh.Index, sh.Total, len(sh.Planned()), len(sh.Plan.Units), weightsSummary(sh.Weights), shortDigest(sh.Digest))
+	return "SHARD\t" + shardSummary(sh)
 }
 
-// printShardHeader writes the plan header before the run starts. Inside CI it is a collapsed group,
-// elsewhere it is the title followed by the body. It goes through the writer rather than the logger,
-// which is invisible at info level.
-func printShardHeader(w io.Writer, format group.Formatter, sh *shardRuntime) {
-	title, body := shardHeaderTitle(sh), shardHeaderBody(sh)
-	if format == nil {
-		fmt.Fprintf(w, "%s\n%s", title, body)
-		return
+// printShardHeader writes the plan summary before the run starts. It goes through the writer rather than the
+// logger, which is invisible at info level. The details are only logged (see logShardDetails): a mismatch between
+// shards is what `canopy shard join` reports on, so they aren't worth the space on every run.
+func printShardHeader(w io.Writer, sh *shardRuntime, color bool) {
+	// the tab stays outside the render, lipgloss would expand it to spaces and miss the status column's tab stop
+	aux := style.NewGo(color).Aux
+	status, rest, _ := strings.Cut(shardHeaderTitle(sh), "\t")
+	fmt.Fprintf(w, "%s\t%s\n", aux.Render(status), aux.Render(rest))
+	if sh.Weights.FellBack() {
+		// the metrics exist but didn't apply, which is worth a look (unlike having none yet), so it says why
+		why := strings.TrimPrefix(sh.Weights.Ignored, "metrics ignored, ")
+		fmt.Fprintf(w, "    \t%s\n", style.NewGo(color).Skipped.Render("└─ "+why))
 	}
-	fmt.Fprint(w, format(title, body))
+}
+
+// logShardDetails logs where the shard, its weights and its inputs came from, for a verbose run.
+func logShardDetails(sh *shardRuntime) {
+	for _, l := range strings.Split(strings.TrimRight(shardHeaderBody(sh), "\n"), "\n") {
+		log.Debug(strings.TrimSpace(l))
+	}
 }
 
 // printEmptyShard writes the result of a shard that was assigned no packages.
@@ -53,6 +74,7 @@ func shardHeaderBody(sh *shardRuntime) string {
 	more := func(value string) { fmt.Fprintf(&b, "    %-14s %s\n", "", value) }
 
 	row("shard source", shardSource(sh))
+	row("inputs", sh.Digest)
 
 	w := sh.Weights
 	if w.Source == shard.SourceMetrics {

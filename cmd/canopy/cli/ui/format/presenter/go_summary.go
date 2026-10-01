@@ -553,8 +553,9 @@ func (s GoTestResultSummary) summaryFooter() string {
 	}
 
 	if s.config.ShardTrailer != "" && !s.config.Running {
-		// indented to the tests line above, whatever width its status glyph has
-		result += "\n" + strings.TrimLeft(statusColumn(strings.Repeat(" ", lipgloss.Width(s.footerStatusGlyph()))), " ") + s.style.Aux.Render(footerBranch+s.config.ShardTrailer)
+		// a blank status as wide as the glyph above, so the tabs land on the same stop as the tests line whatever the
+		// tab width (the tty expands tabs to 4 columns, a CI log to 8)
+		result += "\n" + statusColumn(strings.Repeat(" ", lipgloss.Width(s.footerStatusGlyph()))) + s.style.Aux.Render(footerBranch+s.config.ShardTrailer)
 	}
 
 	if s.config.Canceled {

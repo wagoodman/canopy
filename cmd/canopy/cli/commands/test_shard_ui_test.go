@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/group"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/presenter"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/shard"
@@ -44,7 +43,7 @@ func testShardRuntime(index, total int, pkgs []string, coverMin *float64) *shard
 		Weights: shard.WeightResult{Units: units, Source: shard.SourceMetrics, Measured: len(pkgs) - 1, Estimated: 1},
 		Counts:  counts, Plan: plan, Digest: "sha256:9f3c1a2b77d0e4c1aabbccdd",
 		Metrics:     shard.ReceiptMetrics{File: "sha256:77d0e4c1aabbccdd", Env: shard.Env{GOOS: "linux", GOARCH: "arm64"}},
-		MetricsPath: ".canopy/shard/metrics.json",
+		MetricsPath: ".canopy/shard/metrics/linux-arm64-cced3044f0ac.json",
 		Inputs: shard.Inputs{
 			Go:     []string{"goversion go1.27.1", "goos linux", "goarch arm64"},
 			Run:    []string{"test-flag -race", "test-flag -timeout=10m"},
@@ -63,6 +62,9 @@ func TestShardUI(t *testing.T) {
 	static.Weights = shard.WeightResult{Units: static.Weights.Units, Source: shard.SourceStatic, Ignored: "no metrics file"}
 	static.Auto, static.From = true, "CI_NODE_INDEX/CI_NODE_TOTAL"
 
+	fallback := testShardRuntime(1, 3, pkgs, nil)
+	fallback.Weights = shard.WeightResult{Units: fallback.Weights.Units, Source: shard.SourceStatic, Ignored: `metrics ignored, recorded with "cover true" but this run has "cover false"`}
+
 	cases := []struct {
 		name string
 		sh   *shardRuntime
@@ -72,25 +74,24 @@ func TestShardUI(t *testing.T) {
 		{name: "passing", sh: testShardRuntime(2, 3, pkgs, &cover), run: shardPassJSON, cov: 81.7},
 		{name: "failing", sh: testShardRuntime(3, 3, pkgs, &cover), run: shardFailJSON, cov: 79.4},
 		{name: "static_weights", sh: static, run: shardPassJSON, cov: 81.7},
+		{name: "fallback_weights", sh: fallback, run: shardPassJSON, cov: 81.7},
 		{name: "empty", sh: testShardRuntime(6, 8, pkgs[:2], nil)},
 	}
 
 	for _, tt := range cases {
-		for name, format := range map[string]group.Formatter{"plain": nil, "github": group.GitHub} {
-			t.Run(tt.name+"_"+name, func(t *testing.T) {
-				var sb strings.Builder
-				printShardHeader(&sb, format, tt.sh)
-				if tt.run == "" {
-					printEmptyShard(&sb, tt.sh, false)
-				} else {
-					run := gotest.ReplayRun(strings.NewReader(tt.run), gotest.RunnerConfig{}, gotest.ResultConfig{}, nil)
-					run.Result.SetCoverage(&tt.cov)
-					cfg := presenter.GoSummaryConfig{PackageNameWidth: 40, DurationFromEvents: true}.WithShardTrailer(shardTrailer(tt.sh))
-					require.NoError(t, cfg.New(*run).Present(&sb, &sb))
-				}
-				assertShardUIGolden(t, tt.name+"_"+name, sb.String())
-			})
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			var sb strings.Builder
+			printShardHeader(&sb, tt.sh, false)
+			if tt.run == "" {
+				printEmptyShard(&sb, tt.sh, false)
+			} else {
+				run := gotest.ReplayRun(strings.NewReader(tt.run), gotest.RunnerConfig{}, gotest.ResultConfig{}, nil)
+				run.Result.SetCoverage(&tt.cov)
+				cfg := presenter.GoSummaryConfig{PackageNameWidth: 40, DurationFromEvents: true}.WithShardTrailer(shardTrailer(tt.sh))
+				require.NoError(t, cfg.New(*run).Present(&sb, &sb))
+			}
+			assertShardUIGolden(t, tt.name, sb.String())
+		})
 	}
 }
 

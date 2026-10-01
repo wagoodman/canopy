@@ -49,6 +49,8 @@ func TestRenderJoin(t *testing.T) {
 		{Check: shard.CheckCoverage, Kind: shard.KindCoverageBelow, Message: "coverage below threshold: 78.30% < 80.00%"},
 	}
 	missing.Warnings = []string{"canopy version differs between shards"}
+	missing.Checks.Metrics = shard.MetricsCheck{Packages: 6, Warning: "shards failed verification"}
+	missing.Suggestion = nil
 
 	// a run with no timing data only has package counts to suggest
 	static := loadJoinFixture(t, "happy")
@@ -57,7 +59,28 @@ func TestRenderJoin(t *testing.T) {
 		static.Shards[i].EstimatedMS = nil
 	}
 
+	// receipts from different runs stop the join before any shard is filled in
+	mixed := shard.Report{
+		Total:  3,
+		Shards: []shard.ReportShard{{Index: 1}, {Index: 2}, {Index: 3}},
+		Problems: []shard.Problem{
+			{Check: shard.CheckVerified, Kind: shard.KindTotalMismatch, Message: "receipts disagree on shard total: shard-2 says 2, shard-1 says 3 (stale files in .canopy/shard/out?)"},
+		},
+		Result:   "fail",
+		ExitCode: shard.ExitUnverified,
+	}
+	mixed.Checks.Tests.OK, mixed.Checks.Coverage.OK = true, true
+
+	// several verified problems at once, with the packages they name
+	unverified := loadJoinFixture(t, "weights_mismatch")
+	unverified.Problems = append(unverified.Problems,
+		shard.Problem{Check: shard.CheckVerified, Kind: shard.KindNeverRan, Packages: []string{"m/e", "m/f"}, Message: "2 packages never ran"},
+		shard.Problem{Check: shard.CheckVerified, Kind: shard.KindRanTwice, Shards: []int{1, 3}, Packages: []string{"m/a"}, Message: "1 package ran twice"},
+	)
+
 	cases := map[string]shard.Report{
+		"unverified":        unverified,
+		"total_mismatch":    mixed,
 		"happy":             loadJoinFixture(t, "happy"),
 		"failed_shard":      loadJoinFixture(t, "failed_shard"),
 		"run_flag":          loadJoinFixture(t, "run_flag"),

@@ -1,17 +1,15 @@
-canopy shard join: 3 shards, 6 packages, inputs sha256:a62ace69 (weights from metrics)
+canopy shard join   3 shards · 6 packages · inputs sha256:a62ace69 · exit 1
 
-  shard  pkgs  est.  actual  tests                             result
-  1/3    2     0s    2s      10 passed                         ok
-  2/3    2     0s    2s      11 passed / 1 failed / 1 skipped  FAIL
-  3/3    2     0s    2s      12 passed / 2 skipped             ok
+✗ TESTS FAILED   33 passed, 1 failed
 
-FAIL    tests      1 failed test in 1 package
-        └─ shard 2/3  m/d  TestReconcile
-ok      verified   every package ran exactly once (6 of 6, 3 of 3 receipts, 1 plan)
-ok      coverage   75.0%
-ok      metrics    5 packages updated in .canopy/shard/metrics/linux-arm64-cced3044f0ac.json
+  ✗ 1 test failed in 1 package
+      2/3  d  TestReconcile
+      → failure output is in the shard 2/3 job log
 
-FAIL    33 passed / 1 failed / 3 skipped tests   2s slowest shard   75.0% covered
-        └─ failure output is in the shard 2/3 job log
+  shard   pkgs   est.   time   tests
+  1/3        2     0s     2s   10 passed
+  2/3        2     0s     2s   11 passed / 1 failed / 1 skipped
+  3/3        2     0s     2s   12 passed / 2 skipped              ← slowest
 
-suggestion: 2 shards would be better than 3 (1 would be 1s, 2 would be 1s, 3 is 1s wall)
+  ✓ metrics saved for 5 packages                 .canopy/shard/metrics/linux-arm64-cced3044f0ac.json
+  → 2 shards would be as fast on fewer runners   1: 1s  2: 1s  3: 1s

@@ -18,158 +18,386 @@ const (
 	verdictFailed = "failed"
 )
 
-// renderJoinText writes the join report as plain text in the same PASS/FAIL style as the go test footer.
+// renderJoinText writes the join report for a terminal: the verdict, what went wrong, the shards, and
+// what the join did with the timings.
 func renderJoinText(w io.Writer, r shard.Report, color bool) error {
 	var b strings.Builder
 	st := style.NewGo(color)
 
-	b.WriteString(st.Bold.Render(joinHeader(r)) + "\n\n")
-	writeJoinTable(&b, st, r)
-	b.WriteString("\n")
-
-	// a passing tests check is implied by the PASS footer, so only failures get a line
-	if !r.Checks.Tests.OK {
-		failures, pkgs := joinFailures(r)
-		var failed []string
-		for _, f := range failures {
-			failed = append(failed, fmt.Sprintf("shard %s  %s  %s", f.shard, f.pkg, f.test))
+	b.WriteString(st.Bold.Render("canopy shard join") + "   " + st.Aux.Render(joinMeta(r)) + "\n\n")
+	b.WriteString(joinVerdict(st, r) + "\n")
+	for _, it := range joinProblems(r, packageTrimmer(r)) {
+		b.WriteString("\n  " + st.Failed.Render("✗") + " " + it.title + "\n")
+		for _, d := range it.details {
+			b.WriteString("      " + d + "\n")
 		}
-		msg := joinProblemMessage(r, shard.CheckTests)
-		if r.Checks.Tests.Failed > 0 {
-			msg = fmt.Sprintf("%s in %s", countOf(r.Checks.Tests.Failed, "failed test"), countOf(len(pkgs), "package"))
+		if it.hint != "" {
+			b.WriteString("      " + st.Aux.Render("→ "+it.hint) + "\n")
 		}
-		writeJoinCheck(&b, st, false, "tests", msg, failed, "")
 	}
-	writeJoinVerified(&b, st, r)
-	joinCoverage(r, func(ok bool, msg string) { writeJoinCheck(&b, st, ok, "coverage", msg, nil, "") })
-	if m := r.Checks.Metrics; m.Written {
-		writeJoinCheck(&b, st, true, "metrics", fmt.Sprintf("%s updated in %s", countOf(m.Packages, "package"), m.Path), nil, "")
-	} else if m.Warning != "" {
-		writeJoinCheck(&b, st, true, "metrics", "not updated: "+m.Warning, nil, "")
+	// the join stopped before any receipt was matched to a shard, so a table would only show placeholders
+	if joinHasShards(r) {
+		b.WriteString("\n")
+		writeJoinTable(&b, st, r)
+		writeJoinAftermath(&b, st, r)
 	}
-
-	writeJoinFooter(&b, st, r)
-
 	if len(r.Warnings) > 0 {
 		b.WriteString("\n")
 	}
 	for _, warn := range r.Warnings {
-		fmt.Fprintf(&b, "%s %s\n", st.Skipped.Render("warning:"), warn)
-	}
-	if s := r.Suggestion; s != nil {
-		b.WriteString("\n" + st.Aux.Render("suggestion: "+suggestionText(s)) + "\n")
+		b.WriteString("  " + st.Skipped.Render("!") + " " + warn + "\n")
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
 }
 
-func joinHeader(r shard.Report) string {
-	header := fmt.Sprintf("canopy shard join: %s, %s", countOf(r.Total, "shard"), countOf(r.Packages, "package"))
-	switch {
-	case len(r.Digests) == 1:
-		header += ", inputs " + shortDigest(r.Digests[0].Digest)
-		if src := joinWeightSource(r); src != "" {
-			header += " (weights from " + weightsLabel(src) + ")"
-		}
-	case len(r.Digests) > 1:
-		header += ", inputs differ between shards"
+// joinMeta is the header's `3 shards · 57 packages · inputs sha256:9f3c1a2b · exit 3`.
+func joinMeta(r shard.Report) string {
+	var parts []string
+	if joinHasShards(r) {
+		parts = append(parts, countOf(r.Total, "shard"), countOf(r.Packages, "package"))
 	}
-	return header
+	if len(r.Digests) == 1 {
+		parts = append(parts, "inputs "+shortDigest(r.Digests[0].Digest))
+	}
+	return strings.Join(append(parts, fmt.Sprintf("exit %d", r.ExitCode)), " · ")
 }
 
-// writeJoinTable writes the shard table. The last column is never padded, so styled cells don't affect widths.
+// joinVerdict is the one line that answers whether the run can be trusted, and why not.
+func joinVerdict(st style.Go, r shard.Report) string {
+	t := r.Checks.Tests
+	if r.Result == shard.ResultPass {
+		parts := []string{countOf(t.Passed, "test") + " passed"}
+		if t.Skipped > 0 {
+			parts[0] += fmt.Sprintf(", %d skipped", t.Skipped)
+		}
+		parts = append(parts, "every package ran once")
+		if c := r.Checks.Coverage; c.Percent != nil {
+			cov := pct(*c.Percent) + " coverage"
+			if c.Threshold != nil {
+				cov += " (min " + pct(*c.Threshold) + ")"
+			}
+			parts = append(parts, cov)
+		}
+		return st.Success.Render("✓ PASSED") + "   " + strings.Join(parts, " · ")
+	}
+
+	tests, and := fmt.Sprintf("tests passed (%d)", t.Passed), "but"
+	if !t.OK {
+		_, pkgs := joinFailures(r)
+		tests, and = fmt.Sprintf("%s failed in %s", countOf(t.Failed, "test"), countOf(len(pkgs), "package")), "and"
+		if t.Failed == 0 {
+			tests = countOf(len(pkgs), "package") + " failed"
+		}
+	}
+	var head, why string
+	switch r.ExitCode {
+	case shard.ExitCannotRun:
+		head, why = "CAN'T JOIN", "the shard receipts couldn't be read"
+	case shard.ExitUnverified:
+		head, why = "NOT VERIFIED", tests+", "+and+" the shards don't add up to one run"
+		if !joinHasShards(r) {
+			why = "the receipts don't come from one run"
+		}
+	case shard.ExitGateFailed:
+		head, why = "GATE FAILED", tests+", "+and+" coverage failed its gate"
+	default:
+		head, why = "TESTS FAILED", fmt.Sprintf("%d passed, %d failed", t.Passed, t.Failed)
+	}
+	return st.Failed.Render("✗ "+head) + "   " + why
+}
+
+type joinItem struct {
+	title   string
+	details []string
+	hint    string
+}
+
+// joinProblems is every problem as a titled item: verification first since it decides whether the
+// rest means anything, then failed tests (one item for all shards), then coverage.
+func joinProblems(r shard.Report, trim func(string) string) []joinItem {
+	var out []joinItem
+	for _, p := range r.Problems {
+		if p.Check != shard.CheckVerified {
+			continue
+		}
+		title, details := verifiedProblem(r, p)
+		if p.Kind == shard.KindRanTwice && len(p.Shards) > 0 {
+			title += ", in " + shardsLabel(p.Shards)
+		}
+		if len(p.Packages) > 0 {
+			details = packageColumns(mapped(p.Packages, trim))
+		}
+		out = append(out, joinItem{title, details, p.Hint})
+	}
+
+	if !r.Checks.Tests.OK {
+		failures, pkgs := joinFailures(r)
+		it := joinItem{title: joinProblemMessage(r, shard.CheckTests)}
+		if n := r.Checks.Tests.Failed; n > 0 {
+			it.title = fmt.Sprintf("%s failed in %s", countOf(n, "test"), countOf(len(pkgs), "package"))
+		}
+		rows := make([][]string, 0, len(failures))
+		for _, f := range failures {
+			rows = append(rows, []string{f.shard, trim(f.pkg), f.test})
+		}
+		it.details = alignRows(rows)
+		var names []string
+		for _, p := range r.Problems {
+			if p.Kind == shard.KindShardFailed {
+				for _, i := range p.Shards {
+					names = append(names, fmt.Sprintf("%d/%d", i, r.Total))
+				}
+			}
+		}
+		if len(names) > 0 {
+			it.hint = "failure output is in the shard " + strings.Join(names, ", ") + " job log"
+			if len(names) > 1 {
+				it.hint += "s"
+			}
+		}
+		out = append(out, it)
+	}
+
+	for _, p := range r.Problems {
+		if p.Check == shard.CheckCoverage {
+			out = append(out, joinItem{title: p.Message, hint: p.Hint})
+		}
+	}
+	return out
+}
+
+// verifiedProblem is a verified problem's title, and for differing inputs the lines that differ.
+func verifiedProblem(r shard.Report, p shard.Problem) (title string, details []string) {
+	if p.Kind == shard.KindInputMismatch && p.Group != "" && p.LineDiff != nil {
+		if p.Group == shard.GroupWeights {
+			return "shards computed different plans", weightDetails(r)
+		}
+		for _, d := range p.Describe() {
+			details = append(details, "["+p.Group+"] "+d)
+		}
+		return "shards ran with different inputs", details
+	}
+	return p.Message, nil
+}
+
+// writeJoinTable writes one row per shard, with the slowest one marked.
 func writeJoinTable(b *strings.Builder, st style.Go, r shard.Report) {
 	withEst := joinHasEstimates(r)
 	head := []string{"shard", colPkgs}
 	if withEst {
 		head = append(head, "est.")
 	}
-	rows := [][]string{append(head, "actual", "tests", "result")}
+	head = append(head, "time", "tests")
+
+	slowest, present := -1, 0
+	for i, s := range r.Shards {
+		if s.Present {
+			present++
+			if slowest < 0 || s.ElapsedMS > r.Shards[slowest].ElapsedMS {
+				slowest = i
+			}
+		}
+	}
+
+	rows, bad := [][]string{head}, []bool{false}
 	for _, s := range r.Shards {
-		label := fmt.Sprintf("%d/%d", s.Index, r.Total)
-		row := []string{label, "-"}
+		row := []string{fmt.Sprintf("%d/%d", s.Index, r.Total), "-"}
 		if withEst {
 			row = append(row, "-")
 		}
 		if !s.Present {
-			rows = append(rows, append(row, "-", "missing", st.Failed.Render("FAIL")))
+			rows, bad = append(rows, append(row, "-", "missing")), append(bad, true)
 			continue
 		}
 		row[1] = fmt.Sprint(len(s.Planned))
 		if s.EstimatedMS != nil && withEst {
 			row[2] = fmtMS(*s.EstimatedMS)
 		}
-		result := st.Success.Render("ok")
-		if !s.Passed {
-			result = st.Failed.Render("FAIL")
-		}
-		rows = append(rows, append(row, fmtMS(s.ElapsedMS), tallyText(s.Tests), result))
+		rows, bad = append(rows, append(row, fmtMS(s.ElapsedMS), tallyText(s.Tests))), append(bad, !s.Passed)
 	}
-	widths := make([]int, len(rows[0]))
+
+	widths := make([]int, len(head))
 	for _, row := range rows {
-		for i, c := range row[:len(row)-1] {
+		for i, c := range row {
 			widths[i] = max(widths[i], len(c))
 		}
 	}
+	last := len(head) - 1
 	for i, row := range rows {
-		line := ""
-		for j, c := range row {
-			if j < len(row)-1 {
-				c += strings.Repeat(" ", widths[j]-len(c))
-			}
-			line += "  " + c
+		line := "  " + row[0] + strings.Repeat(" ", widths[0]-len(row[0]))
+		// numbers read best right aligned
+		for j := 1; j < last; j++ {
+			line += "   " + strings.Repeat(" ", widths[j]-len(row[j])) + row[j]
 		}
-		if i == 0 {
-			line = st.Aux.Render(line)
+		tests := row[last]
+		if i > 0 && i-1 == slowest && present > 1 {
+			tests += strings.Repeat(" ", widths[last]-len(tests)) + "   " + st.Aux.Render("← slowest")
+		}
+		switch {
+		case i == 0:
+			line = st.Aux.Render(line + "   " + tests)
+		case bad[i]:
+			line += "   " + st.Failed.Render(row[last]) + tests[len(row[last]):]
+		default:
+			line += "   " + tests
 		}
 		b.WriteString(line + "\n")
 	}
 }
 
-// writeJoinCheck writes one `ok`/`FAIL` check line, its tree of details and a note below them.
-func writeJoinCheck(b *strings.Builder, st style.Go, ok bool, name, msg string, details []string, note string) {
-	status := st.Success.Render("ok") + "    "
-	if !ok {
-		status = st.Failed.Render("FAIL") + "  "
+// writeJoinAftermath writes what the join did with the shards' timings: the metrics file and the
+// shard count suggestion. `–` marks something skipped on purpose.
+func writeJoinAftermath(b *strings.Builder, st style.Go, r shard.Report) {
+	type line struct{ glyph, label, note string }
+	var lines []line
+	switch m := r.Checks.Metrics; {
+	case m.Written:
+		lines = append(lines, line{st.Success.Render("✓"), "metrics saved for " + countOf(m.Packages, "package"), m.Path})
+	case m.Warning != "":
+		lines = append(lines, line{st.Aux.Render("–"), "metrics not saved", m.Warning})
 	}
-	fmt.Fprintf(b, "%s  %-11s%s\n", status, name, msg)
-	for i, d := range details {
-		glyph := "├─"
-		if i == len(details)-1 {
-			glyph = "└─"
-		}
-		fmt.Fprintf(b, "        %s %s\n", st.Aux.Render(glyph), d)
+	var extra string
+	switch s := r.Suggestion; {
+	case !r.Checks.Verified.OK:
+		lines = append(lines, line{st.Aux.Render("–"), "no shard count suggestion", "shards failed verification"})
+	case s == nil:
+	case s.Static:
+		lines = append(lines, line{st.Aux.Render("–"), "no shard count suggestion", "no timing data yet"})
+	case s.Best != s.Current:
+		lines = append(lines, line{"→", suggestionVerdict(s), suggestionEstimates(s)})
+		extra = s.Note
 	}
-	if note != "" {
-		fmt.Fprintf(b, "           %s\n", st.Aux.Render(note))
+	if len(lines) == 0 {
+		return
+	}
+	w := 0
+	for _, l := range lines {
+		w = max(w, len(l.label))
+	}
+	b.WriteString("\n")
+	for _, l := range lines {
+		fmt.Fprintf(b, "  %s %-*s   %s\n", l.glyph, w, l.label, st.Aux.Render(l.note))
+	}
+	if extra != "" {
+		b.WriteString("    " + st.Aux.Render(extra) + "\n")
 	}
 }
 
-// writeJoinVerified writes the verified check: one line per problem, or the ok line.
-func writeJoinVerified(b *strings.Builder, st style.Go, r shard.Report) {
-	verified := true
-	for _, p := range r.Problems {
-		if p.Check != shard.CheckVerified {
-			continue
-		}
-		verified = false
-		title, details := p.Message, []string(nil)
-		if p.Kind == shard.KindInputMismatch && p.Group != "" && p.LineDiff != nil {
-			title = "shards ran with different inputs"
-			if p.Group == shard.GroupWeights {
-				title, details = "shards computed different plans", weightDetails(r)
-			} else {
-				for _, d := range p.Describe() {
-					details = append(details, "["+p.Group+"] "+d)
-				}
+// suggestionVerdict is `4 shards would be ~6s faster`, or the same wall on fewer runners.
+func suggestionVerdict(s *shard.Suggestion) string {
+	wall := func(n int) int64 {
+		for _, e := range s.Estimates {
+			if e.Shards == n {
+				return e.WallMS
 			}
 		}
-		writeJoinCheck(b, st, false, "verified", title, details, p.Hint)
+		return 0
 	}
-	if verified {
-		v := r.Checks.Verified
-		writeJoinCheck(b, st, true, "verified", fmt.Sprintf("every package ran exactly once (%d of %d, %d of %d receipts, %s)", v.RanOnce, r.Packages, v.Receipts, r.Total, countOf(len(r.Digests), "plan")), nil, "")
+	if saved := wall(s.Current) - wall(s.Best); saved >= 1000 {
+		return fmt.Sprintf("%s would be ~%s faster", countOf(s.Best, "shard"), fmtMS(saved))
 	}
+	return countOf(s.Best, "shard") + " would be as fast on fewer runners"
+}
+
+// suggestionEstimates is the est. wall around the current and best counts: `3: 22s  4: 16s  5: 15s`.
+func suggestionEstimates(s *shard.Suggestion) string {
+	var parts []string
+	for _, e := range s.Estimates {
+		if e.Shards == s.Current || (e.Shards >= s.Best-1 && e.Shards <= s.Best+1) {
+			parts = append(parts, fmt.Sprintf("%d: %s", e.Shards, fmtMS(e.WallMS)))
+		}
+	}
+	return strings.Join(parts, "  ")
+}
+
+// packageTrimmer drops the path prefix every package in the report shares (usually the module path),
+// always keeping at least the last element.
+func packageTrimmer(r shard.Report) func(string) string {
+	var common []string
+	first := true
+	add := func(p string) {
+		segs := strings.Split(p, "/")
+		if first {
+			common, first = segs[:len(segs)-1], false
+			return
+		}
+		n := 0
+		for n < len(common) && n < len(segs)-1 && common[n] == segs[n] {
+			n++
+		}
+		common = common[:n]
+	}
+	for _, s := range r.Shards {
+		if s.Present {
+			for _, p := range s.Planned {
+				add(p)
+			}
+			for _, p := range s.Reported {
+				add(p)
+			}
+		}
+	}
+	for _, p := range r.Problems {
+		for _, pkg := range p.Packages {
+			add(pkg)
+		}
+	}
+	if len(common) == 0 {
+		return func(p string) string { return p }
+	}
+	prefix := strings.Join(common, "/") + "/"
+	return func(p string) string { return strings.TrimPrefix(p, prefix) }
+}
+
+// packageColumns lays names out top to bottom in up to three columns, like ls.
+func packageColumns(names []string) []string {
+	w := 0
+	for _, n := range names {
+		w = max(w, len(n))
+	}
+	w += 2
+	cols := max(1, min(3, 96/w))
+	rows := (len(names) + cols - 1) / cols
+	out := make([]string, rows)
+	for i, n := range names {
+		out[i%rows] += n + strings.Repeat(" ", w-len(n))
+	}
+	for i := range out {
+		out[i] = strings.TrimRight(out[i], " ")
+	}
+	return out
+}
+
+// alignRows pads every column but the last to its widest cell.
+func alignRows(rows [][]string) []string {
+	var widths []int
+	for _, row := range rows {
+		for i, c := range row {
+			if i == len(widths) {
+				widths = append(widths, 0)
+			}
+			widths[i] = max(widths[i], len(c))
+		}
+	}
+	out := make([]string, len(rows))
+	for i, row := range rows {
+		for j, c := range row {
+			if j < len(row)-1 {
+				c += strings.Repeat(" ", widths[j]-len(c)+2)
+			}
+			out[i] += c
+		}
+	}
+	return out
+}
+
+func mapped(in []string, f func(string) string) []string {
+	out := make([]string, len(in))
+	for i, v := range in {
+		out[i] = f(v)
+	}
+	return out
 }
 
 // weightDetails groups the present shards by how they weighted the packages and the inputs they
@@ -232,50 +460,6 @@ func weightsLabel(source string) string {
 	return source
 }
 
-// writeJoinFooter writes the PASS/FAIL line, and where to find the output of failed shards.
-func writeJoinFooter(b *strings.Builder, st style.Go, r shard.Report) {
-	counts := []string{fmt.Sprintf("%d passed", r.Checks.Tests.Passed)}
-	if n := r.Checks.Tests.Failed; n > 0 {
-		counts = append(counts, fmt.Sprintf("%d failed", n))
-	}
-	if n := r.Checks.Tests.Skipped; n > 0 {
-		counts = append(counts, fmt.Sprintf("%d skipped", n))
-	}
-	status := st.Success.Render("PASS")
-	if r.Result != shard.ResultPass {
-		status = st.Failed.Render("FAIL")
-	}
-	var slowest int64
-	for _, s := range r.Shards {
-		if s.Present {
-			slowest = max(slowest, s.ElapsedMS)
-		}
-	}
-	aux := fmtMS(slowest) + " slowest shard"
-	if p := r.Checks.Coverage.Percent; p != nil {
-		aux += "   " + pct(*p) + " covered"
-	}
-	fmt.Fprintf(b, "\n%s    %s tests   %s\n", status, strings.Join(counts, " / "), st.Aux.Render(aux))
-	if r.Checks.Tests.OK {
-		return
-	}
-	var names []string
-	for _, p := range r.Problems {
-		if p.Kind == shard.KindShardFailed {
-			for _, i := range p.Shards {
-				names = append(names, fmt.Sprintf("%d/%d", i, r.Total))
-			}
-		}
-	}
-	if len(names) > 0 {
-		where := "the shard " + strings.Join(names, ", ") + " job log"
-		if len(names) > 1 {
-			where += "s"
-		}
-		fmt.Fprintf(b, "        %s failure output is in %s\n", st.Aux.Render("└─"), where)
-	}
-}
-
 // renderJoinMarkdown writes the join report for the GitHub step summary.
 func renderJoinMarkdown(w io.Writer, r shard.Report) error {
 	var b strings.Builder
@@ -292,8 +476,10 @@ func renderJoinMarkdown(w io.Writer, r shard.Report) error {
 	}
 	fmt.Fprintf(&b, "### canopy shard join: %s %s\n\n", icon(r.Result == shard.ResultPass), verdict)
 
-	writeJoinMarkdownTable(&b, r, icon)
-	b.WriteString("\n")
+	if joinHasShards(r) {
+		writeJoinMarkdownTable(&b, r, icon)
+		b.WriteString("\n")
+	}
 
 	if !r.Checks.Tests.OK {
 		failures, _ := joinFailures(r)
@@ -304,20 +490,23 @@ func renderJoinMarkdown(w io.Writer, r shard.Report) error {
 			fmt.Fprintf(&b, "- ❌ **tests**: %s\n", joinProblemMessage(r, shard.CheckTests))
 		}
 	}
-	verified := true
+	if r.Checks.Verified.OK {
+		fmt.Fprintf(&b, "- ✅ **verified**: %d of %d packages ran exactly once\n", r.Checks.Verified.RanOnce, r.Packages)
+	} else {
+		b.WriteString("- ❌ **verified**\n")
+	}
 	for _, p := range r.Problems {
 		if p.Check != shard.CheckVerified {
 			continue
 		}
-		verified = false
-		line := fmt.Sprintf("- ❌ **verified**: %s", p.Message)
+		line := "  - " + p.Message
 		if p.Hint != "" {
 			line += " (" + p.Hint + ")"
 		}
 		b.WriteString(line + "\n")
-	}
-	if verified {
-		fmt.Fprintf(&b, "- ✅ **verified**: %d of %d packages ran exactly once\n", r.Checks.Verified.RanOnce, r.Packages)
+		for _, pkg := range p.Packages {
+			fmt.Fprintf(&b, "    - `%s`\n", pkg)
+		}
 	}
 	joinCoverage(r, func(ok bool, msg string) { fmt.Fprintf(&b, "- %s **coverage**: %s\n", icon(ok), msg) })
 	for _, warn := range r.Warnings {
@@ -344,7 +533,7 @@ func writeJoinMarkdownTable(b *strings.Builder, r shard.Report, icon func(bool) 
 		if withEst {
 			cells = append(cells, "-")
 		}
-		cells = append(cells, "-", "missing", "❌")
+		cells = append(cells, "-", "-", "❌ missing")
 		if s.Present {
 			cells[1] = fmt.Sprint(len(s.Planned))
 			if s.EstimatedMS != nil && withEst {
@@ -429,50 +618,15 @@ func joinProblemMessage(r shard.Report, check string) string {
 	return ""
 }
 
+// joinHasShards is true when at least one receipt was matched to a shard. It's false when the join
+// stopped early (unreadable receipts, or receipts from different runs), leaving only empty placeholders.
+func joinHasShards(r shard.Report) bool {
+	return slices.ContainsFunc(r.Shards, func(s shard.ReportShard) bool { return s.Present })
+}
+
 // joinHasEstimates is true when any shard planned with metrics and has an estimated load.
 func joinHasEstimates(r shard.Report) bool {
 	return slices.ContainsFunc(r.Shards, func(s shard.ReportShard) bool { return s.Present && s.EstimatedMS != nil })
-}
-
-// joinWeightSource is the weights source every present shard agreed on, or empty.
-func joinWeightSource(r shard.Report) string {
-	var src string
-	for _, s := range r.Shards {
-		if !s.Present {
-			continue
-		}
-		if src != "" && src != s.Weights.Source {
-			return ""
-		}
-		src = s.Weights.Source
-	}
-	return src
-}
-
-// suggestionText looks like `4 shards is right (3 would be 4m23s, 4 is 3m32s, 5 is 3m29s wall)`.
-func suggestionText(s *shard.Suggestion) string {
-	if s.Static {
-		return s.Note
-	}
-	verdict := countOf(s.Current, "shard") + " is right"
-	if s.Best != s.Current {
-		verdict = fmt.Sprintf("%s would be better than %d", countOf(s.Best, "shard"), s.Current)
-	}
-	var parts []string
-	for _, e := range s.Estimates {
-		if e.Shards == s.Current || (e.Shards >= s.Best-1 && e.Shards <= s.Best+1) {
-			verb := "is"
-			if e.Shards < s.Current {
-				verb = "would be"
-			}
-			parts = append(parts, fmt.Sprintf("%d %s %s", e.Shards, verb, fmtMS(e.WallMS)))
-		}
-	}
-	text := fmt.Sprintf("%s (%s wall)", verdict, strings.Join(parts, ", "))
-	if s.Note != "" {
-		text += "; " + s.Note
-	}
-	return text
 }
 
 func tallyText(t shard.TestTally) string {

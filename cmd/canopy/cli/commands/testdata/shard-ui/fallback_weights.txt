@@ -1,0 +1,4 @@
+SHARD	1/3 (1/6 pkgs, split by test count, metrics ignored)
+    	└─ recorded with "cover true" but this run has "cover false"
+PASS	1 passed tests                          	    3s  	81.7% covered (this shard)
+    	└─ shard 1/3 (1/6 pkgs, split by test count, metrics ignored)

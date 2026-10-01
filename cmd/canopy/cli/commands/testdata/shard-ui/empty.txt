@@ -1,0 +1,3 @@
+SHARD	6/8 (0/2 pkgs, split by time)
+PASS	no packages assigned to this shard
+	└─ shard 6/8 (0/2 pkgs, split by time)

@@ -8,4 +8,9 @@
 
 - ❌ **verified**
   - [weights] shards 1,2: metrics sha256:451171ec (6 measured, 0 estimated) / shard 3: static (no metrics file) (a cache race, or a partial rerun after main saved new metrics; rerun all jobs)
+  - 2 packages never ran
+    - `m/e`
+    - `m/f`
+  - 1 package ran twice
+    - `m/a`
 - ✅ **coverage**: 75.0%
