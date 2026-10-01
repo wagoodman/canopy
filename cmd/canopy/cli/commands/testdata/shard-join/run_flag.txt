@@ -9,8 +9,6 @@ FAIL    verified   shards ran with different inputs
         └─ [run] shard 2 only: test-flag -run=TestDoesNotExist
            a flag or CANOPY_TEST_* env var is set on some jobs only
 ok      coverage   75.0%
-ok      metrics    6 packages updated in .canopy/shard/metrics.json
+ok      metrics    not updated: shards failed verification
 
 FAIL    33 passed / 3 skipped tests   2s slowest shard   75.0% covered
-
-suggestion: 2 shards would be better than 3 (1 would be 1s, 2 would be 1s, 3 is 1s wall)

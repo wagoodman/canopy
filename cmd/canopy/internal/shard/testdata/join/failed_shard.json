@@ -35,7 +35,7 @@
     "metrics": {
       "ok": true,
       "written": true,
-      "path": ".canopy/shard/metrics.json",
+      "path": ".canopy/shard/metrics/linux-arm64-cced3044f0ac.json",
       "packages": 5
     }
   },
@@ -49,7 +49,7 @@
         "source": "metrics",
         "measured": 6,
         "estimated": 0,
-        "metrics_file": "sha256:39947a22b15545d78800ca8aca05020af2fa30052864b1c501d10151dbd7da22"
+        "metrics_file": "sha256:451171ec63f4cda18e60113c19c07bd3173feaf9ed837cc99891ebf59fa687ff"
       },
       "estimated_ms": 200,
       "planned": [
@@ -79,7 +79,7 @@
         "source": "metrics",
         "measured": 6,
         "estimated": 0,
-        "metrics_file": "sha256:39947a22b15545d78800ca8aca05020af2fa30052864b1c501d10151dbd7da22"
+        "metrics_file": "sha256:451171ec63f4cda18e60113c19c07bd3173feaf9ed837cc99891ebf59fa687ff"
       },
       "estimated_ms": 200,
       "planned": [
@@ -114,7 +114,7 @@
         "source": "metrics",
         "measured": 6,
         "estimated": 0,
-        "metrics_file": "sha256:39947a22b15545d78800ca8aca05020af2fa30052864b1c501d10151dbd7da22"
+        "metrics_file": "sha256:451171ec63f4cda18e60113c19c07bd3173feaf9ed837cc99891ebf59fa687ff"
       },
       "estimated_ms": 200,
       "planned": [

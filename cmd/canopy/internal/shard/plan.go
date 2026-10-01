@@ -15,9 +15,18 @@ const PlannerVersion = 1
 
 // Unit is one schedulable piece of work: a package and its estimated cost.
 type Unit struct {
-	Package   string // import path
-	Weight    int64  // estimated ms with metrics, static count without (see weights.go)
-	Estimated bool   // weight came from test counts, not a measurement
+	Package   string `json:"package"`   // import path
+	Weight    int64  `json:"weight"`    // estimated ms with metrics, static count without (see weights.go)
+	Estimated bool   `json:"estimated"` // weight came from test counts, not a measurement
+}
+
+// Packages returns the import paths of units, in order.
+func Packages(units []Unit) []string {
+	out := make([]string, len(units))
+	for i, u := range units {
+		out[i] = u.Package
+	}
+	return out
 }
 
 // Plan is the assignment of units to shards.

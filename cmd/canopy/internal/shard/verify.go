@@ -14,13 +14,12 @@ import (
 type JoinInput struct {
 	Receipts []LoadedReceipt // from LoadDir
 	OutDir   string          // where the receipts and their coverprofiles are
-	ShardDir string          // where coverage.out and metrics.json are written
+	ShardDir string          // where coverage.out and the metrics dir are written
 	// CoverMin is the covermin set on the join itself (flag, env or config), nil when unset. It wins
 	// over whatever the receipts recorded.
 	CoverMin      *float64
 	WriteMetrics  bool
 	Overhead      time.Duration // per-job overhead for the suggestion
-	P             int           // go test -p for the suggestion, 0 means the shards' runner cpus
 	CanopyVersion string        // the join's own version, compared with the shards'
 }
 
@@ -45,7 +44,7 @@ func inputHint(group string) string {
 
 // Join verifies the receipts, merges coverage and metrics, applies the gates and suggests a shard
 // count. Problems are reported in the Report; the error is only for failing to write coverage.out
-// or metrics.json, and the Report is complete up to that point.
+// or the metrics file, and the Report is complete up to that point.
 func Join(in JoinInput) (Report, error) {
 	r := Report{Version: ReportVersion, Digests: []DigestGroup{}, Problems: []Problem{}, Warnings: []string{}, Shards: []ReportShard{}}
 	err := join(&r, in)
@@ -70,10 +69,6 @@ func join(r *Report, in JoinInput) error {
 	// 2. every index exactly once; the first receipt for an index stands for it
 	present, complete := checkIndexes(r, rs, names, stale)
 
-	old, _, err := LoadMetrics(filepath.Join(in.ShardDir, "metrics.json"))
-	if err != nil {
-		old = nil
-	}
 	for _, rc := range present {
 		r.Shards[rc.Index-1] = shardReport(rc)
 		r.Checks.Tests.Passed += rc.Tests.Passed
@@ -84,6 +79,7 @@ func join(r *Report, in JoinInput) error {
 
 	// 3. one digest
 	oneDigest := checkDigests(r, present)
+	checkUnits(r, present)
 
 	// 4 and 5. exact cover, over planned with one plan and over reported otherwise (what actually ran)
 	units := checkCover(r, present, oneDigest, complete)
@@ -107,18 +103,26 @@ func join(r *Report, in JoinInput) error {
 	if err := r.coverage(in, present); err != nil {
 		return err
 	}
-	merged, err := r.metrics(in, present, old, units)
+	merged, err := r.metrics(in, present, units)
 	if err != nil {
 		return err
 	}
-	p := in.P
-	if p < 1 {
+	// same reason as the metrics: an unverified run says nothing reliable about how to split. The
+	// units are the ones the shards planned with (one digest), so this is the suggestion `shard plan`
+	// gives for the same metrics.
+	if !r.unverified() && len(present) > 0 && len(present[0].Units) > 0 {
+		cpus := 0
 		for _, rc := range present {
-			p = max(p, rc.Runner.CPUs)
+			cpus = max(cpus, rc.Runner.CPUs)
 		}
+		r.Suggestion = NewSuggestion(present[0].Units, r.Total, in.Overhead, SuggestionP(merged, cpus))
 	}
-	r.Suggestion = suggest(merged, units, r.Total, in.Overhead, p)
 	return nil
+}
+
+// unverified is true once any problem fails the verified check.
+func (r *Report) unverified() bool {
+	return slices.ContainsFunc(r.Problems, func(p Problem) bool { return p.Check == CheckVerified })
 }
 
 // readReceipts returns the readable receipts and their file names (without .json), reporting the rest.
@@ -230,6 +234,18 @@ func checkDigests(r *Report, present []*Receipt) bool {
 	return oneDigest
 }
 
+// checkUnits verifies each receipt's units are the ones its [weights] digest covers, so the join can
+// trust them for the suggestion.
+func checkUnits(r *Report, present []*Receipt) {
+	for _, rc := range present {
+		w := rc.Inputs[GroupWeights]
+		if (Group{GroupWeights, WeightLines(w.Source, rc.Units)}).Digest() != w.Digest {
+			r.problem(Problem{Kind: KindInputMismatch, Shards: []int{rc.Index}, Group: GroupWeights, Hint: "receipts written by a different canopy, or edited",
+				Message: fmt.Sprintf("[weights] shard %d: its units don't match its weights digest", rc.Index)})
+		}
+	}
+}
+
 // checkCover verifies every package ran exactly once and returns the union of the shards' packages.
 func checkCover(r *Report, present []*Receipt, oneDigest, complete bool) []string {
 	units := unionUnits(present)
@@ -262,11 +278,11 @@ func checkCover(r *Report, present []*Receipt, oneDigest, complete bool) []strin
 		return units
 	}
 	if len(never) > 0 {
-		r.problem(Problem{Kind: KindNeverRan, Packages: never, Message: fmt.Sprintf("%s never ran: %s", plural(len(never), "package"), listOf(never))})
+		r.problem(Problem{Kind: KindNeverRan, Packages: never, Message: plural(len(never), "package") + " never ran"})
 	}
 	if len(twice) > 0 {
 		slices.Sort(twiceShards)
-		r.problem(Problem{Kind: KindRanTwice, Shards: slices.Compact(twiceShards), Packages: twice, Message: fmt.Sprintf("%s ran twice: %s", plural(len(twice), "package"), listOf(twice))})
+		r.problem(Problem{Kind: KindRanTwice, Shards: slices.Compact(twiceShards), Packages: twice, Message: plural(len(twice), "package") + " ran twice"})
 	}
 	for _, rc := range present {
 		var missing []string
@@ -276,7 +292,7 @@ func checkCover(r *Report, present []*Receipt, oneDigest, complete bool) []strin
 			}
 		}
 		if len(missing) > 0 {
-			r.problem(Problem{Kind: KindPlannedNotReported, Shards: []int{rc.Index}, Packages: missing, Message: fmt.Sprintf("shard %d planned but never reported: %s", rc.Index, listOf(missing))})
+			r.problem(Problem{Kind: KindPlannedNotReported, Shards: []int{rc.Index}, Packages: missing, Message: fmt.Sprintf("shard %d never reported %s it planned", rc.Index, plural(len(missing), "package"))})
 		}
 	}
 	return units
@@ -399,9 +415,9 @@ func (r *Report) coverage(in JoinInput, present []*Receipt) error {
 	return nil
 }
 
-// metrics folds the shards' observations into the metrics file and returns the merged metrics (nil
-// when the shards disagree on env or profile).
-func (r *Report) metrics(in JoinInput, present []*Receipt, old *Metrics, units []string) (*Metrics, error) {
+// metrics folds the shards' observations into the metrics file for their env and profile and
+// returns the merged metrics (nil when the shards disagree on env or profile).
+func (r *Report) metrics(in JoinInput, present []*Receipt, units []string) (*Metrics, error) {
 	m := &r.Checks.Metrics
 	obs := make([]Observations, 0, len(present))
 	fresh := map[string]bool{}
@@ -413,52 +429,26 @@ func (r *Report) metrics(in JoinInput, present []*Receipt, old *Metrics, units [
 	}
 	m.Packages = len(fresh)
 
+	var old *Metrics
+	if len(present) > 0 {
+		// a file that can't be used starts over, the same as it does for the shards
+		old, _, _ = LoadMetrics(MetricsPath(in.ShardDir, present[0].Metrics.Env, present[0].Metrics.Profile))
+	}
 	merged, warn := Merge(old, obs, units)
+	// timings from shards that don't add up to one verified run would skew every later split
+	if warn == "" && r.unverified() {
+		warn = "shards failed verification"
+	}
 	m.Warning = warn
 	m.OK = warn == ""
-	if merged != nil && in.WriteMetrics {
-		m.Path = filepath.Join(in.ShardDir, "metrics.json")
+	if merged != nil && m.OK && in.WriteMetrics {
+		m.Path = MetricsPath(in.ShardDir, merged.Env, merged.Profile)
 		if err := WriteMetrics(m.Path, merged); err != nil {
 			return merged, fmt.Errorf("unable to write metrics: %w", err)
 		}
 		m.Written = true
 	}
 	return merged, nil
-}
-
-// suggest weighs units by their lower median in m. Packages without samples are assumed to take
-// the median of the measured ones; with nothing measured only package counts are shown.
-func suggest(m *Metrics, units []string, total int, overhead time.Duration, p int) *Suggestion {
-	if len(units) == 0 {
-		return nil
-	}
-	var measured []int64
-	weights := map[string]int64{}
-	for _, u := range units {
-		if m != nil && len(m.Packages[u].MS) > 0 {
-			weights[u] = lowerMedian(m.Packages[u].MS)
-			measured = append(measured, weights[u])
-		}
-	}
-
-	fill := int64(1)
-	if len(measured) > 0 {
-		fill = lowerMedian(measured)
-	}
-	us := make([]Unit, 0, len(units))
-	for _, u := range units {
-		w, ok := weights[u]
-		if !ok {
-			w = fill
-		}
-		us = append(us, Unit{Package: u, Weight: w, Estimated: !ok})
-	}
-
-	s := NewSuggestion(us, total, overhead, p)
-	if len(measured) > 0 && len(measured) < len(units) {
-		s.Note = fmt.Sprintf("%s without timing data assumed to take the median package time", plural(len(units)-len(measured), "package"))
-	}
-	return s
 }
 
 // NewSuggestion builds the shard count suggestion for units weighted in ms. When no unit was
@@ -478,7 +468,7 @@ func NewSuggestion(us []Unit, current int, overhead time.Duration, p int) *Sugge
 	if !s.Static {
 		s.Best, table = Suggest(us, overhead, p)
 	}
-	for n := 1; n <= min(maxSuggestedShards, len(us)); n++ {
+	for n := 1; n <= min(MaxSuggestedShards, len(us)); n++ {
 		e := SuggestionEstimate{Shards: n}
 		for _, pkgs := range NewPlan(us, n).Shards {
 			e.Packages = append(e.Packages, len(pkgs))
@@ -534,7 +524,7 @@ func groupLines(group string, rc *Receipt) []string {
 	case GroupSelection:
 		lines := slices.Clone(in.Lines)
 		for _, u := range rc.Units {
-			lines = append(lines, "package "+u)
+			lines = append(lines, "package "+u.Package)
 		}
 		return lines
 	case GroupWeights:
@@ -636,7 +626,7 @@ func describeWeights(present []*Receipt) string {
 func unionUnits(present []*Receipt) []string {
 	var units []string
 	for _, rc := range present {
-		units = append(units, rc.Units...)
+		units = append(units, Packages(rc.Units)...)
 	}
 	slices.Sort(units)
 	return slices.Compact(units)

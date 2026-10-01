@@ -63,6 +63,8 @@ type shardInputs struct {
 	Counts      map[string]int64
 	Metrics     shard.ReceiptMetrics
 	MetricsPath string
+	Gates       shard.Gates
+	metrics     *shard.Metrics // the loaded metrics file, nil when there was none
 }
 
 // resolveShardInputs builds the digest inputs and weights from the resolved test config.
@@ -77,23 +79,23 @@ func resolveShardInputs(cfg testConfig) (*shardInputs, error) {
 	if err != nil {
 		return nil, err
 	}
-	run := shardRunLines(cfg)
+	run, profile := shardRunLines(cfg)
+	gates := shardGates(cfg)
 
 	counts, err := shard.TestCounts(cfg.Runtime.Packages)
 	if err != nil {
 		return nil, fmt.Errorf("unable to count tests: %w", err)
 	}
-	metricsPath := filepath.Join(cfg.Shard.Dir, "metrics.json")
-	m, metricsDigest, loadErr := shard.LoadMetrics(metricsPath)
 	// the profile is how tests run, not which packages run, so a subset run still matches main's metrics
-	profile := shard.Group{Name: shard.GroupRun, Lines: run}.Digest()
+	metricsPath := shard.MetricsPath(cfg.Shard.Dir, goEnv, profile)
+	m, metricsDigest, loadErr := shard.LoadMetrics(metricsPath)
 	w := shard.Weights(counts, m, loadErr, goEnv, profile)
 
 	return &shardInputs{
 		Inputs: shard.Inputs{
 			Selection: selection,
 			Run:       run,
-			Gates:     shardGateLines(cfg),
+			Gates:     gates.Lines(),
 			Go:        goLines,
 			Source:    shardSourceLines(),
 			Weights:   shard.WeightLines(w.Source, w.Units),
@@ -102,6 +104,8 @@ func resolveShardInputs(cfg testConfig) (*shardInputs, error) {
 		Counts:      counts,
 		Metrics:     shard.ReceiptMetrics{File: metricsDigest, Env: goEnv, Profile: profile, Ignored: w.Ignored},
 		MetricsPath: metricsPath,
+		Gates:       gates,
+		metrics:     m,
 	}, nil
 }
 
@@ -151,11 +155,10 @@ func shardTestPackages(cfg *testConfig, canopyVersion string) error {
 		Digest:      inputs.Digest(),
 		Metrics:     in.Metrics,
 		MetricsPath: in.MetricsPath,
+		Gates:       in.Gates,
 	}
-	if cfg.CoverMin > 0 {
-		v := cfg.CoverMin
-		sh.Gates.CoverMin = &v
-		log.Infof("coverage threshold %g%% deferred to 'canopy shard join'", v)
+	if g := sh.Gates.CoverMin; g != nil {
+		log.Infof("coverage threshold %g%% deferred to 'canopy shard join'", *g)
 	}
 
 	all := map[string]golist.Package{}
@@ -223,25 +226,57 @@ func shardSelectionLines(cfg testConfig) ([]string, error) {
 	return lines, nil
 }
 
-// shardRunLines is the [run] group: how the tests are built and run. The rendered flags are sorted
-// since they are rendered from maps (their order varies between processes).
-func shardRunLines(cfg testConfig) []string {
-	var lines []string
-	for _, f := range sortedCopy(cfg.GoBuild.RenderedFlags) {
-		lines = append(lines, "build-flag "+f)
+// runTiming classifies every [run] key by whether it changes how long a package's tests take. The
+// timing keys are the metrics profile: timings recorded under one profile don't hold for another.
+// Keys are go flag names, plus the canopy settings in shardRunLines. Every build and test flag must
+// be listed (a test enforces it); an unknown key counts as timing, so it can't mix timings silently.
+var runTiming = map[string]bool{
+	// build flags
+	"race": true, "msan": true, "asan": true, "tags": true, "gcflags": true, "ldflags": true,
+	"asmflags": true, "compiler": true, "gccgoflags": true, "buildmode": true, "linkshared": true,
+	"pgo": true, "toolexec": true, "overlay": true,
+	"cd": false, "all": false, "work": false, "trimpath": false, "buildvcs": false, "mod": false,
+	"modfile": false, "modcacherw": false, "pkgdir": false, "installsuffix": false,
+	// test flags
+	"count": true, "run": true, "bench": true, "parallel": true, "exec": true, "covermode": true,
+	"coverpkg": true,
+	"timeout":  false, "vet": false,
+	// canopy settings
+	"cover": true, "shuffle": true,
+	"no-cache": false, // only fresh results are recorded, so timings hold whether or not a run caches
+}
+
+// shardRunLines returns the [run] group (how the tests are built and run) and the metrics profile,
+// its timing lines. Both come from the same flags the run passes to go test.
+func shardRunLines(cfg testConfig) (run, profile []string) {
+	add := func(key, line string) {
+		run = append(run, line)
+		if timing, ok := runTiming[key]; timing || !ok {
+			profile = append(profile, line)
+		}
 	}
-	for _, f := range sortedCopy(cfg.GoTest.RenderedFlags) {
-		lines = append(lines, "test-flag "+f)
+	flags := resolveGoFlags(cfg)
+	for _, f := range flags.Build {
+		add(goFlagName(f), "build-flag "+f)
 	}
-	for _, f := range cfg.ExtraFlags {
-		lines = append(lines, "extra-flag "+f)
+	for _, f := range flags.Test {
+		add(goFlagName(f), "test-flag "+f)
 	}
-	return append(lines,
-		"cover "+strconv.FormatBool(cfg.Cover),
-		"no-cache "+strconv.FormatBool(cfg.NoCache),
-		// on/off only: the seed is generated per run
-		"shuffle "+strconv.FormatBool(cfg.Shuffle),
-	)
+	for _, f := range flags.Extra {
+		// anything could be in here, so it always counts
+		add("", "extra-flag "+f)
+	}
+	add("cover", "cover "+strconv.FormatBool(cfg.Cover))
+	add("no-cache", "no-cache "+strconv.FormatBool(cfg.NoCache))
+	// on/off only: the seed is generated per run
+	add("shuffle", "shuffle "+strconv.FormatBool(cfg.Shuffle))
+	return run, profile
+}
+
+// goFlagName is the name of a rendered flag: "-tags=x" is "tags".
+func goFlagName(f string) string {
+	name, _, _ := strings.Cut(strings.TrimLeft(f, "-"), "=")
+	return name
 }
 
 func sortedCopy(s []string) []string {
@@ -250,11 +285,15 @@ func sortedCopy(s []string) []string {
 	return c
 }
 
-func shardGateLines(cfg testConfig) []string {
+// shardGates are the result gates a shard defers to the join, recorded in the receipt and, as lines,
+// in the [gates] group.
+func shardGates(cfg testConfig) shard.Gates {
+	var g shard.Gates
 	if cfg.CoverMin > 0 {
-		return []string{fmt.Sprintf("covermin %g", cfg.CoverMin)}
+		v := cfg.CoverMin
+		g.CoverMin = &v
 	}
-	return nil
+	return g
 }
 
 // shardGoLines is the [go] group, from the toolchain `go test` will use (not the one canopy was built with).
@@ -326,7 +365,7 @@ func shardReceipt(sh *shardRuntime, canopyVersion string, run *gotest.Run, passe
 		Inputs:        map[string]shard.ReceiptInput{},
 		Metrics:       sh.Metrics,
 		Runner:        shard.ReceiptRunner{CPUs: runtime.NumCPU()},
-		Units:         []string{},
+		Units:         sh.Plan.Units,
 		Planned:       sh.Planned(),
 		LoadMS:        sh.Plan.Loads[sh.Index-1],
 		Reported:      []string{},
@@ -334,9 +373,6 @@ func shardReceipt(sh *shardRuntime, canopyVersion string, run *gotest.Run, passe
 		Failures:      []shard.Failure{},
 		Gates:         sh.Gates,
 		Observations:  map[string]int64{},
-	}
-	for _, u := range sh.Plan.Units {
-		r.Units = append(r.Units, u.Package)
 	}
 	for _, g := range sh.Inputs.Groups() {
 		ri := shard.ReceiptInput{Digest: g.Digest()}

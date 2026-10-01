@@ -9,7 +9,7 @@ FAIL    tests      1 failed test in 1 package
         └─ shard 2/3  m/d  TestReconcile
 ok      verified   every package ran exactly once (6 of 6, 3 of 3 receipts, 1 plan)
 ok      coverage   75.0%
-ok      metrics    5 packages updated in .canopy/shard/metrics.json
+ok      metrics    5 packages updated in .canopy/shard/metrics/linux-arm64-cced3044f0ac.json
 
 FAIL    33 passed / 1 failed / 3 skipped tests   2s slowest shard   75.0% covered
         └─ failure output is in the shard 2/3 job log

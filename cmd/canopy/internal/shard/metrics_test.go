@@ -12,7 +12,7 @@ import (
 func TestMerge(t *testing.T) {
 	env := Env{GOOS: "linux", GOARCH: "arm64"}
 	obs := func(ms map[string]int64) Observations {
-		return Observations{Env: env, Profile: "p", CPUs: 4, MS: ms}
+		return Observations{Env: env, Profile: []string{"p"}, CPUs: 4, MS: ms}
 	}
 
 	t.Run("a 6th sample drops the oldest", func(t *testing.T) {
@@ -51,16 +51,16 @@ func TestMerge(t *testing.T) {
 	})
 
 	t.Run("env reset", func(t *testing.T) {
-		old := &Metrics{Version: 1, Env: Env{GOOS: "linux", GOARCH: "amd64"}, Profile: "p", Packages: map[string]PackageMetrics{"a": {MS: []int64{9}}, "x": {MS: []int64{9}}}}
+		old := &Metrics{Version: 1, Env: Env{GOOS: "linux", GOARCH: "amd64"}, Profile: []string{"p"}, Packages: map[string]PackageMetrics{"a": {MS: []int64{9}}, "x": {MS: []int64{9}}}}
 		m, _ := Merge(old, []Observations{obs(map[string]int64{"a": 1})}, []string{"a"})
 		assert.Equal(t, map[string]PackageMetrics{"a": {MS: []int64{1}}}, m.Packages)
 		assert.Equal(t, env, m.Env)
 	})
 
 	t.Run("profile reset", func(t *testing.T) {
-		old := &Metrics{Version: 1, Env: env, Profile: "other", Packages: map[string]PackageMetrics{"a": {MS: []int64{9}}}}
+		old := &Metrics{Version: 1, Env: env, Profile: []string{"other"}, Packages: map[string]PackageMetrics{"a": {MS: []int64{9}}}}
 		m, _ := Merge(old, []Observations{obs(map[string]int64{"a": 1})}, []string{"a"})
-		assert.Equal(t, "p", m.Profile)
+		assert.Equal(t, []string{"p"}, m.Profile)
 		assert.Equal(t, []int64{1}, m.Packages["a"].MS)
 	})
 
@@ -72,14 +72,14 @@ func TestMerge(t *testing.T) {
 		assert.Equal(t, "shards disagree on env (linux/arm64 vs linux/amd64), metrics not saved", warn)
 
 		other = obs(nil)
-		other.Profile = "q"
+		other.Profile = []string{"q"}
 		m, warn = Merge(nil, []Observations{obs(nil), other}, nil)
 		assert.Nil(t, m)
 		assert.Equal(t, "shards disagree on test profile, metrics not saved", warn)
 	})
 
 	t.Run("cpus overwritten", func(t *testing.T) {
-		old := &Metrics{Version: 1, Env: env, Profile: "p", CPUs: 2}
+		old := &Metrics{Version: 1, Env: env, Profile: []string{"p"}, CPUs: 2}
 		m, _ := Merge(old, []Observations{obs(nil)}, nil)
 		assert.Equal(t, 4, m.CPUs)
 	})
@@ -89,7 +89,7 @@ func TestWriteLoadMetrics(t *testing.T) {
 	env := Env{GOOS: "linux", GOARCH: "arm64"}
 	build := func() *Metrics {
 		m, _ := Merge(nil, []Observations{
-			{Env: env, Profile: "p", CPUs: 4, MS: map[string]int64{"z": 1, "a": 2, "m": 3}},
+			{Env: env, Profile: []string{"p"}, CPUs: 4, MS: map[string]int64{"z": 1, "a": 2, "m": 3}},
 		}, []string{"z", "a", "m"})
 		return m
 	}
@@ -110,7 +110,9 @@ func TestWriteLoadMetrics(t *testing.T) {
     "goos": "linux",
     "goarch": "arm64"
   },
-  "profile": "p",
+  "profile": [
+    "p"
+  ],
   "cpus": 4,
   "packages": {
     "a": {

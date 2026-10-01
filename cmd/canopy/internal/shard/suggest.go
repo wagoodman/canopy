@@ -2,10 +2,12 @@ package shard
 
 import "time"
 
-const maxSuggestedShards = 16
+// MaxSuggestedShards is the largest shard count the suggestion (and `shard plan` without --shards) considers.
+const MaxSuggestedShards = 16
 
-// StaticSuggestionNote is shown instead of time estimates when no package was measured.
-const StaticSuggestionNote = "no timing data yet; showing package counts only"
+// StaticSuggestionNote is shown instead of time estimates when no package was measured. Why there is no timing data
+// is up to the caller (a missing file, or metrics that were ignored).
+const StaticSuggestionNote = "without timing data, showing package counts only"
 
 // Estimate is the predicted cost of running the units across a given number of shards.
 type Estimate struct {
@@ -27,7 +29,7 @@ func Suggest(units []Unit, overhead time.Duration, p int) (best int, table []Est
 	}
 
 	var fastest time.Duration
-	for n := 1; n <= min(maxSuggestedShards, len(units)); n++ {
+	for n := 1; n <= min(MaxSuggestedShards, len(units)); n++ {
 		plan := NewPlan(units, n)
 
 		// ponytail: assumes perfect packing within a shard, a rough lower bound that's fine for comparing n
@@ -57,6 +59,15 @@ func Suggest(units []Unit, overhead time.Duration, p int) (best int, table []Est
 		}
 	}
 	return 0, table
+}
+
+// SuggestionP is the go test -p the suggestion assumes: the runner CPU count the metrics recorded
+// (Merge takes it from the receipts), else fallback. Plan and join both go through here.
+func SuggestionP(m *Metrics, fallback int) int {
+	if m != nil && m.CPUs > 0 {
+		return m.CPUs
+	}
+	return fallback
 }
 
 func ms(v int64) time.Duration {

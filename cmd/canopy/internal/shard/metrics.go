@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 )
 
 const (
@@ -19,8 +21,8 @@ const (
 type Metrics struct {
 	Version  int                       `json:"version"`
 	Env      Env                       `json:"env"`
-	Profile  string                    `json:"profile"`
-	CPUs     int                       `json:"cpus"` // informational, never matched
+	Profile  []string                  `json:"profile"` // the [run] lines that affect timing (the CLI decides which)
+	CPUs     int                       `json:"cpus"`    // informational, never matched
 	Packages map[string]PackageMetrics `json:"packages"`
 }
 
@@ -32,9 +34,18 @@ type PackageMetrics struct {
 // Observations is what one shard measured: fresh, passing package times in ms.
 type Observations struct {
 	Env     Env
-	Profile string
+	Profile []string
 	CPUs    int
 	MS      map[string]int64
+}
+
+// MetricsPath is where the metrics for one env and profile live under the shard dir. Each identity
+// gets its own file, so matrix jobs that share a cache (a -race and a plain run) keep separate
+// histories instead of resetting each other's. It's the only place the path is built.
+// ponytail: files for profiles nobody runs anymore stay until the cache key prefix is bumped.
+func MetricsPath(shardDir string, env Env, profile []string) string {
+	key := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(profile, "\n"))))[:12]
+	return filepath.Join(shardDir, "metrics", fmt.Sprintf("%s-%s-%s.json", env.GOOS, env.GOARCH, key))
 }
 
 // LoadMetrics reads a metrics file and returns it with the sha256 digest of its bytes. The digest
@@ -49,10 +60,10 @@ func LoadMetrics(path string) (*Metrics, string, error) {
 
 	var m Metrics
 	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, digest, fmt.Errorf("corrupt metrics file: %w", err)
+		return nil, digest, fmt.Errorf("corrupt file: %w", err)
 	}
 	if m.Version != metricsVersion {
-		return nil, digest, fmt.Errorf("unsupported metrics version %d", m.Version)
+		return nil, digest, fmt.Errorf("unsupported version %d", m.Version)
 	}
 	return &m, digest, nil
 }
@@ -105,14 +116,14 @@ func Merge(old *Metrics, obs []Observations, units []string) (*Metrics, string) 
 		if o.Env != env {
 			return nil, fmt.Sprintf("shards disagree on env (%s vs %s), metrics not saved", env, o.Env)
 		}
-		if o.Profile != profile {
+		if !slices.Equal(o.Profile, profile) {
 			return nil, "shards disagree on test profile, metrics not saved"
 		}
 		cpus = max(cpus, o.CPUs)
 	}
 
 	// a different env or profile means the old samples describe different code or a different run
-	if old == nil || old.Env != env || old.Profile != profile {
+	if old == nil || old.Env != env || !slices.Equal(old.Profile, profile) {
 		old = &Metrics{}
 	}
 

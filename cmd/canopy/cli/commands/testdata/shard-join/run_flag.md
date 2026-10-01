@@ -8,16 +8,3 @@
 
 - ❌ **verified**: [run] shard 2 only: test-flag -run=TestDoesNotExist (a flag or CANOPY_TEST_* env var is set on some jobs only)
 - ✅ **coverage**: 75.0%
-
-<details><summary>shard count suggestion</summary>
-
-| shards | est. wall | runner time |
-|---|---|---|
-| 1 | 1s | 2s |
-| **2** | **1s** | **3s** |
-| 3 | 1s | 4s |
-| 4 | 1s | 5s |
-| 5 | 1s | 6s |
-| 6 | 1s | 7s |
-
-</details>

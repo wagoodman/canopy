@@ -621,9 +621,7 @@ func toSourceStateInput(s *source.State) *db.SourceStateInput {
 func buildRunConfig(cfg testConfig) gotest.RunnerConfig {
 	var args []string
 	args = append(args, cfg.Runtime.Packages.ImportPaths()...)
-	args = append(args, cfg.GoBuild.RenderedFlags...)
-	args = append(args, cfg.GoTest.RenderedFlags...)
-	args = append(args, cfg.ExtraFlags...)
+	args = append(args, resolveGoFlags(cfg).args()...)
 
 	fp := &gotest.ExecFingerprint{
 		Race:      cfg.Race,
@@ -647,6 +645,22 @@ func buildRunConfig(cfg testConfig) gotest.RunnerConfig {
 		UserArgs:    args,
 		Fingerprint: fp,
 	}
+}
+
+// goFlags are the flags canopy passes to `go test`, by where they come from. The run and the shard
+// [run] input group both come from here, so the digest covers exactly what runs.
+type goFlags struct {
+	Build, Test, Extra []string
+}
+
+// resolveGoFlags sorts the rendered build and test flags (they're rendered from maps, so their order
+// varies between processes). Extra flags keep the order they were given in.
+func resolveGoFlags(cfg testConfig) goFlags {
+	return goFlags{Build: sortedCopy(cfg.GoBuild.RenderedFlags), Test: sortedCopy(cfg.GoTest.RenderedFlags), Extra: cfg.ExtraFlags}
+}
+
+func (f goFlags) args() []string {
+	return slices.Concat(f.Build, f.Test, f.Extra)
 }
 
 // splitCSV splits a comma-separated flag value into trimmed, non-empty keys.

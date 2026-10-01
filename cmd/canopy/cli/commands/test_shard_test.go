@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -117,7 +118,8 @@ func TestShardRunLines_CoverEveryGoOption(t *testing.T) {
 	render := func() []string {
 		require.NoError(t, opts.Test.GoBuild.PostLoad())
 		require.NoError(t, opts.Test.GoTest.PostLoad())
-		return shardRunLines(opts.Test)
+		run, _ := shardRunLines(opts.Test)
+		return run
 	}
 	base := render()
 
@@ -144,10 +146,35 @@ func TestShardRunLines_CoverEveryGoOption(t *testing.T) {
 			default:
 				t.Fatalf("%s.%s: unhandled kind %s", v.Type().Name(), f.Name, field.Kind())
 			}
-			assert.NotEqual(t, base, render(), "%s.%s is not in the [run] input group", v.Type().Name(), f.Name)
+			run := render()
+			assert.NotEqual(t, base, run, "%s.%s is not in the [run] input group", v.Type().Name(), f.Name)
+			// every flag must say whether it's part of the metrics profile
+			for _, l := range run {
+				if slices.Contains(base, l) {
+					continue
+				}
+				key, val, _ := strings.Cut(l, " ")
+				if key == "build-flag" || key == "test-flag" {
+					key = goFlagName(val)
+				}
+				_, ok := runTiming[key]
+				assert.True(t, ok, "%s.%s renders %q, which runTiming doesn't classify", v.Type().Name(), f.Name, l)
+			}
 			field.Set(orig)
 		}
 	}
+}
+
+func TestShardRunLines_Profile(t *testing.T) {
+	cfg := testConfig{ExtraFlags: []string{"-failfast"}}
+	cfg.NoCache, cfg.Cover = true, true
+	cfg.GoBuild.RenderedFlags = []string{"-trimpath", "-race"}
+	cfg.GoTest.RenderedFlags = []string{"-timeout=5m", "-run=TestX"}
+	run, profile := shardRunLines(cfg)
+	assert.Equal(t, []string{"build-flag -race", "build-flag -trimpath", "test-flag -run=TestX", "test-flag -timeout=5m", "extra-flag -failfast", "cover true", "no-cache true", "shuffle false"}, run)
+	assert.Equal(t, []string{"build-flag -race", "test-flag -run=TestX", "extra-flag -failfast", "cover true", "shuffle false"}, profile)
+	// the run passes exactly the flags [run] records
+	assert.Equal(t, []string{"-race", "-trimpath", "-run=TestX", "-timeout=5m", "-failfast"}, resolveGoFlags(cfg).args())
 }
 
 func TestShardReceipt(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,9 +36,9 @@ type joinFixture struct {
 func newJoinFixture(metricsFile string) *joinFixture {
 	f := &joinFixture{}
 	for i, planned := range split {
-		var weights []Unit
+		var units []Unit
 		for _, p := range allPkgs {
-			weights = append(weights, Unit{Package: p, Weight: 100})
+			units = append(units, Unit{Package: p, Weight: 100})
 		}
 		in := Inputs{
 			Plan:      PlanLines("v0.9.0", 3),
@@ -45,7 +46,7 @@ func newJoinFixture(metricsFile string) *joinFixture {
 			Run:       []string{"test-flag -timeout=10m", "cover true", "no-cache false", "shuffle false"},
 			Go:        []string{"goversion go1.27.1", "goos linux", "goarch arm64", "env CGO_ENABLED=1"},
 			Source:    []string{"commit a1b2c3", "dirty false"},
-			Weights:   WeightLines(SourceMetrics, weights),
+			Weights:   []string{"source " + SourceMetrics}, // seal adds the units
 		}
 		obs := map[string]int64{}
 		var profile string
@@ -60,9 +61,9 @@ func newJoinFixture(metricsFile string) *joinFixture {
 			CanopyVersion: "v0.9.0",
 			Index:         i + 1,
 			Total:         3,
-			Metrics:       ReceiptMetrics{File: metricsFile, Env: env, Profile: "sha256:run"},
+			Metrics:       ReceiptMetrics{File: metricsFile, Env: env, Profile: []string{"sha256:run"}},
 			Runner:        ReceiptRunner{CPUs: 2},
-			Units:         allPkgs,
+			Units:         units,
 			Planned:       planned,
 			LoadMS:        int64(100 * len(planned)),
 			Reported:      planned,
@@ -85,11 +86,12 @@ func prefixed(prefix string, items []string) []string {
 	return out
 }
 
-// seal fills each receipt's digests and input lines from its Inputs, the way a shard would.
+// seal fills each receipt's digests and input lines from its Inputs and units, the way a shard would.
 func (f *joinFixture) seal() {
 	for i := range f.receipts {
 		in := f.inputs[i]
 		rc := &f.receipts[i]
+		in.Weights = WeightLines(strings.TrimPrefix(in.Weights[0], "source "), rc.Units)
 		rc.Digest = in.Digest()
 		rc.Inputs = map[string]ReceiptInput{}
 		for _, g := range in.Groups() {
@@ -136,11 +138,11 @@ func (f *joinFixture) write(t *testing.T, shardDir string) []LoadedReceipt {
 // writeOldMetrics writes a metrics file every package has samples in and returns its digest.
 func writeOldMetrics(t *testing.T, shardDir string) string {
 	t.Helper()
-	m := &Metrics{Version: metricsVersion, Env: env, Profile: "sha256:run", CPUs: 2, Packages: map[string]PackageMetrics{}}
+	m := &Metrics{Version: metricsVersion, Env: env, Profile: []string{"sha256:run"}, CPUs: 2, Packages: map[string]PackageMetrics{}}
 	for _, p := range allPkgs {
 		m.Packages[p] = PackageMetrics{MS: []int64{100}}
 	}
-	path := filepath.Join(shardDir, "metrics.json")
+	path := MetricsPath(shardDir, env, []string{"sha256:run"})
 	require.NoError(t, WriteMetrics(path, m))
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -239,8 +241,9 @@ func TestJoin(t *testing.T) {
 				for _, p := range allPkgs {
 					units = append(units, Unit{Package: p, Weight: 1, Estimated: true})
 				}
-				f.inputs[2].Weights = WeightLines(SourceStatic, units)
-				f.receipts[2].Metrics = ReceiptMetrics{Env: env, Profile: "sha256:run", Ignored: "no metrics file"}
+				f.inputs[2].Weights = []string{"source " + SourceStatic}
+				f.receipts[2].Units = units
+				f.receipts[2].Metrics = ReceiptMetrics{Env: env, Profile: []string{"sha256:run"}, Ignored: "no metrics file"}
 			},
 			golden:   "weights_mismatch",
 			wantExit: ExitUnverified,
@@ -307,10 +310,11 @@ func TestJoin(t *testing.T) {
 			name: "different package selection",
 			mutate: func(f *joinFixture) {
 				f.inputs[2].Selection = append(slices.Clone(f.inputs[2].Selection), "package m/g", "package m/h")
-				f.receipts[2].Units = append(slices.Clone(allPkgs), "m/g", "m/h")
+				f.receipts[2].Units = append(slices.Clone(f.receipts[2].Units), Unit{Package: "m/g", Weight: 100}, Unit{Package: "m/h", Weight: 100})
 			},
 			wantExit: ExitUnverified,
-			want:     []string{KindInputMismatch},
+			// more units means more weight lines, so [weights] differs too
+			want: []string{KindInputMismatch, KindInputMismatch},
 			check: func(t *testing.T, r Report) {
 				p := problemOf(t, r, KindInputMismatch)
 				assert.Equal(t, "[selection] shard 3 has 2 packages the others don't: m/g, m/h", p.Message)
@@ -338,7 +342,8 @@ func TestJoin(t *testing.T) {
 			check: func(t *testing.T, r Report) {
 				p := r.Problems[0]
 				assert.Equal(t, []int{2}, p.Shards)
-				assert.Equal(t, "shard 2 planned but never reported: m/d", p.Message)
+				assert.Equal(t, "shard 2 never reported 1 package it planned", p.Message)
+				assert.Equal(t, []string{"m/d"}, p.Packages)
 			},
 		},
 		{
@@ -355,6 +360,8 @@ func TestJoin(t *testing.T) {
 				twice := problemOf(t, r, KindRanTwice)
 				assert.Equal(t, []string{"m/d"}, twice.Packages)
 				assert.Equal(t, []int{2, 3}, twice.Shards)
+				assert.False(t, r.Checks.Metrics.Written, "unverified timings must not be saved")
+				assert.Equal(t, "shards failed verification", r.Checks.Metrics.Warning)
 			},
 		},
 		{
@@ -506,8 +513,8 @@ func TestJoin(t *testing.T) {
 			check: func(t *testing.T, r Report) {
 				assert.False(t, r.Checks.Metrics.Written)
 				assert.Contains(t, r.Checks.Metrics.Warning, "shards disagree on env")
-				assert.True(t, r.Suggestion.Static)
-				assert.Equal(t, StaticSuggestionNote, r.Suggestion.Note)
+				// the suggestion comes from the units the shards planned with, not the merge
+				assert.False(t, r.Suggestion.Static)
 			},
 		},
 	}
@@ -612,4 +619,27 @@ func TestIsBareFileName(t *testing.T) {
 			t.Errorf("isBareFileName(%q) = %v, want %v", name, got, want)
 		}
 	}
+}
+
+func TestJoin_UnitsMustMatchWeightsDigest(t *testing.T) {
+	dir := t.TempDir()
+	f := newJoinFixture("")
+	f.seal()
+	f.receipts[1].Units[0].Weight = 999
+	r, err := Join(JoinInput{Receipts: f.write(t, dir), OutDir: OutDir(dir), ShardDir: dir})
+	require.NoError(t, err)
+	assert.Equal(t, ExitUnverified, r.ExitCode)
+	p := problemOf(t, r, KindInputMismatch)
+	assert.Equal(t, "[weights] shard 2: its units don't match its weights digest", p.Message)
+	assert.Nil(t, r.Suggestion)
+}
+
+func TestJoin_SuggestionMatchesPlan(t *testing.T) {
+	dir := t.TempDir()
+	f := newJoinFixture("")
+	f.seal()
+	r, err := Join(JoinInput{Receipts: f.write(t, dir), OutDir: OutDir(dir), ShardDir: dir, Overhead: time.Second})
+	require.NoError(t, err)
+	// what `shard plan` computes from the same units and runner cpus
+	assert.Equal(t, NewSuggestion(f.receipts[0].Units, 3, time.Second, SuggestionP(nil, 2)), r.Suggestion)
 }

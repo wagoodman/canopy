@@ -38,10 +38,10 @@
       "profile": ".canopy/shard/coverage.out"
     },
     "metrics": {
-      "ok": true,
-      "written": true,
-      "path": ".canopy/shard/metrics.json",
-      "packages": 6
+      "ok": false,
+      "written": false,
+      "packages": 6,
+      "warning": "shards failed verification"
     }
   },
   "shards": [
@@ -54,7 +54,7 @@
         "source": "metrics",
         "measured": 6,
         "estimated": 0,
-        "metrics_file": "sha256:39947a22b15545d78800ca8aca05020af2fa30052864b1c501d10151dbd7da22"
+        "metrics_file": "sha256:451171ec63f4cda18e60113c19c07bd3173feaf9ed837cc99891ebf59fa687ff"
       },
       "estimated_ms": 200,
       "planned": [
@@ -84,7 +84,7 @@
         "source": "metrics",
         "measured": 6,
         "estimated": 0,
-        "metrics_file": "sha256:39947a22b15545d78800ca8aca05020af2fa30052864b1c501d10151dbd7da22"
+        "metrics_file": "sha256:451171ec63f4cda18e60113c19c07bd3173feaf9ed837cc99891ebf59fa687ff"
       },
       "estimated_ms": 200,
       "planned": [
@@ -173,7 +173,7 @@
           "ignored: no metrics file": [
             3
           ],
-          "sha256:39947a22b15545d78800ca8aca05020af2fa30052864b1c501d10151dbd7da22": [
+          "sha256:451171ec63f4cda18e60113c19c07bd3173feaf9ed837cc99891ebf59fa687ff": [
             1,
             2
           ]
@@ -189,80 +189,8 @@
         }
       },
       "hint": "a cache race, or a partial rerun after main saved new metrics; rerun all jobs",
-      "message": "[weights] shards 1,2: metrics sha256:39947a22 (6 measured, 0 estimated) / shard 3: static (no metrics file)"
+      "message": "[weights] shards 1,2: metrics sha256:451171ec (6 measured, 0 estimated) / shard 3: static (no metrics file)"
     }
   ],
-  "warnings": [],
-  "suggestion": {
-    "current": 3,
-    "best": 2,
-    "static": false,
-    "slowest_package": "m/a",
-    "slowest_ms": 100,
-    "estimates": [
-      {
-        "shards": 1,
-        "wall_ms": 1300,
-        "runner_ms": 1600,
-        "packages": [
-          6
-        ]
-      },
-      {
-        "shards": 2,
-        "wall_ms": 1150,
-        "runner_ms": 2600,
-        "packages": [
-          3,
-          3
-        ]
-      },
-      {
-        "shards": 3,
-        "wall_ms": 1100,
-        "runner_ms": 3600,
-        "packages": [
-          2,
-          2,
-          2
-        ]
-      },
-      {
-        "shards": 4,
-        "wall_ms": 1100,
-        "runner_ms": 4600,
-        "packages": [
-          2,
-          2,
-          1,
-          1
-        ]
-      },
-      {
-        "shards": 5,
-        "wall_ms": 1100,
-        "runner_ms": 5600,
-        "packages": [
-          2,
-          1,
-          1,
-          1,
-          1
-        ]
-      },
-      {
-        "shards": 6,
-        "wall_ms": 1100,
-        "runner_ms": 6600,
-        "packages": [
-          1,
-          1,
-          1,
-          1,
-          1,
-          1
-        ]
-      }
-    ]
-  }
+  "warnings": []
 }

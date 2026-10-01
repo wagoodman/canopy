@@ -197,7 +197,7 @@ jobs:
 
           # the merged metrics get written (uploaded below for the metrics pass)
           jq -e '.checks.metrics.written' report.json
-          test -s .canopy/shard/metrics.json
+          test -s "$(jq -r .checks.metrics.path report.json)"
 
       - name: Combined event log
         run: |
@@ -274,7 +274,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: metrics
-          path: .canopy/shard/metrics.json
+          path: .canopy/shard/metrics/
           include-hidden-files: true
           if-no-files-found: error
 
@@ -304,7 +304,7 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: metrics
-          path: .canopy/shard
+          path: .canopy/shard/metrics
 
       - name: Install canopy
         run: |

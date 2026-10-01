@@ -244,13 +244,13 @@ With no `-o`, you get `text`, plus `github-summary` when `$GITHUB_STEP_SUMMARY` 
 
 ### Level 4: metrics
 
-Shards and the join restore a cached `metrics.json`, and the join on main saves it back.
+Shards and the join restore the cached `.canopy/shard/metrics/` directory, and the join on main saves it back. A join that fails verification leaves it alone, since those timings don't come from one consistent run.
 
 ```yaml
       # added before `canopy test` in the test job, and before `canopy shard join` in the join job
       - uses: actions/cache/restore@...
         with:
-          path: .canopy/shard/metrics.json
+          path: .canopy/shard/metrics/
           key: canopy-shard-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}
           restore-keys: canopy-shard-${{ runner.os }}-${{ runner.arch }}-
 
@@ -258,18 +258,19 @@ Shards and the join restore a cached `metrics.json`, and the join on main saves 
       - if: always() && github.ref == 'refs/heads/main'
         uses: actions/cache/save@...
         with:
-          path: .canopy/shard/metrics.json
+          path: .canopy/shard/metrics/
           key: canopy-shard-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}
 ```
 
-Packages with a measured time use it, and the rest get their test count converted to time at the rate the measured ones run. Missing, corrupt or foreign metrics make every shard fall back to test counts the same way, so losing the cache costs balance and nothing else. The join also prints a shard count suggestion with estimated wall and runner time for each option. It is only advice, so you edit the matrix list by hand. `canopy shard plan ./... --shards 4` shows how packages would be split without running anything (`-o json` for scripts).
+Packages with a measured time use it, and the rest get their test count converted to time at the rate the measured ones run. Missing, corrupt or foreign metrics make every shard fall back to test counts the same way, so losing the cache costs balance and nothing else. The join also prints a shard count suggestion with estimated wall and runner time for each option, from the same weights the shards split by, so it matches what `canopy shard plan` shows. It is only advice, so you edit the matrix list by hand. `canopy shard plan ./... --shards 4` shows how packages would be split without running anything (`-o json` for scripts).
 
 Caching notes:
 
 - only the join on main saves; shards and PR joins only read
 - cache entries can't be overwritten, so each save gets a fresh key (by `run_id`) and restores take the newest one by prefix
+- there's one file per platform and test profile (the `[run]` settings that change timings, like `-race`, `-tags` or `--cover`), so matrix jobs that differ in those keep separate timings in the same cache
 - to reset, bump the key prefix
-- aging out is passive. GitHub evicts entries that go unread for 7 days, the file keeps at most 5 samples per package, packages missing from the last 10 saves are dropped, and an environment change starts the file over. No cleanup job and no `actions: write`
+- aging out is passive. GitHub evicts entries that go unread for 7 days, each file keeps at most 5 samples per package, and packages missing from the last 10 saves are dropped. No cleanup job and no `actions: write`
 
 If the join reports a `[weights]` mismatch, use **Re-run all jobs**, not "Re-run failed jobs". Re-running one shard after main saved new metrics gives that shard a different split than its siblings. The same message shows up if a cache save lands while a run's shards are starting.
 

@@ -119,7 +119,7 @@ func ShardJoin(app clio.Application) *cobra.Command {
 the shards add up to one complete test run: every shard 1 to n is present, all shards ran with
 the same inputs (packages, flags, toolchain, commit and weights), and every package ran exactly
 once. It then merges the coverprofiles into <shard-dir>/coverage.out, applies covermin, folds
-the fresh timings into <shard-dir>/metrics.json and suggests a shard count.
+the fresh timings into <shard-dir>/metrics/ and suggests a shard count.
 
 The join needs no checkout and no Go toolchain. covermin comes from the join's own config
 (flag, env or .canopy.yaml) when set, otherwise from what the shards recorded.
@@ -270,7 +270,7 @@ func ShardPlan(app clio.Application) *cobra.Command {
 		Short: "Show how packages would be split across shards",
 		Long: `Compute the shard plan 'canopy test --shard i/n' would run, without running any tests: the
 packages each shard gets, their estimated load, the input digest and where the weights came from
-(timing metrics in <shard-dir>/metrics.json, or test counts without them), plus a shard count
+(timing metrics in <shard-dir>/metrics/, or test counts without them), plus a shard count
 suggestion.
 
 The plan takes the same config, package selection and flags as 'canopy test', so given the same
@@ -323,15 +323,9 @@ type shardPlanTotal struct {
 }
 
 type shardPlanShard struct {
-	Index    int             `json:"index"`
-	Load     int64           `json:"load"`
-	Packages []shardPlanUnit `json:"packages"`
-}
-
-type shardPlanUnit struct {
-	Package   string `json:"package"`
-	Weight    int64  `json:"weight"`
-	Estimated bool   `json:"estimated"`
+	Index    int          `json:"index"`
+	Load     int64        `json:"load"`
+	Packages []shard.Unit `json:"packages"`
 }
 
 func buildShardPlan(opts *shardPlanConfig, canopyVersion string) (*shardPlanReport, error) {
@@ -357,7 +351,7 @@ func buildShardPlan(opts *shardPlanConfig, canopyVersion string) (*shardPlanRepo
 	totals := []int{opts.Shards}
 	if opts.Shards == 0 {
 		totals = nil
-		for n := 1; n <= min(16, len(w.Units)); n++ {
+		for n := 1; n <= min(shard.MaxSuggestedShards, len(w.Units)); n++ {
 			totals = append(totals, n)
 		}
 	}
@@ -369,9 +363,9 @@ func buildShardPlan(opts *shardPlanConfig, canopyVersion string) (*shardPlanRepo
 		plan, inputs := in.forTotal(canopyVersion, n)
 		pt := shardPlanTotal{Total: n, Digest: inputs.Digest()}
 		for i, pkgs := range plan.Shards {
-			s := shardPlanShard{Index: i + 1, Load: plan.Loads[i], Packages: []shardPlanUnit{}}
+			s := shardPlanShard{Index: i + 1, Load: plan.Loads[i], Packages: []shard.Unit{}}
 			for _, p := range pkgs {
-				s.Packages = append(s.Packages, shardPlanUnit{Package: p, Weight: weights[p].Weight, Estimated: weights[p].Estimated})
+				s.Packages = append(s.Packages, weights[p])
 			}
 			pt.Shards = append(pt.Shards, s)
 		}
@@ -380,10 +374,7 @@ func buildShardPlan(opts *shardPlanConfig, canopyVersion string) (*shardPlanRepo
 
 	if len(w.Units) > 0 {
 		// the p the metrics were measured with, which is what `go test` would use on the same runners
-		p := runtime.NumCPU()
-		if m, _, err := shard.LoadMetrics(in.MetricsPath); err == nil && m.CPUs > 0 {
-			p = m.CPUs
-		}
+		p := shard.SuggestionP(in.metrics, runtime.NumCPU())
 		r.Suggestion = shard.NewSuggestion(w.Units, opts.Shards, cfg.Shard.ParsedOverhead(), p)
 	}
 	return r, nil

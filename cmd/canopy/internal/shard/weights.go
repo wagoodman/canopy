@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"slices"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/wagoodman/canopy/cmd/canopy/internal/golist"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/gotest"
@@ -14,6 +16,10 @@ import (
 const (
 	SourceMetrics = "metrics"
 	SourceStatic  = "static"
+
+	// NoMetricsFile is why a run without a metrics file weighs by test count. Unlike the other reasons it isn't a
+	// fallback, it's how every setup starts.
+	NoMetricsFile = "no metrics file"
 )
 
 // Env is the part of the environment that decides which files build, so metrics from another Env
@@ -56,10 +62,15 @@ type WeightResult struct {
 	Ignored   string // why metrics weren't used, empty when they were
 }
 
+// FellBack reports whether there were metrics that couldn't be used, so the split fell back to test counts.
+func (w WeightResult) FellBack() bool {
+	return w.Source == SourceStatic && w.Ignored != NoMetricsFile
+}
+
 // Weights turns test counts into units. m and loadErr are the results of LoadMetrics; metrics are
 // used only when they loaded and match env and profile. Measured packages weigh the lower median
 // of their samples, the rest are test counts scaled into ms by the measured packages.
-func Weights(counts map[string]int64, m *Metrics, loadErr error, env Env, profile string) WeightResult {
+func Weights(counts map[string]int64, m *Metrics, loadErr error, env Env, profile []string) WeightResult {
 	pkgs := make([]string, 0, len(counts))
 	for p := range counts {
 		pkgs = append(pkgs, p)
@@ -79,7 +90,7 @@ func Weights(counts map[string]int64, m *Metrics, loadErr error, env Env, profil
 			}
 		}
 		if len(measured) == 0 {
-			ignored = "no metrics for the current packages"
+			ignored = "metrics ignored, none of these packages were measured"
 		}
 	}
 
@@ -104,20 +115,34 @@ func Weights(counts map[string]int64, m *Metrics, loadErr error, env Env, profil
 	return r
 }
 
-func metricsIgnored(m *Metrics, loadErr error, env Env, profile string) string {
+// metricsIgnored says why metrics can't be used. Every reason but NoMetricsFile starts with "metrics ignored", so
+// wherever it's shown it reads as a fallback.
+func metricsIgnored(m *Metrics, loadErr error, env Env, profile []string) string {
 	switch {
-	case errors.Is(loadErr, fs.ErrNotExist):
-		return "no metrics file"
+	case errors.Is(loadErr, fs.ErrNotExist), loadErr == nil && m == nil:
+		return NoMetricsFile
 	case loadErr != nil:
-		return loadErr.Error()
-	case m == nil:
-		return "no metrics file"
+		return "metrics ignored, " + loadErr.Error()
 	case m.Env != env:
-		return fmt.Sprintf("metrics recorded on %s, this is %s", m.Env, env)
-	case m.Profile != profile:
-		return "metrics recorded with a different test profile"
+		return fmt.Sprintf("metrics ignored, recorded on %s but this is %s", m.Env, env)
+	case !slices.Equal(m.Profile, profile):
+		return fmt.Sprintf("metrics ignored, recorded with %s but this run has %s", onlyIn(m.Profile, profile), onlyIn(profile, m.Profile))
 	}
 	return ""
+}
+
+// onlyIn quotes the lines of a that aren't in b, for saying how two profiles differ.
+func onlyIn(a, b []string) string {
+	var out []string
+	for _, l := range a {
+		if !slices.Contains(b, l) {
+			out = append(out, strconv.Quote(l))
+		}
+	}
+	if len(out) == 0 {
+		return "none of those"
+	}
+	return strings.Join(out, ", ")
 }
 
 func lowerMedian(ms []int64) int64 {

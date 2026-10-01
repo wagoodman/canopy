@@ -8,7 +8,8 @@ import (
 	"sort"
 )
 
-const ReceiptVersion = 1
+// ReceiptVersion changes only when a field changes meaning; adding a field doesn't bump it.
+const ReceiptVersion = 2
 
 // Receipt is what one shard writes after it runs: what it was asked to run, with which inputs, and
 // what actually happened. The join reads only receipts, so it needs no checkout.
@@ -21,7 +22,7 @@ type Receipt struct {
 	Inputs        map[string]ReceiptInput `json:"inputs"` // keyed by group name (plan, selection, run, ...)
 	Metrics       ReceiptMetrics          `json:"metrics"`
 	Runner        ReceiptRunner           `json:"runner"`
-	Units         []string                `json:"units"`
+	Units         []Unit                  `json:"units"` // the planned units with the weights they were split by, sorted by package
 	Planned       []string                `json:"planned"`
 	LoadMS        int64                   `json:"load_ms"` // this shard's planned load (ms with metrics, test counts without)
 	Reported      []string                `json:"reported"`
@@ -47,10 +48,10 @@ type ReceiptInput struct {
 
 // ReceiptMetrics explains where the weights came from. It is not part of the digest.
 type ReceiptMetrics struct {
-	File    string `json:"file,omitempty"` // sha256 of the metrics file bytes
-	Env     Env    `json:"env"`
-	Profile string `json:"profile"`
-	Ignored string `json:"ignored"`
+	File    string   `json:"file,omitempty"` // sha256 of the metrics file bytes
+	Env     Env      `json:"env"`
+	Profile []string `json:"profile"`
+	Ignored string   `json:"ignored"`
 }
 
 type ReceiptRunner struct {
@@ -71,6 +72,14 @@ type Failure struct {
 // Gates are the result gates a shard resolved and deferred to the join. Unset gates are nil.
 type Gates struct {
 	CoverMin *float64 `json:"covermin,omitempty"`
+}
+
+// Lines is the [gates] input group for these gates.
+func (g Gates) Lines() []string {
+	if g.CoverMin != nil {
+		return []string{fmt.Sprintf("covermin %g", *g.CoverMin)}
+	}
+	return nil
 }
 
 // ReceiptPath is where shard i writes its receipt under the shard dir.

@@ -7,7 +7,7 @@ canopy shard join: 3 shards, 6 packages, inputs sha256:a62ace69 (weights from me
 
 ok      verified   every package ran exactly once (6 of 6, 3 of 3 receipts, 1 plan)
 ok      coverage   75.0%
-ok      metrics    6 packages updated in .canopy/shard/metrics.json
+ok      metrics    6 packages updated in .canopy/shard/metrics/linux-arm64-cced3044f0ac.json
 
 PASS    33 passed / 3 skipped tests   2s slowest shard   75.0% covered
 

@@ -11,6 +11,6 @@
 
 <details><summary>shard count suggestion</summary>
 
-no timing data yet; showing package counts only
+without timing data, showing package counts only
 
 </details>

@@ -31,7 +31,7 @@ type Shard struct {
 	// Disabled prevents the shard flags from being added to the command.
 	Disabled bool `yaml:"-" json:"-" mapstructure:"-"`
 
-	// Dir holds metrics.json and the out/ dir with receipts (independent of the store dir).
+	// Dir holds the metrics/ dir and the out/ dir with receipts (independent of the store dir).
 	Dir string `yaml:"dir" json:"dir" mapstructure:"dir"`
 	// Overhead is the fixed per-shard cost (runner startup, checkout, build) the shard count suggestion assumes.
 	Overhead string `yaml:"overhead" json:"overhead" mapstructure:"overhead"`

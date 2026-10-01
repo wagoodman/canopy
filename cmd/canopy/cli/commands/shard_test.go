@@ -56,8 +56,10 @@ func exitCode(err error) int {
 func writeJoinReceipts(t *testing.T, dir string, coverMin *float64) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(shard.OutDir(dir), 0o755))
-	units := []string{"m/p1", "m/p2", "m/p3"}
-	for i, pkg := range units {
+	units := []shard.Unit{{Package: "m/p1", Weight: 1}, {Package: "m/p2", Weight: 1}, {Package: "m/p3", Weight: 1}}
+	weights := shard.ReceiptInput{Digest: shard.Group{Name: shard.GroupWeights, Lines: shard.WeightLines(shard.SourceStatic, units)}.Digest(), Source: shard.SourceStatic}
+	for i, u := range units {
+		pkg := u.Package
 		cover := fmt.Sprintf("shard-%d.coverprofile", i+1)
 		profile := fmt.Sprintf("mode: set\n%[1]s/f.go:1.1,2.1 1 1\n%[1]s/f.go:3.1,4.1 1 0\n", pkg)
 		require.NoError(t, os.WriteFile(filepath.Join(shard.OutDir(dir), cover), []byte(profile), 0o600))
@@ -67,6 +69,7 @@ func writeJoinReceipts(t *testing.T, dir string, coverMin *float64) {
 			Index:         i + 1,
 			Total:         len(units),
 			Digest:        "sha256:same",
+			Inputs:        map[string]shard.ReceiptInput{shard.GroupWeights: weights},
 			Units:         units,
 			Planned:       []string{pkg},
 			Reported:      []string{pkg},

@@ -52,7 +52,7 @@ func TestWeights(t *testing.T) {
 	env := Env{GOOS: "linux", GOARCH: "arm64"}
 	counts := map[string]int64{"a": 9, "b": 1, "c": 199, "d": 0}
 	metrics := func(pkgs map[string][]int64) *Metrics {
-		m := &Metrics{Version: 1, Env: env, Profile: "p", CPUs: 4, Packages: map[string]PackageMetrics{}}
+		m := &Metrics{Version: 1, Env: env, Profile: []string{"p"}, CPUs: 4, Packages: map[string]PackageMetrics{}}
 		for p, ms := range pkgs {
 			m.Packages[p] = PackageMetrics{MS: ms}
 		}
@@ -60,7 +60,7 @@ func TestWeights(t *testing.T) {
 	}
 
 	t.Run("static without metrics", func(t *testing.T) {
-		r := Weights(counts, nil, nil, env, "p")
+		r := Weights(counts, nil, nil, env, []string{"p"})
 		assert.Equal(t, SourceStatic, r.Source)
 		assert.Equal(t, "no metrics file", r.Ignored)
 		assert.Equal(t, []Unit{
@@ -74,7 +74,7 @@ func TestWeights(t *testing.T) {
 
 	t.Run("one measured package keeps the test-count ratios for the rest", func(t *testing.T) {
 		// a: s=10, lower median of [300 100 200 400] is 200, so 20ms per unit of s
-		r := Weights(counts, metrics(map[string][]int64{"a": {300, 100, 200, 400}}), nil, env, "p")
+		r := Weights(counts, metrics(map[string][]int64{"a": {300, 100, 200, 400}}), nil, env, []string{"p"})
 		assert.Equal(t, SourceMetrics, r.Source)
 		assert.Empty(t, r.Ignored)
 		assert.Equal(t, 1, r.Measured)
@@ -88,7 +88,7 @@ func TestWeights(t *testing.T) {
 	})
 
 	t.Run("new package with more tests is estimated heavier", func(t *testing.T) {
-		r := Weights(counts, metrics(map[string][]int64{"a": {5000}, "d": {10}}), nil, env, "p")
+		r := Weights(counts, metrics(map[string][]int64{"a": {5000}, "d": {10}}), nil, env, []string{"p"})
 		w := map[string]int64{}
 		for _, u := range r.Units {
 			w[u.Package] = u.Weight
@@ -98,7 +98,7 @@ func TestWeights(t *testing.T) {
 	})
 
 	t.Run("estimates are at least 1", func(t *testing.T) {
-		r := Weights(counts, metrics(map[string][]int64{"c": {0}}), nil, env, "p")
+		r := Weights(counts, metrics(map[string][]int64{"c": {0}}), nil, env, []string{"p"})
 		for _, u := range r.Units {
 			if u.Estimated {
 				assert.Equal(t, int64(1), u.Weight, u.Package)
@@ -109,7 +109,7 @@ func TestWeights(t *testing.T) {
 	t.Run("different cpu count still uses metrics", func(t *testing.T) {
 		m := metrics(map[string][]int64{"a": {100}})
 		m.CPUs = 64
-		assert.Equal(t, SourceMetrics, Weights(counts, m, nil, env, "p").Source)
+		assert.Equal(t, SourceMetrics, Weights(counts, m, nil, env, []string{"p"}).Source)
 	})
 
 	dir := t.TempDir()
@@ -125,19 +125,26 @@ func TestWeights(t *testing.T) {
 		reason string
 	}{
 		{name: "missing", path: filepath.Join(dir, "nope.json"), env: env, reason: "no metrics file"},
-		{name: "corrupt", path: file("corrupt.json", "{"), env: env, reason: "corrupt metrics file: unexpected end of JSON input"},
-		{name: "version", path: file("v2.json", `{"version": 2}`), env: env, reason: "unsupported metrics version 2"},
-		{name: "env", path: file("env.json", `{"version": 1, "env": {"goos": "linux", "goarch": "amd64"}, "profile": "p", "packages": {"a": {"ms": [1]}}}`), env: env, reason: "metrics recorded on linux/amd64, this is linux/arm64"},
-		{name: "profile", path: file("profile.json", `{"version": 1, "env": {"goos": "linux", "goarch": "arm64"}, "profile": "other", "packages": {"a": {"ms": [1]}}}`), env: env, reason: "metrics recorded with a different test profile"},
-		{name: "no overlap", path: file("overlap.json", `{"version": 1, "env": {"goos": "linux", "goarch": "arm64"}, "profile": "p", "packages": {"gone": {"ms": [1]}}}`), env: env, reason: "no metrics for the current packages"},
+		{name: "corrupt", path: file("corrupt.json", "{"), env: env, reason: "metrics ignored, corrupt file: unexpected end of JSON input"},
+		{name: "version", path: file("v2.json", `{"version": 2}`), env: env, reason: "metrics ignored, unsupported version 2"},
+		{name: "env", path: file("env.json", `{"version": 1, "env": {"goos": "linux", "goarch": "amd64"}, "profile": ["p"], "packages": {"a": {"ms": [1]}}}`), env: env, reason: "metrics ignored, recorded on linux/amd64 but this is linux/arm64"},
+		{name: "profile", path: file("profile.json", `{"version": 1, "env": {"goos": "linux", "goarch": "arm64"}, "profile": ["cover true", "p"], "packages": {"a": {"ms": [1]}}}`), env: env, reason: `metrics ignored, recorded with "cover true" but this run has none of those`},
+		{name: "no overlap", path: file("overlap.json", `{"version": 1, "env": {"goos": "linux", "goarch": "arm64"}, "profile": ["p"], "packages": {"gone": {"ms": [1]}}}`), env: env, reason: "metrics ignored, none of these packages were measured"},
 	}
+	t.Run("profile diff", func(t *testing.T) {
+		m := &Metrics{Version: 1, Env: env, Profile: []string{"cover true", "test-flag -race"}}
+		r := Weights(counts, m, nil, env, []string{"cover false", "test-flag -race"})
+		assert.Equal(t, `metrics ignored, recorded with "cover true" but this run has "cover false"`, r.Ignored)
+	})
+
 	for _, tt := range fallbacks {
 		t.Run("fallback "+tt.name, func(t *testing.T) {
 			m, _, err := LoadMetrics(tt.path)
-			r := Weights(counts, m, err, tt.env, "p")
+			r := Weights(counts, m, err, tt.env, []string{"p"})
 			assert.Equal(t, SourceStatic, r.Source)
 			assert.Equal(t, tt.reason, r.Ignored)
-			assert.Equal(t, Weights(counts, nil, nil, env, "p").Units, r.Units)
+			assert.Equal(t, tt.name != "missing", r.FellBack())
+			assert.Equal(t, Weights(counts, nil, nil, env, []string{"p"}).Units, r.Units)
 		})
 	}
 }
