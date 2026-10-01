@@ -286,15 +286,7 @@ func writeJoinAftermath(b *strings.Builder, st style.Go, r shard.Report) {
 
 // suggestionVerdict is `4 shards would be ~6s faster`, or the same wall on fewer runners.
 func suggestionVerdict(s *shard.Suggestion) string {
-	wall := func(n int) int64 {
-		for _, e := range s.Estimates {
-			if e.Shards == n {
-				return e.WallMS
-			}
-		}
-		return 0
-	}
-	if saved := wall(s.Current) - wall(s.Best); saved >= 1000 {
+	if saved := suggestionWall(s, s.Current) - suggestionWall(s, s.Best); saved >= 1000 {
 		return fmt.Sprintf("%s would be ~%s faster", countOf(s.Best, "shard"), fmtMS(saved))
 	}
 	return countOf(s.Best, "shard") + " would be as fast on fewer runners"
@@ -311,37 +303,34 @@ func suggestionEstimates(s *shard.Suggestion) string {
 	return strings.Join(parts, "  ")
 }
 
-// packageTrimmer drops the path prefix every package in the report shares (usually the module path),
-// always keeping at least the last element.
+// packageTrimmer drops the path prefix every package in the report shares (usually the module path).
 func packageTrimmer(r shard.Report) func(string) string {
+	var paths []string
+	for _, s := range r.Shards {
+		if s.Present {
+			paths = append(append(paths, s.Planned...), s.Reported...)
+		}
+	}
+	for _, p := range r.Problems {
+		paths = append(paths, p.Packages...)
+	}
+	return prefixTrimmer(paths)
+}
+
+// prefixTrimmer drops the path prefix all paths share, always keeping at least the last element.
+func prefixTrimmer(paths []string) func(string) string {
 	var common []string
-	first := true
-	add := func(p string) {
+	for i, p := range paths {
 		segs := strings.Split(p, "/")
-		if first {
-			common, first = segs[:len(segs)-1], false
-			return
+		if i == 0 {
+			common = segs[:len(segs)-1]
+			continue
 		}
 		n := 0
 		for n < len(common) && n < len(segs)-1 && common[n] == segs[n] {
 			n++
 		}
 		common = common[:n]
-	}
-	for _, s := range r.Shards {
-		if s.Present {
-			for _, p := range s.Planned {
-				add(p)
-			}
-			for _, p := range s.Reported {
-				add(p)
-			}
-		}
-	}
-	for _, p := range r.Problems {
-		for _, pkg := range p.Packages {
-			add(pkg)
-		}
 	}
 	if len(common) == 0 {
 		return func(p string) string { return p }

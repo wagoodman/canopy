@@ -1,17 +1,20 @@
 package commands
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options"
 	"github.com/wagoodman/canopy/cmd/canopy/cli/options/xflagset"
+	"github.com/wagoodman/canopy/cmd/canopy/cli/ui/format/style"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/log"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/shard"
 
@@ -293,11 +296,11 @@ ones it prints the digest every shard records. Without --shards only the suggest
 			if err != nil {
 				return err
 			}
-			return writeOutputs(opts.Output.Writers, func(w io.Writer, format string, _ bool) error {
+			return writeOutputs(opts.Output.Writers, func(w io.Writer, format string, color bool) error {
 				if format == formatJSON {
 					return writeJSON(w, report)
 				}
-				return renderPlanText(w, report)
+				return renderPlanText(w, report, color)
 			})
 		},
 	}
@@ -380,77 +383,174 @@ func buildShardPlan(opts *shardPlanConfig, canopyVersion string) (*shardPlanRepo
 	return r, nil
 }
 
-func renderPlanText(w io.Writer, r *shardPlanReport) error {
+// renderPlanText writes the plan for a terminal in the join's style: one row per shard with its
+// heaviest packages when planning for a count, then the shard count suggestion.
+func renderPlanText(w io.Writer, r *shardPlanReport, color bool) error {
 	var b strings.Builder
-	metrics := r.Weights.Source == shard.SourceMetrics
-	load := func(v int64) string {
-		if metrics {
-			return fmtMS(v)
-		}
-		return fmt.Sprint(v)
-	}
-	source := fmt.Sprintf("test counts (%s)", r.Weights.Ignored)
-	if metrics {
-		source = fmt.Sprintf("metrics (%d measured, %d estimated)", r.Weights.Measured, r.Weights.Estimated)
-	}
-
-	// a single plan is shown in full; without --shards only the suggestion
-	if len(r.Plans) == 1 {
-		p := r.Plans[0]
-		fmt.Fprintf(&b, "canopy shard plan: %s, %s, weights from %s\n", countOf(p.Total, "shard"), countOf(r.Packages, "package"), source)
-		fmt.Fprintf(&b, "inputs %s\n\n", p.Digest)
-		head := "weight"
-		if metrics {
-			head = "est."
-		}
-		fmt.Fprintf(&b, "  %-7s %-5s %s\n", "shard", "pkgs", head)
+	st := style.NewGo(color)
+	var paths []string
+	for _, p := range r.Plans {
 		for _, s := range p.Shards {
-			fmt.Fprintf(&b, "  %-7s %-5d %s\n", fmt.Sprintf("%d/%d", s.Index, p.Total), len(s.Packages), load(s.Load))
-		}
-		for _, s := range p.Shards {
-			fmt.Fprintf(&b, "\nshard %d/%d:\n", s.Index, p.Total)
 			for _, u := range s.Packages {
-				fmt.Fprintf(&b, "  %-8s %s\n", load(u.Weight), u.Package)
+				paths = append(paths, u.Package)
 			}
 		}
-	} else {
-		fmt.Fprintf(&b, "canopy shard plan: %s, weights from %s\n", countOf(r.Packages, "package"), source)
 	}
+	if r.Suggestion != nil && r.Suggestion.Slowest != "" {
+		paths = append(paths, r.Suggestion.Slowest)
+	}
+	trim := prefixTrimmer(paths)
 
-	if r.Suggestion != nil {
-		b.WriteString("\n")
-		writePlanSuggestion(&b, r.Suggestion)
+	// a single plan is shown per shard; without --shards only the suggestion
+	if len(r.Plans) == 1 {
+		p := r.Plans[0]
+		meta := strings.Join([]string{countOf(p.Total, "shard"), countOf(r.Packages, "package"), "inputs " + shortDigest(p.Digest)}, " · ")
+		b.WriteString(st.Bold.Render("canopy shard plan") + "   " + st.Aux.Render(meta) + "\n\n")
+		writePlanTable(&b, st, r, p, trim)
+		b.WriteString("\n  " + st.Aux.Render("–") + " " + planWeightsText(r.Weights) + "\n")
+		if line := planSuggestionLine(st, r.Suggestion, trim); line != "" {
+			b.WriteString("  " + line + "\n")
+		}
+	} else {
+		meta := countOf(r.Packages, "package") + " · " + planWeightsText(r.Weights)
+		b.WriteString(st.Bold.Render("canopy shard plan") + "   " + st.Aux.Render(meta) + "\n")
+		if r.Suggestion != nil {
+			b.WriteString("\n")
+			writePlanSuggestion(&b, st, r.Suggestion, trim)
+		}
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
 }
 
-// writePlanSuggestion writes the suggestion table: time estimates per shard count, or only package
-// counts with static weights.
-func writePlanSuggestion(b *strings.Builder, s *shard.Suggestion) {
-	if s.Static {
-		fmt.Fprintf(b, "%s\n  %-7s %s\n", s.Note, "shards", "packages per shard")
-		for _, e := range s.Estimates {
-			counts := make([]string, len(e.Packages))
-			for i, n := range e.Packages {
-				counts[i] = fmt.Sprint(n)
-			}
-			fmt.Fprintf(b, "  %-7d %s\n", e.Shards, strings.Join(counts, ", "))
+// planWeightsText is `weights from metrics (23 measured, 34 estimated)`, or test counts and why.
+func planWeightsText(wt shard.ReportWeights) string {
+	if wt.Source == shard.SourceMetrics {
+		return fmt.Sprintf("weights from metrics (%d measured, %d estimated)", wt.Measured, wt.Estimated)
+	}
+	return fmt.Sprintf("weights from test counts (%s)", wt.Ignored)
+}
+
+// writePlanTable writes one row per shard: package count, load and its three heaviest packages.
+func writePlanTable(b *strings.Builder, st style.Go, r *shardPlanReport, p shardPlanTotal, trim func(string) string) {
+	load := func(v int64) string {
+		if r.Weights.Source == shard.SourceMetrics {
+			return fmtMS(v)
 		}
+		return countOf(int(v), "test")
+	}
+	rows := [][]string{{"shard", colPkgs, "load", "heaviest"}}
+	for _, s := range p.Shards {
+		units := slices.Clone(s.Packages)
+		slices.SortStableFunc(units, func(a, b shard.Unit) int { return cmp.Compare(b.Weight, a.Weight) })
+		var heavy []string
+		for _, u := range units[:min(3, len(units))] {
+			v := load(u.Weight)
+			if u.Estimated && r.Weights.Source == shard.SourceMetrics {
+				v = "~" + v
+			}
+			heavy = append(heavy, trim(u.Package)+" "+v)
+		}
+		rows = append(rows, []string{fmt.Sprintf("%d/%d", s.Index, p.Total), fmt.Sprint(len(s.Packages)), load(s.Load), strings.Join(heavy, " · ")})
+	}
+	writeAlignedTable(b, st, rows, 1, 2)
+}
+
+// writeAlignedTable writes rows with an aux header row, right aligning the given numeric columns.
+func writeAlignedTable(b *strings.Builder, st style.Go, rows [][]string, right ...int) {
+	widths := make([]int, len(rows[0]))
+	for _, row := range rows {
+		for i, c := range row {
+			widths[i] = max(widths[i], len(c))
+		}
+	}
+	for i, row := range rows {
+		var line string
+		for j, c := range row {
+			pad := strings.Repeat(" ", widths[j]-len(c))
+			switch {
+			case slices.Contains(right, j):
+				c = pad + c
+			case j < len(row)-1:
+				c += pad
+			}
+			gap := "   "
+			if j == 0 {
+				gap = "  "
+			}
+			line += gap + c
+		}
+		line = strings.TrimRight(line, " ")
+		if i == 0 {
+			line = st.Aux.Render(line)
+		}
+		b.WriteString(line + "\n")
+	}
+}
+
+// planSuggestionLine is the one line verdict on a planned shard count: `✓ 3 shards is right` or
+// `→ 4 shards would be ~6s faster`, and why when one package sets the floor.
+func planSuggestionLine(st style.Go, s *shard.Suggestion, trim func(string) string) string {
+	switch {
+	case s == nil:
+		return ""
+	case s.Static:
+		return st.Aux.Render("–") + " no shard count suggestion   " + st.Aux.Render("no timing data yet")
+	case s.Best == s.Current:
+		return st.Success.Render("✓") + " " + countOf(s.Current, "shard") + " is right   " + st.Aux.Render(fmtMS(suggestionWall(s, s.Best))+" est. wall")
+	}
+	note := suggestionEstimates(s)
+	if s.Best < s.Current && s.Slowest != "" {
+		note = fmt.Sprintf("%s alone takes %s", trim(s.Slowest), fmtMS(s.SlowestMS))
+	}
+	return "→ " + suggestionVerdict(s) + "   " + st.Aux.Render(note)
+}
+
+// writePlanSuggestion writes the verdict and the estimates worth comparing: up to two past the suggested
+// count, skipping counts that only add runner time over the one before them.
+func writePlanSuggestion(b *strings.Builder, st style.Go, s *shard.Suggestion, trim func(string) string) {
+	if s.Static {
+		b.WriteString(st.Aux.Render("–") + " no shard count suggestion   " + st.Aux.Render("no timing data yet") + "\n")
 		return
 	}
+	verdict, why := countOf(s.Best, "shard"), ""
+	one := suggestionWall(s, 1)
+	switch {
+	case s.Best == 1 && s.Slowest != "":
+		verdict += " is enough"
+		why = fmt.Sprintf("%s alone takes %s; more shards only add runner time", trim(s.Slowest), fmtMS(s.SlowestMS))
+	case s.Best == 1:
+		verdict += " is enough"
+	default:
+		why = fmt.Sprintf("~%s wall, down from %s on one runner", fmtMS(suggestionWall(s, s.Best)), fmtMS(one))
+	}
+	b.WriteString("→ " + verdict + "   " + st.Aux.Render(why) + "\n\n")
 
-	fmt.Fprintf(b, "  %-7s %-10s %s\n", "shards", "est. wall", "runner time")
+	rows := [][]string{{"shards", "est. wall", "runner time", ""}}
+	var prev int64
 	for _, e := range s.Estimates {
+		if e.Shards > s.Best+2 {
+			break
+		}
+		if e.Shards > 1 && e.Shards < s.Best && e.WallMS >= prev {
+			continue
+		}
+		prev = e.WallMS
 		mark := ""
 		if e.Shards == s.Best {
-			mark = "  <- suggested"
+			mark = st.Aux.Render("← suggested")
 		}
-		fmt.Fprintf(b, "  %-7d %-10s %s%s\n", e.Shards, fmtMS(e.WallMS), fmtMS(e.RunnerMS), mark)
+		rows = append(rows, []string{fmt.Sprint(e.Shards), fmtMS(e.WallMS), fmtMS(e.RunnerMS), mark})
 	}
-	line := fmt.Sprintf("\nsuggested: %s", countOf(s.Best, "shard"))
-	if s.Slowest != "" {
-		line += fmt.Sprintf("; slowest package %s sets the floor at %s", s.Slowest, fmtMS(s.SlowestMS))
+	writeAlignedTable(b, st, rows, 0, 1, 2)
+}
+
+// suggestionWall is the est. wall for n shards, 0 when it wasn't estimated.
+func suggestionWall(s *shard.Suggestion, n int) int64 {
+	for _, e := range s.Estimates {
+		if e.Shards == n {
+			return e.WallMS
+		}
 	}
-	b.WriteString(line + "\n")
+	return 0
 }

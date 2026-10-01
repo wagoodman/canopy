@@ -1,0 +1,8 @@
+canopy shard plan   5 packages · weights from metrics (4 measured, 1 estimated)
+
+→ 1 shard is enough   slow alone takes 18s; more shards only add runner time
+
+  shards   est. wall   runner time
+       1       1m18s         1m25s   ← suggested
+       2       1m18s         2m25s
+       3       1m18s         3m25s

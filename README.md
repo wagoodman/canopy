@@ -359,7 +359,7 @@ If groups do get mixed in one join, it fails with a mismatch in the group that d
 
 ### Trying it locally
 
-`canopy shard plan` prints the plan without running anything: packages and estimated load per shard, the input digest, and the shard count suggestion. It takes the same package selection and config as `canopy test`, so it matches what a shard would compute.
+`canopy shard plan` prints the plan without running anything: estimated load and heaviest packages per shard, the input digest, and the shard count suggestion (`-o json` lists every package). It takes the same package selection and config as `canopy test`, so it matches what a shard would compute.
 
 ```
 canopy shard plan ./... --shards 4

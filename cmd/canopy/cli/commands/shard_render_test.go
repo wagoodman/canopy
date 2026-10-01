@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/shard"
@@ -95,6 +97,80 @@ func TestRenderJoin(t *testing.T) {
 			require.NoError(t, renderJoinMarkdown(&md, r))
 			assertJoinGolden(t, name, "txt", text.Bytes())
 			assertJoinGolden(t, name, "md", md.Bytes())
+		})
+	}
+}
+
+func TestRenderPlan(t *testing.T) {
+	units := []shard.Unit{
+		{Package: "m/slow", Weight: 18000}, {Package: "m/a", Weight: 3000}, {Package: "m/b", Weight: 2000, Estimated: true},
+		{Package: "m/c", Weight: 1000}, {Package: "m/d", Weight: 500},
+	}
+	weights := shard.ReportWeights{Source: shard.SourceMetrics, Measured: 4, Estimated: 1}
+	plan := func(total int) *shardPlanReport {
+		r := &shardPlanReport{Packages: len(units), Weights: weights}
+		p := shard.NewPlan(units, total)
+		pt := shardPlanTotal{Total: total, Digest: "sha256:80e279d11624db27f8b8101503f3b897"}
+		byPkg := map[string]shard.Unit{}
+		for _, u := range units {
+			byPkg[u.Package] = u
+		}
+		for i, pkgs := range p.Shards {
+			s := shardPlanShard{Index: i + 1, Load: p.Loads[i]}
+			for _, pkg := range pkgs {
+				s.Packages = append(s.Packages, byPkg[pkg])
+			}
+			pt.Shards = append(pt.Shards, s)
+		}
+		r.Plans = []shardPlanTotal{pt}
+		r.Suggestion = shard.NewSuggestion(units, total, time.Minute, 4)
+		return r
+	}
+
+	// without --shards: every count is planned and only the suggestion is shown
+	suggestion := plan(1)
+	suggestion.Plans = append(suggestion.Plans, plan(2).Plans...)
+	suggestion.Suggestion = shard.NewSuggestion(units, 0, time.Minute, 4)
+
+	// where more shards pay off
+	var many []shard.Unit
+	for i := range 12 {
+		many = append(many, shard.Unit{Package: fmt.Sprintf("m/p%02d", i), Weight: 60000})
+	}
+	split := &shardPlanReport{Packages: len(many), Weights: shard.ReportWeights{Source: shard.SourceMetrics, Measured: 12}, Plans: []shardPlanTotal{{}, {}},
+		Suggestion: shard.NewSuggestion(many, 0, 10*time.Second, 1)}
+
+	// test counts as weights
+	static := plan(2)
+	for i := range static.Plans[0].Shards {
+		s := &static.Plans[0].Shards[i]
+		s.Load = 0
+		for j := range s.Packages {
+			s.Packages[j].Weight /= 100
+			s.Load += s.Packages[j].Weight
+		}
+	}
+	static.Weights = shard.ReportWeights{Source: shard.SourceStatic, Estimated: 5, Ignored: "no metrics file"}
+	static.Suggestion = &shard.Suggestion{Current: 2, Static: true}
+
+	cases := map[string]*shardPlanReport{
+		"plan":        plan(3),
+		"suggestion":  suggestion,
+		"split":       split,
+		"static_plan": static,
+	}
+	for name, r := range cases {
+		t.Run(name, func(t *testing.T) {
+			var text bytes.Buffer
+			require.NoError(t, renderPlanText(&text, r, false))
+			path := filepath.Join("testdata", "shard-plan", name+".txt")
+			if *updateJoinGoldens {
+				require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+				require.NoError(t, os.WriteFile(path, text.Bytes(), 0o600))
+			}
+			want, err := os.ReadFile(path)
+			require.NoError(t, err)
+			require.Equal(t, string(want), text.String())
 		})
 	}
 }

@@ -1,0 +1,8 @@
+canopy shard plan   2 shards · 5 packages · inputs sha256:80e279d1
+
+  shard   pkgs        load   heaviest
+  1/2        1   180 tests   slow 180 tests
+  2/2        4    65 tests   a 30 tests · b 20 tests · c 10 tests
+
+  – weights from test counts (no metrics file)
+  – no shard count suggestion   no timing data yet
