@@ -1,0 +1,13 @@
+mode: set
+github.com/wagoodman/canopy/internal/test-fixtures/math/factorial.go:6.2,7.1 2 1
+github.com/wagoodman/canopy/internal/test-fixtures/math/factorial.go:8.2,8.11 2 0
+github.com/wagoodman/canopy/internal/test-fixtures/math/factorial.go:9.3,10.1 1 1
+github.com/wagoodman/canopy/internal/test-fixtures/math/factorial.go:11.2,11.12 1 1
+github.com/wagoodman/canopy/internal/test-fixtures/math/factorial.go:12.3,13.1 1 0
+github.com/wagoodman/canopy/internal/test-fixtures/math/factorial.go:14.2,15.26 2 1
+github.com/wagoodman/canopy/internal/test-fixtures/math/factorial.go:16.3,17.1 1 1
+github.com/wagoodman/canopy/internal/test-fixtures/math/factorial.go:18.2,18.15 1 1
+github.com/wagoodman/canopy/internal/test-fixtures/math/fibonacci.go:6.2,7.1 4 1
+github.com/wagoodman/canopy/internal/test-fixtures/math/fibonacci.go:8.2,10.25 4 1
+github.com/wagoodman/canopy/internal/test-fixtures/math/fibonacci.go:11.3,13.1 2 1
+github.com/wagoodman/canopy/internal/test-fixtures/math/fibonacci.go:14.2,14.12 1 1

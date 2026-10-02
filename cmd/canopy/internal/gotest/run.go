@@ -1,6 +1,8 @@
 package gotest
 
 import (
+	"path/filepath"
+
 	"github.com/google/uuid"
 	"github.com/wagoodman/canopy/cmd/canopy/internal/cover"
 )
@@ -26,4 +28,12 @@ func NewRun(config RunnerConfig) *Run {
 		ID:     uuid.New(),
 		Config: config,
 	}
+}
+
+// ProfilePath is where the run's text coverprofile is written, empty when no coverage dir was configured.
+func (r *Run) ProfilePath() string {
+	if r.Config.CoverageDir == "" {
+		return ""
+	}
+	return filepath.Join(r.Config.CoverageDir, coverProfileName)
 }

@@ -25,6 +25,8 @@ type TestUIConfig struct {
 	// ExecutionMarkers controls visibility of test state markers (=== RUN/PAUSE/CONT).
 	// Valid values: "none" (hide all), "all" (show all), "parallel-only" (show only PAUSE/CONT).
 	ExecutionMarkers string
+	// ShardTrailer is the shard note rendered under the final summary (empty when not sharded).
+	ShardTrailer string
 	// Grouping configures collapsible output groups (usually for CI environments).
 	Grouping group.Config
 }

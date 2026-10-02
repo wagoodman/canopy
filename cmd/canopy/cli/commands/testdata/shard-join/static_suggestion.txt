@@ -1,0 +1,11 @@
+canopy shard join   3 shards · 6 packages · inputs sha256:a62ace69 · exit 0
+
+✓ PASSED   33 tests passed, 3 skipped · every package ran once · 75.0% coverage
+
+  shard   pkgs   time   tests
+  1/3        2     2s   10 passed
+  2/3        2     2s   11 passed / 1 skipped
+  3/3        2     2s   12 passed / 2 skipped   ← slowest
+
+  ✓ metrics saved for 6 packages   .canopy/shard/metrics/linux-arm64-cced3044f0ac.json
+  – no shard count suggestion      no timing data yet

@@ -2,6 +2,9 @@
 package ci
 
 import (
+	"fmt"
+	"strconv"
+
 	"github.com/wagoodman/canopy/cmd/canopy/internal/env"
 )
 
@@ -45,4 +48,50 @@ func DetectWith(e env.EnvironmentGetter) Provider {
 	}
 
 	return ProviderUnknown
+}
+
+// shardVars describes a CI provider's parallelism variable pair.
+type shardVars struct {
+	index, total string
+	base         int // the provider's first index (0 or 1)
+}
+
+var shardProviders = []shardVars{
+	{"CI_NODE_INDEX", "CI_NODE_TOTAL", 1},                         // gitlab
+	{"CIRCLE_NODE_INDEX", "CIRCLE_NODE_TOTAL", 0},                 // circleci
+	{"BUILDKITE_PARALLEL_JOB", "BUILDKITE_PARALLEL_JOB_COUNT", 0}, // buildkite
+	{"SYSTEM_JOBPOSITIONINPHASE", "SYSTEM_TOTALJOBSINPHASE", 1},   // azure
+}
+
+// ShardFromEnv resolves a 1-based shard index and total from the CI provider's own variables. The
+// source is the "INDEX_VAR/TOTAL_VAR" pair used, or empty (with 1/1) when none is set. Providers
+// are keyed on the index var: GitLab sets only the total (as 1) on jobs that are not parallel.
+func ShardFromEnv(e env.EnvironmentGetter) (index, total int, source string, err error) {
+	for _, p := range shardProviders {
+		rawIndex := e.Getenv(p.index)
+		if rawIndex == "" {
+			continue
+		}
+		source = p.index + "/" + p.total
+
+		i, err := strconv.Atoi(rawIndex)
+		if err != nil {
+			return 0, 0, source, fmt.Errorf("%s: invalid value %q", p.index, rawIndex)
+		}
+		rawTotal := e.Getenv(p.total)
+		if rawTotal == "" {
+			return 0, 0, source, fmt.Errorf("%s is set but %s is not", p.index, p.total)
+		}
+		n, err := strconv.Atoi(rawTotal)
+		if err != nil {
+			return 0, 0, source, fmt.Errorf("%s: invalid value %q", p.total, rawTotal)
+		}
+
+		i += 1 - p.base
+		if n < 1 || i < 1 || i > n {
+			return 0, 0, source, fmt.Errorf("%s/%s: shard %d of %d is out of range", p.index, p.total, i, n)
+		}
+		return i, n, source, nil
+	}
+	return 1, 1, "", nil
 }

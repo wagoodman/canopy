@@ -100,7 +100,7 @@ func main() {
 			showError()
 		}
 
-		exitCode = 1
+		exitCode = exitCodeOf(err)
 	}
 
 	// a user interrupt (ctrl-c) is a graceful exit as far as clio is concerned, so the worker error is dropped
@@ -109,4 +109,13 @@ func main() {
 	if exitCode == 0 && bus.Interrupted() {
 		exitCode = exitCodeInterrupted
 	}
+}
+
+// exitCodeOf is the code an ExitCoder carries (e.g. the join's 2 to 4), else 1.
+func exitCodeOf(err error) int {
+	var ec commands.ExitCoder
+	if errors.As(err, &ec) {
+		return ec.ExitCode()
+	}
+	return 1
 }

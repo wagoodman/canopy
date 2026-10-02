@@ -49,6 +49,7 @@ func defaultRootOptions() *rootConfig {
 			withoutOpenOpts(),         // we cannot open failed results as this may be for multiple sessions
 			withoutRunOptsRendered(),  // -run is being rendered based on the user selection, thus does not need to be rendered to be passed to 'go test'
 			withCombineMultipleRuns(), // we want a single summary for multiple running sessions
+			withoutShardOpts(),        // --shard only exists on 'canopy test'
 		),
 	}
 	return &c
@@ -72,7 +73,7 @@ func Root(app clio.Application) *cobra.Command {
 		//Example: // TODO
 		PreRunE: func(_ *cobra.Command, _ []string) error {
 			// resolve packages (narrowing to affected first when --affected is set)
-			_, err := selectTestPackages(&opts.Test)
+			_, err := selectTestPackages(&opts.Test, app.ID().Version)
 			return err
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {

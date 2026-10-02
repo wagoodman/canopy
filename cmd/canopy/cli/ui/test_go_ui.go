@@ -73,6 +73,7 @@ func newDynamicGoUI(cfg TestUIConfig, maxPkgNameLength int) clio.UI {
 			WithStalePackageDuration(stalePackageDuration).
 			WithLoosePackageOrder(loosePackageOrder).
 			WithCombineMultipleRuns(cfg.CombineMultipleRuns).
+			WithShardTrailer(cfg.ShardTrailer).
 			WithHidePackagesWithNoTests(!cfg.ShowPackagesWithNoTests).
 			WithDurationFromEvents(false), //  we're running with a true wall clock, so we want to use that. Otherwise you'll see the timers jitter, only updating when there is a test event that arrives.
 		common,
@@ -144,6 +145,7 @@ func newSafeGoUI(cfg TestUIConfig, maxPkgName int) clio.UI {
 					ShowSummaryForUnrenderedPackages: true,
 					ShowRunningTests:                 false, // it's safer to not thrash the number of lines we're writing to the terminal
 					CombineMultipleRuns:              cfg.CombineMultipleRuns,
+					ShardTrailer:                     cfg.ShardTrailer,
 					HidePackagesWithNoTests:          !cfg.ShowPackagesWithNoTests,
 				}.New,
 			),

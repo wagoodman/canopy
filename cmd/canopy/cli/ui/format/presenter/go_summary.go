@@ -121,6 +121,10 @@ type GoSummaryConfig struct {
 	// cancellation instead of a PASS/FAIL conclusion.
 	Canceled bool
 
+	// ShardTrailer is the shard note shown on a branch line under the final summary (e.g. "shard 2/4, 37 of
+	// 142 pkgs"). Its presence also marks the coverage figure as covering this shard's packages only.
+	ShardTrailer string
+
 	// Running indicates the run-end event has not been seen yet. The results alone can't tell this: between
 	// packages (e.g. while the next package is still compiling) every reference seen so far has concluded,
 	// which would otherwise read as a final PASS/FAIL.
@@ -227,6 +231,11 @@ func (c GoSummaryConfig) WithCombineMultipleRuns(combine bool) GoSummaryConfig {
 
 func (c GoSummaryConfig) WithHidePackagesWithNoTests(hide bool) GoSummaryConfig {
 	c.HidePackagesWithNoTests = hide
+	return c
+}
+
+func (c GoSummaryConfig) WithShardTrailer(trailer string) GoSummaryConfig {
+	c.ShardTrailer = trailer
 	return c
 }
 
@@ -543,6 +552,12 @@ func (s GoTestResultSummary) summaryFooter() string {
 		result = s.footerStatus() + s.testsLine(s.config.PackageNameWidth)
 	}
 
+	if s.config.ShardTrailer != "" && !s.config.Running {
+		// a blank status as wide as the glyph above, so the tabs land on the same stop as the tests line whatever the
+		// tab width (the tty expands tabs to 4 columns, a CI log to 8)
+		result += "\n" + statusColumn(strings.Repeat(" ", lipgloss.Width(s.footerStatusGlyph()))) + s.style.Aux.Render(footerBranch+s.config.ShardTrailer)
+	}
+
 	if s.config.Canceled {
 		// call out the interruption in red on its own trailer line, since the glyph alone is ambiguous
 		result += "\n" + s.style.Failed.Render("└──▶ canceled by user")
@@ -577,7 +592,11 @@ func (s GoTestResultSummary) testsLine(colWidth int) string {
 	}
 
 	if coverage, ok := s.results.Coverage(); ok {
-		result += "\t" + s.style.Aux.Render(fmt.Sprintf("%.1f%% covered", coverage))
+		covered := fmt.Sprintf("%.1f%% covered", coverage)
+		if s.config.ShardTrailer != "" {
+			covered += " (this shard)"
+		}
+		result += "\t" + s.style.Aux.Render(covered)
 	}
 
 	if s.config.HidePackagesWithNoTests && stats.PackagesWithNoTests > 0 {

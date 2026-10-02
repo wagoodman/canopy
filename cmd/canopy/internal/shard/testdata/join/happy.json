@@ -1,0 +1,208 @@
+{
+  "version": 1,
+  "result": "pass",
+  "exit_code": 0,
+  "total": 3,
+  "packages": 6,
+  "digests": [
+    {
+      "digest": "sha256:a62ace69eb3ba06f277c30d1e336ca0946ff501c517ce581aae69bfb20e0b9d9",
+      "shards": [
+        1,
+        2,
+        3
+      ]
+    }
+  ],
+  "checks": {
+    "tests": {
+      "ok": true,
+      "passed": 33,
+      "failed": 0,
+      "skipped": 3
+    },
+    "verified": {
+      "ok": true,
+      "receipts": 3,
+      "ran_once": 6
+    },
+    "coverage": {
+      "ok": true,
+      "enabled": true,
+      "percent": 75,
+      "profile": ".canopy/shard/coverage.out"
+    },
+    "metrics": {
+      "ok": true,
+      "written": true,
+      "path": ".canopy/shard/metrics/linux-arm64-cced3044f0ac.json",
+      "packages": 6
+    }
+  },
+  "shards": [
+    {
+      "index": 1,
+      "present": true,
+      "canopy_version": "v0.9.0",
+      "digest": "sha256:a62ace69eb3ba06f277c30d1e336ca0946ff501c517ce581aae69bfb20e0b9d9",
+      "weights": {
+        "source": "metrics",
+        "measured": 6,
+        "estimated": 0,
+        "metrics_file": "sha256:451171ec63f4cda18e60113c19c07bd3173feaf9ed837cc99891ebf59fa687ff"
+      },
+      "estimated_ms": 200,
+      "planned": [
+        "m/a",
+        "m/b"
+      ],
+      "reported": [
+        "m/a",
+        "m/b"
+      ],
+      "passed": true,
+      "elapsed_ms": 2000,
+      "tests": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      },
+      "failures": [],
+      "coverprofile": "shard-1.coverprofile"
+    },
+    {
+      "index": 2,
+      "present": true,
+      "canopy_version": "v0.9.0",
+      "digest": "sha256:a62ace69eb3ba06f277c30d1e336ca0946ff501c517ce581aae69bfb20e0b9d9",
+      "weights": {
+        "source": "metrics",
+        "measured": 6,
+        "estimated": 0,
+        "metrics_file": "sha256:451171ec63f4cda18e60113c19c07bd3173feaf9ed837cc99891ebf59fa687ff"
+      },
+      "estimated_ms": 200,
+      "planned": [
+        "m/c",
+        "m/d"
+      ],
+      "reported": [
+        "m/c",
+        "m/d"
+      ],
+      "passed": true,
+      "elapsed_ms": 2100,
+      "tests": {
+        "passed": 11,
+        "failed": 0,
+        "skipped": 1
+      },
+      "failures": [],
+      "coverprofile": "shard-2.coverprofile"
+    },
+    {
+      "index": 3,
+      "present": true,
+      "canopy_version": "v0.9.0",
+      "digest": "sha256:a62ace69eb3ba06f277c30d1e336ca0946ff501c517ce581aae69bfb20e0b9d9",
+      "weights": {
+        "source": "metrics",
+        "measured": 6,
+        "estimated": 0,
+        "metrics_file": "sha256:451171ec63f4cda18e60113c19c07bd3173feaf9ed837cc99891ebf59fa687ff"
+      },
+      "estimated_ms": 200,
+      "planned": [
+        "m/e",
+        "m/f"
+      ],
+      "reported": [
+        "m/e",
+        "m/f"
+      ],
+      "passed": true,
+      "elapsed_ms": 2200,
+      "tests": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 2
+      },
+      "failures": [],
+      "coverprofile": "shard-3.coverprofile"
+    }
+  ],
+  "problems": [],
+  "warnings": [],
+  "suggestion": {
+    "current": 3,
+    "best": 2,
+    "static": false,
+    "slowest_package": "m/a",
+    "slowest_ms": 100,
+    "estimates": [
+      {
+        "shards": 1,
+        "wall_ms": 1300,
+        "runner_ms": 1600,
+        "packages": [
+          6
+        ]
+      },
+      {
+        "shards": 2,
+        "wall_ms": 1150,
+        "runner_ms": 2600,
+        "packages": [
+          3,
+          3
+        ]
+      },
+      {
+        "shards": 3,
+        "wall_ms": 1100,
+        "runner_ms": 3600,
+        "packages": [
+          2,
+          2,
+          2
+        ]
+      },
+      {
+        "shards": 4,
+        "wall_ms": 1100,
+        "runner_ms": 4600,
+        "packages": [
+          2,
+          2,
+          1,
+          1
+        ]
+      },
+      {
+        "shards": 5,
+        "wall_ms": 1100,
+        "runner_ms": 5600,
+        "packages": [
+          2,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "shards": 6,
+        "wall_ms": 1100,
+        "runner_ms": 6600,
+        "packages": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      }
+    ]
+  }
+}

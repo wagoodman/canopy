@@ -39,7 +39,14 @@ type formatConfig struct {
 	// File specifies the path to read test JSON output from, or "-" for stdin (this is the format command argument).
 	File string `yaml:"file" json:"file" mapstructure:"file"`
 
+	// Session names the session to group the stored run under (or @branch, @module, @worktree).
+	Session string `yaml:"session" json:"session" mapstructure:"session"`
+
 	reader io.ReadCloser
+}
+
+func (o *formatConfig) AddFlags(flags fangs.FlagSet) {
+	flags.StringVarP(&o.Session, "session", "", "session name to group runs under (or @branch, @module, @worktree)")
 }
 
 func (o *formatConfig) DescribeFields(descriptions clio.FieldDescriptionSet) {
@@ -80,6 +87,7 @@ func defaultFormatOptions() *formatCoreConfig {
 	return &formatCoreConfig{
 		Experiment: options.DefaultExperiment(),
 		Store:      options.DefaultStore(),
+		Format:     formatConfig{Session: defaultSessionName},
 		Test: formatTestConfig{
 			Format:     options.DefaultTestFormat(),
 			Appearance: options.DefaultAppearance(),
@@ -151,11 +159,18 @@ func runFormat(ctx context.Context, app clio.Application, coreCfg formatCoreConf
 	// only use a DB store when persistence is needed
 	needsStorage := coreCfg.Enabled || cfg.OpenSessionOnFailure
 
+	// only resolve the name when storing, since resolving may shell out to git or go list
+	var sessionName string
+	if needsStorage {
+		sessionName = resolveSessionName(coreCfg.Format.Session)
+	}
+
 	s, err := test.NewManager(
 		test.Config{
-			DBRoot:    coreCfg.Root,
-			Ephemeral: coreCfg.Ephemeral,
-			NoStore:   !needsStorage,
+			DBRoot:      coreCfg.Root,
+			Ephemeral:   coreCfg.Ephemeral,
+			NoStore:     !needsStorage,
+			SessionName: sessionName,
 		},
 	)
 	if err != nil {

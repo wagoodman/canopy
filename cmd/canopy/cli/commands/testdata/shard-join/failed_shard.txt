@@ -1,0 +1,15 @@
+canopy shard join   3 shards · 6 packages · inputs sha256:a62ace69 · exit 1
+
+✗ TESTS FAILED   33 passed, 1 failed
+
+  ✗ 1 test failed in 1 package
+      2/3  d  TestReconcile
+      → failure output is in the shard 2/3 job log
+
+  shard   pkgs   est.   time   tests
+  1/3        2     0s     2s   10 passed
+  2/3        2     0s     2s   11 passed / 1 failed / 1 skipped
+  3/3        2     0s     2s   12 passed / 2 skipped              ← slowest
+
+  ✓ metrics saved for 5 packages                 .canopy/shard/metrics/linux-arm64-cced3044f0ac.json
+  → 2 shards would be as fast on fewer runners   1: 1s  2: 1s  3: 1s

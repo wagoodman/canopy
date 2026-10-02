@@ -1,0 +1,11 @@
+canopy shard plan   12 packages · weights from metrics (12 measured, 0 estimated)
+
+→ 12 shards   ~1m10s wall, down from 12m10s on one runner
+
+  shards   est. wall   runner time
+       1      12m10s        12m10s
+       2       6m10s        12m20s
+       3       4m10s        12m30s
+       4       3m10s        12m40s
+       6       2m10s        13m00s
+      12       1m10s        14m00s   ← suggested

@@ -22,7 +22,7 @@ type gitInfo struct {
 // openRepo attempts to open a git repo at the given path (walks up to find .git).
 // Returns nil, nil if not a git repo.
 func openRepo(dir string) (*git.Repository, error) {
-	repo, err := git.PlainOpenWithOptions(dir, &git.PlainOpenOptions{DetectDotGit: true})
+	repo, err := git.PlainOpenWithOptions(dir, &git.PlainOpenOptions{DetectDotGit: true, EnableDotGitCommonDir: true})
 	if err != nil {
 		if errors.Is(err, git.ErrRepositoryNotExists) {
 			return nil, nil

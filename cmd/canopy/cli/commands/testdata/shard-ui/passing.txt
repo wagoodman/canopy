@@ -1,0 +1,3 @@
+SHARD	2/3 (2/6 pkgs, split by time)
+PASS	1 passed tests                          	    3s  	81.7% covered (this shard)
+    	└─ shard 2/3 (2/6 pkgs, split by time), coverage threshold 80.0% deferred to `canopy shard join`

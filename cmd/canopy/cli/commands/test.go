@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -87,14 +88,25 @@ type testConfig struct {
 	// on top of the built-in allowlist. never captures the whole environment.
 	ReproEnv string `yaml:"repro-env" json:"repro-env" mapstructure:"repro-env"`
 
+	// Shard holds the sharding settings shared with `canopy shard join` and `canopy shard plan` (test.shard).
+	Shard options.Shard `yaml:"shard" json:"shard" mapstructure:"shard"`
+	// ShardIndex is --shard, which is flag-only: it never comes from a config file or env var.
+	ShardIndex options.ShardIndex `yaml:"-" json:"-" mapstructure:"-"`
+
 	// post parse
 	Runtime testRuntimeConfig `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 type testRuntimeConfig struct {
-	Packages *golist.PackageCollection
-	// NothingToRun is set when --affected resolved to an empty set; the run is a clean no-op.
+	// Specifiers are the package specifiers as given, before --affected narrowing.
+	Specifiers []string
+	Packages   *golist.PackageCollection
+	// NothingToRun is set when --affected resolved to an empty set, or this shard got no packages;
+	// the run is a clean no-op.
 	NothingToRun bool
+	// shard is set under --shard. It is unexported so fangs, which allocates every nil struct pointer
+	// it can reach while adding flags, leaves it nil.
+	shard *shardRuntime
 }
 
 func (t *TestCoreConfig) AddFlags(flags fangs.FlagSet) {
@@ -111,26 +123,41 @@ func (t *TestCoreConfig) AddFlags(flags fangs.FlagSet) {
 
 // selectTestPackages resolves the final package set for a run: it first narrows to affected
 // packages (when --affected is set), then resolves specifiers via SelectPackages, storing the
-// result in cfg.Runtime.Packages. It returns proceed=false when there is nothing to run, in
-// which case cfg.Runtime.NothingToRun is set and the caller should exit 0 without erroring.
-func selectTestPackages(cfg *testConfig) (proceed bool, err error) {
+// result in cfg.Runtime.Packages. Under --shard it then narrows the packages to this shard's (see
+// shardTestPackages). It returns proceed=false when there is nothing to run, in which case
+// cfg.Runtime.NothingToRun is set and the caller should exit 0 without erroring (a shard still
+// writes its receipt).
+func selectTestPackages(cfg *testConfig, canopyVersion string) (proceed bool, err error) {
+	cfg.Runtime.Specifiers = slices.Clone(cfg.Specifiers)
 	ok, err := narrowToAffected(cfg)
 	if err != nil {
 		return false, err
 	}
-	if !ok {
+
+	if ok {
+		testPkgs, err := golist.SelectPackages(cfg.Specifiers, cfg.ExcludePatterns)
+		if err != nil {
+			return false, fmt.Errorf("unable to get test paths: %w", err)
+		}
+		if testPkgs.Size() == 0 {
+			return false, fmt.Errorf("no packages selected to test (given %q)", cfg.Specifiers)
+		}
+		cfg.Runtime.Packages = testPkgs
+	} else {
+		// nothing affected: a shard still plans (zero units) so it can write an empty receipt
+		cfg.Runtime.Packages = golist.NewPackageCollection()
+	}
+
+	if cfg.ShardIndex.Enabled() {
+		if err := shardTestPackages(cfg, canopyVersion); err != nil {
+			return false, err
+		}
+	}
+
+	if cfg.Runtime.Packages.Size() == 0 {
 		cfg.Runtime.NothingToRun = true
 		return false, nil
 	}
-
-	testPkgs, err := golist.SelectPackages(cfg.Specifiers, cfg.ExcludePatterns)
-	if err != nil {
-		return false, fmt.Errorf("unable to get test paths: %w", err)
-	}
-	if testPkgs.Size() == 0 {
-		return false, fmt.Errorf("no packages selected to test (given %q)", cfg.Specifiers)
-	}
-	cfg.Runtime.Packages = testPkgs
 	return true, nil
 }
 
@@ -167,6 +194,13 @@ func withoutOpenOpts() func(*TestCoreConfig) {
 	}
 }
 
+func withoutShardOpts() func(*TestCoreConfig) {
+	return func(cfg *TestCoreConfig) {
+		cfg.Test.Shard.Disabled = true
+		cfg.Test.ShardIndex.Disabled = true
+	}
+}
+
 func withoutRunOptsRendered() func(*TestCoreConfig) {
 	return func(cfg *TestCoreConfig) {
 		cfg.Test.IgnoreRenderingFlags = append(cfg.Test.IgnoreRenderingFlags, "run")
@@ -192,6 +226,7 @@ func defaultTestOptions(opts ...func(*TestCoreConfig)) *TestCoreConfig {
 			Open:       options.DefaultOpen(),
 			Appearance: options.DefaultAppearance(),
 			Session:    defaultSessionName,
+			Shard:      options.DefaultShard(),
 		},
 	}
 
@@ -221,9 +256,12 @@ func Test(app clio.Application) *cobra.Command {
 			return nil
 		},
 		PreRunE: func(_ *cobra.Command, _ []string) error {
-			proceed, err := selectTestPackages(&opts.Test)
+			proceed, err := selectTestPackages(&opts.Test, app.ID().Version)
 			if err != nil {
 				return err
+			}
+			if sh := opts.Test.Runtime.shard; sh != nil {
+				announceShard(&opts.Test, sh)
 			}
 			if !proceed {
 				return nil
@@ -243,6 +281,9 @@ func Test(app clio.Application) *cobra.Command {
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if opts.Test.Runtime.NothingToRun {
+				if sh := opts.Test.Runtime.shard; sh != nil {
+					return finishEmptyShard(&opts.Test, sh, app.ID().Version)
+				}
 				return nil
 			}
 
@@ -325,7 +366,20 @@ func runTest(ctx context.Context, app clio.Application, coreCfg TestCoreConfig, 
 		return fmt.Errorf("unable to run tests: %w", err)
 	}
 
-	passed, resultErr := evaluateResult(run, logTestFailuresAsErrors, cfg.CoverMin)
+	// a shard's coverage only covers its own packages, so covermin is left to the join
+	coverMin := cfg.CoverMin
+	if cfg.Runtime.shard != nil {
+		coverMin = 0
+	}
+
+	passed, resultErr := evaluateResult(run, logTestFailuresAsErrors, coverMin)
+
+	// written before the session closes, since an ephemeral session removes the coverprofile
+	if sh := cfg.Runtime.shard; sh != nil {
+		if err := writeShardReceipt(sh, app.ID().Version, run, passed); err != nil {
+			return err
+		}
+	}
 
 	if cfg.OpenSessionOnFailure && !passed {
 		return openUIWithExisting(app, s, resultErr)
@@ -469,7 +523,7 @@ func getUIConfig(appearance options.Appearance, clioCfg clio.Config, format opti
 		removePrefix = module
 	}
 	return ui.TestUIConfig{
-		Color:                   appearance.Color != "off",
+		Color:                   appearance.ColorEnabled(),
 		Verbose:                 clioCfg.Log.Verbosity,
 		ShowPackagesWithNoTests: appearance.ShowPackagesWithNoTests,
 		StripPackagePrefix:      removePrefix,
@@ -478,6 +532,7 @@ func getUIConfig(appearance options.Appearance, clioCfg clio.Config, format opti
 		CombineMultipleRuns:     appearance.CombineMultipleRuns,
 		ExecutionMarkers:        appearance.ExecutionMarkers,
 		Grouping:                appearance.Grouping.ToAPIConfig(),
+		ShardTrailer:            appearance.ShardTrailer,
 	}
 }
 
@@ -566,9 +621,7 @@ func toSourceStateInput(s *source.State) *db.SourceStateInput {
 func buildRunConfig(cfg testConfig) gotest.RunnerConfig {
 	var args []string
 	args = append(args, cfg.Runtime.Packages.ImportPaths()...)
-	args = append(args, cfg.GoBuild.RenderedFlags...)
-	args = append(args, cfg.GoTest.RenderedFlags...)
-	args = append(args, cfg.ExtraFlags...)
+	args = append(args, resolveGoFlags(cfg).args()...)
 
 	fp := &gotest.ExecFingerprint{
 		Race:      cfg.Race,
@@ -592,6 +645,22 @@ func buildRunConfig(cfg testConfig) gotest.RunnerConfig {
 		UserArgs:    args,
 		Fingerprint: fp,
 	}
+}
+
+// goFlags are the flags canopy passes to `go test`, by where they come from. The run and the shard
+// [run] input group both come from here, so the digest covers exactly what runs.
+type goFlags struct {
+	Build, Test, Extra []string
+}
+
+// resolveGoFlags sorts the rendered build and test flags (they're rendered from maps, so their order
+// varies between processes). Extra flags keep the order they were given in.
+func resolveGoFlags(cfg testConfig) goFlags {
+	return goFlags{Build: sortedCopy(cfg.GoBuild.RenderedFlags), Test: sortedCopy(cfg.GoTest.RenderedFlags), Extra: cfg.ExtraFlags}
+}
+
+func (f goFlags) args() []string {
+	return slices.Concat(f.Build, f.Test, f.Extra)
 }
 
 // splitCSV splits a comma-separated flag value into trimmed, non-empty keys.

@@ -24,6 +24,8 @@ var _ interface {
 
 // Format configures output formatting options for test results, supporting multiple concurrent output formats.
 type Format struct {
+	// Disabled prevents the output flag from being added and skips post-load processing.
+	Disabled bool `yaml:"-" json:"-" mapstructure:"-"`
 	// Output is a single output format (used when AllowMultiple is false).
 	Output string `yaml:"-" json:"-" mapstructure:"-"`
 	// Outputs is a list of output formats to use (e.g., "go", "json", "jest=results.json").
@@ -38,6 +40,10 @@ type Format struct {
 	FileDisallowed []string `yaml:"-" json:"-" mapstructure:"-"`
 	// AllowMultiple controls whether multiple output formats can be specified simultaneously.
 	AllowMultiple bool `yaml:"-" json:"-" mapstructure:"-"`
+	// AppendEnv lists formats whose files are appended to rather than truncated, each with the env
+	// var naming the file it goes to when given without a path (e.g. github-summary ->
+	// GITHUB_STEP_SUMMARY). Such a format never goes to stdout.
+	AppendEnv map[string]string `yaml:"-" json:"-" mapstructure:"-"`
 
 	// internal
 
@@ -69,8 +75,27 @@ func DefaultTestFormat() Format {
 	}
 }
 
+// DefaultShardJoinFormat returns format options for `canopy shard join`: text to stdout, plus the
+// GitHub step summary when running on GitHub Actions.
+func DefaultShardJoinFormat() Format {
+	outputs := []string{"text"}
+	if os.Getenv("GITHUB_STEP_SUMMARY") != "" {
+		outputs = append(outputs, "github-summary")
+	}
+	return Format{
+		Outputs:          outputs,
+		AllowMultiple:    true,
+		AllowableFormats: []string{"text", "json", "github-summary"},
+		AppendEnv:        map[string]string{"github-summary": "GITHUB_STEP_SUMMARY"},
+	}
+}
+
 // PostLoad validates format specifications and creates output writers (files or stdout) for each format.
 func (o *Format) PostLoad() error {
+	if o.Disabled {
+		return nil
+	}
+
 	if len(o.Output) > 0 {
 		// single-format mode: the flag replaces the default rather than adding to it
 		o.Outputs = []string{o.Output}
@@ -105,7 +130,10 @@ func (o *Format) PostLoad() error {
 
 	var nonFileOutputs []string
 	for _, output := range o.Outputs {
-		fields := strings.Split(output, "=")
+		fields, appends, err := o.withAppendPath(strings.Split(output, "="))
+		if err != nil {
+			return err
+		}
 		switch len(fields) {
 		case 1:
 			// write to stdout
@@ -120,17 +148,11 @@ func (o *Format) PostLoad() error {
 			if filesDisallowedSet.Has(fields[0]) {
 				return fmt.Errorf("output format %q cannot be written to a file", fields[0])
 			}
-			// write to file
-			f, err := os.Create(fields[1])
+			w, err := fileWriter(fields[0], fields[1], appends)
 			if err != nil {
-				return fmt.Errorf("unable to create output file: %w", err)
+				return err
 			}
-			o.Writers = append(o.Writers, FormatWriter{
-				Path:   fields[1],
-				Writer: f,
-				IsTTY:  false,
-				Name:   strings.ToLower(fields[0]),
-			})
+			o.Writers = append(o.Writers, w)
 		default:
 			return fmt.Errorf("invalid output format specified: %s", output)
 		}
@@ -143,11 +165,41 @@ func (o *Format) PostLoad() error {
 	return nil
 }
 
+// withAppendPath fills in the path from the env var for a bare append-only format (see AppendEnv).
+func (o *Format) withAppendPath(fields []string) ([]string, bool, error) {
+	envVar, appends := o.AppendEnv[fields[0]]
+	if !appends || len(fields) != 1 {
+		return fields, appends, nil
+	}
+	path := os.Getenv(envVar)
+	if path == "" {
+		return nil, false, fmt.Errorf("output format %q writes to $%s, which is not set (use %s=PATH to write to a file)", fields[0], envVar, fields[0])
+	}
+	return append(fields, path), true, nil
+}
+
+// fileWriter opens path for the named format, truncating it unless appends is set.
+func fileWriter(name, path string, appends bool) (FormatWriter, error) {
+	flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	if appends {
+		flags = os.O_WRONLY | os.O_CREATE | os.O_APPEND
+	}
+	f, err := os.OpenFile(path, flags, 0o666)
+	if err != nil {
+		return FormatWriter{}, fmt.Errorf("unable to create output file: %w", err)
+	}
+	return FormatWriter{Path: path, Writer: f, Name: strings.ToLower(name)}, nil
+}
+
 // AddFlags registers the output format flag with the flag set.
 func (o *Format) AddFlags(flags fangs.FlagSet) {
 	o.NamedFlagSet = xflagset.NewNamed()
 	o.tracker = xflagset.NewDecorator(flags, o.NamedFlagSet.FlagSet("Format"))
 	flags = o.tracker
+
+	if o.Disabled {
+		return
+	}
 
 	if o.AllowMultiple {
 		flags.StringArrayVarP(

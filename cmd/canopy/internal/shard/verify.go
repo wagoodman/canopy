@@ -1,0 +1,700 @@
+package shard
+
+import (
+	"fmt"
+	"maps"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// JoinInput is everything the join needs. It reads no config itself.
+type JoinInput struct {
+	Receipts []LoadedReceipt // from LoadDir
+	OutDir   string          // where the receipts and their coverprofiles are
+	ShardDir string          // where coverage.out and the metrics dir are written
+	// CoverMin is the covermin set on the join itself (flag, env or config), nil when unset. It wins
+	// over whatever the receipts recorded.
+	CoverMin      *float64
+	WriteMetrics  bool
+	Overhead      time.Duration // per-job overhead for the suggestion
+	CanopyVersion string        // the join's own version, compared with the shards'
+}
+
+// inputHint suggests what usually causes an input group to differ between shards.
+func inputHint(group string) string {
+	switch group {
+	case GroupPlan:
+		return "shards ran different canopy versions (or a different shard count); install the same version on every job"
+	case GroupSelection:
+		return "different specifiers or excludes, or --affected-since resolved to different commits"
+	case GroupRun, GroupGates:
+		return "a flag or CANOPY_TEST_* env var is set on some jobs only"
+	case GroupGo:
+		return "a different toolchain, GOFLAGS or CGO setting, or a second matrix dimension"
+	case GroupSource:
+		return "shards checked out different commits"
+	case GroupWeights:
+		return "a cache race, or a partial rerun after main saved new metrics; rerun all jobs"
+	}
+	return ""
+}
+
+// Join verifies the receipts, merges coverage and metrics, applies the gates and suggests a shard
+// count. Problems are reported in the Report; the error is only for failing to write coverage.out
+// or the metrics file, and the Report is complete up to that point.
+func Join(in JoinInput) (Report, error) {
+	r := Report{Version: ReportVersion, Digests: []DigestGroup{}, Problems: []Problem{}, Warnings: []string{}, Shards: []ReportShard{}}
+	err := join(&r, in)
+	r.finish()
+	return r, err
+}
+
+func join(r *Report, in JoinInput) error {
+	rs, names := readReceipts(r, in)
+
+	// 1. same total and version; the most common total sizes the report
+	totals := sizeReport(r, rs)
+	if len(r.Problems) > 0 {
+		return nil
+	}
+	stale := fmt.Sprintf("(stale files in %s?)", in.OutDir)
+	checkTotals(r, rs, names, totals, stale)
+	if len(r.Problems) > 0 {
+		return nil
+	}
+
+	// 2. every index exactly once; the first receipt for an index stands for it
+	present, complete := checkIndexes(r, rs, names, stale)
+
+	for _, rc := range present {
+		r.Shards[rc.Index-1] = shardReport(rc)
+		r.Checks.Tests.Passed += rc.Tests.Passed
+		r.Checks.Tests.Failed += rc.Tests.Failed
+		r.Checks.Tests.Skipped += rc.Tests.Skipped
+	}
+	r.Checks.Verified.Receipts = len(present)
+
+	// 3. one digest
+	oneDigest := checkDigests(r, present)
+	checkUnits(r, present)
+
+	// 4 and 5. exact cover, over planned with one plan and over reported otherwise (what actually ran)
+	units := checkCover(r, present, oneDigest, complete)
+
+	// 6. the tests gate
+	for _, rc := range present {
+		if rc.Passed {
+			continue
+		}
+		pkgs := slices.Clone(rc.FailedPkgs)
+		for _, f := range rc.Failures {
+			pkgs = append(pkgs, f.Package)
+		}
+		slices.Sort(pkgs)
+		pkgs = slices.Compact(pkgs)
+		r.problem(Problem{Kind: KindShardFailed, Shards: []int{rc.Index}, Packages: pkgs, Message: fmt.Sprintf("shard %d/%d failed: %s in %s", rc.Index, r.Total, plural(rc.Tests.Failed, "failed test"), plural(len(pkgs), "package"))})
+	}
+
+	warnVersionSkew(r, present, in.CanopyVersion)
+
+	if err := r.coverage(in, present); err != nil {
+		return err
+	}
+	merged, err := r.metrics(in, present, units)
+	if err != nil {
+		return err
+	}
+	// same reason as the metrics: an unverified run says nothing reliable about how to split. The
+	// units are the ones the shards planned with (one digest), so this is the suggestion `shard plan`
+	// gives for the same metrics.
+	if !r.unverified() && len(present) > 0 && len(present[0].Units) > 0 {
+		cpus := 0
+		for _, rc := range present {
+			cpus = max(cpus, rc.Runner.CPUs)
+		}
+		r.Suggestion = NewSuggestion(present[0].Units, r.Total, in.Overhead, SuggestionP(merged, cpus))
+	}
+	return nil
+}
+
+// unverified is true once any problem fails the verified check.
+func (r *Report) unverified() bool {
+	return slices.ContainsFunc(r.Problems, func(p Problem) bool { return p.Check == CheckVerified })
+}
+
+// readReceipts returns the readable receipts and their file names (without .json), reporting the rest.
+func readReceipts(r *Report, in JoinInput) (rs []*Receipt, names []string) {
+	for _, lr := range in.Receipts {
+		if lr.Err != nil {
+			r.problem(Problem{Kind: KindUnreadableReceipt, Message: fmt.Sprintf("unable to read receipt %s: %v", filepath.Base(lr.Path), lr.Err)})
+			continue
+		}
+		rs = append(rs, lr.Receipt)
+		names = append(names, strings.TrimSuffix(filepath.Base(lr.Path), ".json"))
+	}
+	if len(in.Receipts) == 0 {
+		r.problem(Problem{Kind: KindUnreadableReceipt, Message: fmt.Sprintf("no receipts found in %s", in.OutDir)})
+	}
+	return rs, names
+}
+
+// sizeReport sets Total to the most common shard total and adds an empty entry per shard. It returns
+// the receipt positions by total.
+func sizeReport(r *Report, rs []*Receipt) map[int][]int {
+	totals := map[int][]int{}
+	for i, rc := range rs {
+		totals[rc.Total] = append(totals[rc.Total], i)
+	}
+	for t, at := range totals {
+		if len(at) > len(totals[r.Total]) || (len(at) == len(totals[r.Total]) && t < r.Total) {
+			r.Total = t
+		}
+	}
+	for i := range max(r.Total, 0) {
+		r.Shards = append(r.Shards, ReportShard{Index: i + 1})
+	}
+	return totals
+}
+
+// checkTotals reports receipts that disagree on the shard total or receipt version, or have an index out of range.
+func checkTotals(r *Report, rs []*Receipt, names []string, totals map[int][]int, stale string) {
+	if len(totals) > 1 {
+		var says []string
+		for _, t := range slices.Sorted(maps.Keys(totals)) {
+			says = append(says, fmt.Sprintf("%s says %d", names[totals[t][0]], t))
+		}
+		r.problem(Problem{Kind: KindTotalMismatch, Message: fmt.Sprintf("receipts disagree on shard total: %s %s", strings.Join(says, ", "), stale)})
+	}
+	for i, rc := range rs {
+		if rc.Version != rs[0].Version {
+			r.problem(Problem{Kind: KindVersionMismatch, Message: fmt.Sprintf("receipts disagree on receipt version: %s is v%d, %s is v%d", names[0], rs[0].Version, names[i], rc.Version)})
+			break
+		}
+		if rc.Index < 1 || rc.Index > rc.Total {
+			r.problem(Problem{Kind: KindTotalMismatch, Message: fmt.Sprintf("%s is shard %d of %d %s", names[i], rc.Index, rc.Total, stale)})
+		}
+	}
+}
+
+// checkIndexes reports missing and duplicate shards. It returns one receipt per present shard, and
+// whether every shard has exactly one receipt.
+func checkIndexes(r *Report, rs []*Receipt, names []string, stale string) (present []*Receipt, complete bool) {
+	byIndex := map[int][]int{}
+	for i, rc := range rs {
+		byIndex[rc.Index] = append(byIndex[rc.Index], i)
+	}
+	anyFailed := slices.ContainsFunc(rs, func(rc *Receipt) bool { return !rc.Passed })
+	for i := 1; i <= r.Total; i++ {
+		at := byIndex[i]
+		switch {
+		case len(at) == 0:
+			p := Problem{Kind: KindMissingShard, Shards: []int{i}, Message: fmt.Sprintf("missing receipt for shard %d/%d (job failed before canopy finished, or artifact not uploaded)", i, r.Total)}
+			if anyFailed {
+				p.Hint = "cancelled? use fail-fast: false"
+			}
+			r.problem(p)
+			continue
+		case len(at) > 1:
+			var files []string
+			for _, j := range at {
+				files = append(files, names[j])
+			}
+			r.problem(Problem{Kind: KindDuplicateShard, Shards: []int{i}, Message: fmt.Sprintf("shard %d/%d has %d receipts: %s %s", i, r.Total, len(at), strings.Join(files, ", "), stale)})
+		}
+		present = append(present, rs[at[0]])
+	}
+	return present, len(present) == r.Total && len(rs) == r.Total
+}
+
+// checkDigests groups the shards by input digest and explains any mismatch. It returns true when
+// every shard ran the same plan.
+func checkDigests(r *Report, present []*Receipt) bool {
+	byDigest := map[string][]int{}
+	for _, rc := range present {
+		byDigest[rc.Digest] = append(byDigest[rc.Digest], rc.Index)
+	}
+	for d, idx := range byDigest {
+		r.Digests = append(r.Digests, DigestGroup{Digest: d, Shards: idx})
+	}
+	slices.SortFunc(r.Digests, func(a, b DigestGroup) int {
+		if len(a.Shards) != len(b.Shards) {
+			return len(b.Shards) - len(a.Shards)
+		}
+		return a.Shards[0] - b.Shards[0]
+	})
+	oneDigest := len(r.Digests) <= 1
+	if !oneDigest {
+		for _, p := range inputMismatches(present) {
+			r.problem(p)
+		}
+	}
+	return oneDigest
+}
+
+// checkUnits verifies each receipt's units are the ones its [weights] digest covers, so the join can
+// trust them for the suggestion.
+func checkUnits(r *Report, present []*Receipt) {
+	for _, rc := range present {
+		w := rc.Inputs[GroupWeights]
+		if (Group{GroupWeights, WeightLines(w.Source, rc.Units)}).Digest() != w.Digest {
+			r.problem(Problem{Kind: KindInputMismatch, Shards: []int{rc.Index}, Group: GroupWeights, Hint: "receipts written by a different canopy, or edited",
+				Message: fmt.Sprintf("[weights] shard %d: its units don't match its weights digest", rc.Index)})
+		}
+	}
+}
+
+// checkCover verifies every package ran exactly once and returns the union of the shards' packages.
+func checkCover(r *Report, present []*Receipt, oneDigest, complete bool) []string {
+	units := unionUnits(present)
+	r.Packages = len(units)
+	sameUnits := !slices.ContainsFunc(present, func(rc *Receipt) bool { return !slices.Equal(rc.Units, present[0].Units) })
+	ran := map[string][]int{}
+	for _, rc := range present {
+		set := rc.Planned
+		if !oneDigest {
+			set = rc.Reported
+		}
+		for _, p := range set {
+			ran[p] = append(ran[p], rc.Index)
+		}
+	}
+	var never, twice []string
+	var twiceShards []int
+	for _, u := range units {
+		switch len(ran[u]) {
+		case 0:
+			never = append(never, u)
+		case 1:
+			r.Checks.Verified.RanOnce++
+		default:
+			twice = append(twice, u)
+			twiceShards = append(twiceShards, ran[u]...)
+		}
+	}
+	if !complete || !sameUnits {
+		return units
+	}
+	if len(never) > 0 {
+		r.problem(Problem{Kind: KindNeverRan, Packages: never, Message: plural(len(never), "package") + " never ran"})
+	}
+	if len(twice) > 0 {
+		slices.Sort(twiceShards)
+		r.problem(Problem{Kind: KindRanTwice, Shards: slices.Compact(twiceShards), Packages: twice, Message: plural(len(twice), "package") + " ran twice"})
+	}
+	for _, rc := range present {
+		var missing []string
+		for _, p := range rc.Planned {
+			if !slices.Contains(rc.Reported, p) {
+				missing = append(missing, p)
+			}
+		}
+		if len(missing) > 0 {
+			r.problem(Problem{Kind: KindPlannedNotReported, Shards: []int{rc.Index}, Packages: missing, Message: fmt.Sprintf("shard %d never reported %s it planned", rc.Index, plural(len(missing), "package"))})
+		}
+	}
+	return units
+}
+
+// warnVersionSkew warns about shards that ran a different canopy than the join.
+func warnVersionSkew(r *Report, present []*Receipt, version string) {
+	var versions []string
+	for _, rc := range present {
+		if version != "" && rc.CanopyVersion != version && !slices.Contains(versions, rc.CanopyVersion) {
+			versions = append(versions, rc.CanopyVersion)
+		}
+	}
+	if len(versions) > 0 {
+		r.Warnings = append(r.Warnings, fmt.Sprintf("join is canopy %s but shards ran %s; pin the same version on every job", version, strings.Join(versions, ", ")))
+	}
+}
+
+func (r *Report) problem(p Problem) {
+	switch kindExit[p.Kind] {
+	case ExitTestsFailed:
+		p.Check = CheckTests
+	case ExitGateFailed:
+		p.Check = CheckCoverage
+	default:
+		p.Check = CheckVerified
+	}
+	r.Problems = append(r.Problems, p)
+}
+
+func shardReport(rc *Receipt) ReportShard {
+	w := rc.Inputs[GroupWeights]
+	res := &ReportResult{
+		CanopyVersion: rc.CanopyVersion,
+		Digest:        rc.Digest,
+		Weights: ReportWeights{
+			Source: w.Source, Measured: w.Measured, Estimated: w.Estimated,
+			MetricsFile: rc.Metrics.File, Ignored: rc.Metrics.Ignored,
+		},
+		Planned:        nonNil(rc.Planned),
+		Reported:       nonNil(rc.Reported),
+		Passed:         rc.Passed,
+		ElapsedMS:      rc.ElapsedMS,
+		Tests:          rc.Tests,
+		Failures:       nonNil(rc.Failures),
+		FailedPackages: rc.FailedPkgs,
+		Coverprofile:   rc.Coverprofile,
+	}
+	// the load is only ms with metrics; test counts aren't a time estimate
+	if w.Source == SourceMetrics && rc.LoadMS > 0 {
+		est := rc.LoadMS
+		res.EstimatedMS = &est
+	}
+	return ReportShard{Index: rc.Index, Present: true, ReportResult: res}
+}
+
+func (r *Report) coverage(in JoinInput, present []*Receipt) error {
+	c := &r.Checks.Coverage
+
+	// gate precedence: the join's own value, else what the shards recorded (which must agree)
+	recorded := map[string][]int{}
+	var recordedVal *float64
+	for _, rc := range present {
+		k := "unset"
+		if rc.Gates.CoverMin != nil {
+			k, recordedVal = pct(*rc.Gates.CoverMin), rc.Gates.CoverMin
+		}
+		recorded[k] = append(recorded[k], rc.Index)
+	}
+	switch {
+	case in.CoverMin != nil:
+		c.Threshold, c.ThresholdSource = in.CoverMin, ThresholdJoin
+		if len(recorded) == 1 && recordedVal != nil {
+			c.ReceiptThreshold = recordedVal
+			if *recordedVal != *in.CoverMin {
+				r.Warnings = append(r.Warnings, fmt.Sprintf("coverage threshold %s set on the join overrides %s recorded by shards", pct(*in.CoverMin), pct(*recordedVal)))
+			}
+		}
+	case len(recorded) > 1:
+		var says []string
+		for _, k := range slices.Sorted(maps.Keys(recorded)) {
+			says = append(says, fmt.Sprintf("%s: %s", shardList(recorded[k]), k))
+		}
+		var all []int
+		for _, rc := range present {
+			all = append(all, rc.Index)
+		}
+		r.problem(Problem{Kind: KindGateConflict, Shards: all, Message: "shards disagree on covermin: " + strings.Join(says, ", ")})
+	case recordedVal != nil:
+		c.Threshold, c.ThresholdSource = recordedVal, ThresholdReceipts
+	}
+
+	paths, without := r.coverPaths(in.OutDir, present)
+	c.Enabled = len(paths) > 0
+	if c.Enabled && len(without) > 0 {
+		r.problem(Problem{Kind: KindCoverageMissing, Shards: without, Message: fmt.Sprintf("coverage enabled on some shards but not others (none from %s)", shardList(without))})
+	}
+	if c.Enabled {
+		profiles, err := MergeCoverProfiles(paths)
+		if err != nil {
+			r.problem(Problem{Kind: KindCoverageMissing, Message: fmt.Sprintf("unable to merge coverage: %v", err)})
+		} else {
+			c.Profile = filepath.Join(in.ShardDir, "coverage.out")
+			if err := WriteCoverProfile(c.Profile, profiles); err != nil {
+				return fmt.Errorf("unable to write merged coverage: %w", err)
+			}
+			percent := CoveragePercent(profiles)
+			c.Percent = &percent
+		}
+	}
+
+	switch {
+	case c.Threshold == nil:
+	case !c.Enabled:
+		r.problem(Problem{Kind: KindCoverageMissing, Message: fmt.Sprintf("coverage threshold %s set but no shard collected coverage", pct(*c.Threshold))})
+	case c.Percent != nil && *c.Percent < *c.Threshold:
+		// the same message canopy test uses
+		r.problem(Problem{Kind: KindCoverageBelow, Message: fmt.Sprintf("coverage below threshold: %2.2f%% < %2.2f%%", *c.Percent, *c.Threshold)})
+	}
+	return nil
+}
+
+// metrics folds the shards' observations into the metrics file for their env and profile and
+// returns the merged metrics (nil when the shards disagree on env or profile).
+func (r *Report) metrics(in JoinInput, present []*Receipt, units []string) (*Metrics, error) {
+	m := &r.Checks.Metrics
+	obs := make([]Observations, 0, len(present))
+	fresh := map[string]bool{}
+	for _, rc := range present {
+		obs = append(obs, Observations{Env: rc.Metrics.Env, Profile: rc.Metrics.Profile, CPUs: rc.Runner.CPUs, MS: rc.Observations})
+		for p := range rc.Observations {
+			fresh[p] = true
+		}
+	}
+	m.Packages = len(fresh)
+
+	var old *Metrics
+	if len(present) > 0 {
+		// a file that can't be used starts over, the same as it does for the shards
+		old, _, _ = LoadMetrics(MetricsPath(in.ShardDir, present[0].Metrics.Env, present[0].Metrics.Profile))
+	}
+	merged, warn := Merge(old, obs, units)
+	// timings from shards that don't add up to one verified run would skew every later split
+	if warn == "" && r.unverified() {
+		warn = "shards failed verification"
+	}
+	m.Warning = warn
+	m.OK = warn == ""
+	if merged != nil && m.OK && in.WriteMetrics {
+		m.Path = MetricsPath(in.ShardDir, merged.Env, merged.Profile)
+		if err := WriteMetrics(m.Path, merged); err != nil {
+			return merged, fmt.Errorf("unable to write metrics: %w", err)
+		}
+		m.Written = true
+	}
+	return merged, nil
+}
+
+// NewSuggestion builds the shard count suggestion for units weighted in ms. When no unit was
+// measured (all Estimated) it is Static and only the package counts per shard count mean anything.
+func NewSuggestion(us []Unit, current int, overhead time.Duration, p int) *Suggestion {
+	s := &Suggestion{Current: current, Estimates: []SuggestionEstimate{}, Static: true, Note: StaticSuggestionNote}
+	for _, u := range us {
+		if !u.Estimated {
+			s.Static, s.Note = false, ""
+			if u.Weight > s.SlowestMS {
+				s.Slowest, s.SlowestMS = u.Package, u.Weight
+			}
+		}
+	}
+
+	var table []Estimate
+	if !s.Static {
+		s.Best, table = Suggest(us, overhead, p)
+	}
+	for n := 1; n <= min(MaxSuggestedShards, len(us)); n++ {
+		e := SuggestionEstimate{Shards: n}
+		for _, pkgs := range NewPlan(us, n).Shards {
+			e.Packages = append(e.Packages, len(pkgs))
+		}
+		if table != nil {
+			e.WallMS, e.RunnerMS = table[n-1].Wall.Milliseconds(), table[n-1].RunnerTime.Milliseconds()
+		}
+		s.Estimates = append(s.Estimates, e)
+	}
+	return s
+}
+
+// inputMismatches explains a digest mismatch group by group.
+func inputMismatches(present []*Receipt) []Problem {
+	var out []Problem
+	for _, g := range (Inputs{}).Groups() {
+		digests := map[string]bool{}
+		for _, rc := range present {
+			digests[rc.Inputs[g.Name].Digest] = true
+		}
+		if len(digests) < 2 {
+			continue
+		}
+		lines := map[int][]string{}
+		for _, rc := range present {
+			lines[rc.Index] = groupLines(g.Name, rc)
+		}
+		d := DiffLines(lines)
+		msg := strings.Join(d.Describe(), "; ")
+		if g.Name == GroupWeights {
+			msg = describeWeights(present)
+		}
+		out = append(out, Problem{Kind: KindInputMismatch, Shards: d.Differing, Group: g.Name, LineDiff: &d, Hint: inputHint(g.Name), Message: fmt.Sprintf("[%s] %s", g.Name, msg)})
+	}
+	if len(out) == 0 {
+		// the overall digests differ but no group does (receipts without inputs)
+		var differing []int
+		for _, rc := range present[1:] {
+			if rc.Digest != present[0].Digest {
+				differing = append(differing, rc.Index)
+			}
+		}
+		out = append(out, Problem{Kind: KindInputMismatch, Shards: differing, Message: "shards ran with different inputs"})
+	}
+	return out
+}
+
+// groupLines is what a receipt says about one input group. Receipts leave out the selection
+// package lines and the weight lines, so those come from units and the weights summary instead.
+func groupLines(group string, rc *Receipt) []string {
+	in := rc.Inputs[group]
+	switch group {
+	case GroupSelection:
+		lines := slices.Clone(in.Lines)
+		for _, u := range rc.Units {
+			lines = append(lines, "package "+u.Package)
+		}
+		return lines
+	case GroupWeights:
+		file := rc.Metrics.File
+		if rc.Metrics.Ignored != "" {
+			file = "ignored: " + rc.Metrics.Ignored
+		}
+		return []string{
+			"source " + in.Source,
+			"metrics " + file,
+			fmt.Sprintf("measured %d", in.Measured),
+			fmt.Sprintf("estimated %d", in.Estimated),
+		}
+	}
+	return in.Lines
+}
+
+// Describe renders a LineDiff as one piece per difference: `shard 3 only: ...` or
+// `shards 1,2,4: key a / shard 3: key b`. Differing package lines are summarized rather than listed.
+func (d LineDiff) Describe() []string {
+	var pieces []string
+
+	// invert only_in to find which shards share each line
+	holders := map[string][]int{}
+	for i, ls := range d.OnlyIn {
+		for _, l := range ls {
+			holders[l] = append(holders[l], i)
+		}
+	}
+	type side struct {
+		shards     []int
+		lines, pkg []string
+	}
+	sides := map[string]*side{}
+	for _, l := range slices.Sorted(maps.Keys(holders)) {
+		sh := holders[l]
+		slices.Sort(sh)
+		k := fmt.Sprint(sh)
+		if sides[k] == nil {
+			sides[k] = &side{shards: sh}
+		}
+		if p, ok := strings.CutPrefix(l, "package "); ok {
+			sides[k].pkg = append(sides[k].pkg, p)
+		} else {
+			sides[k].lines = append(sides[k].lines, l)
+		}
+	}
+	ordered := slices.SortedFunc(maps.Values(sides), func(a, b *side) int { return slices.Compare(a.shards, b.shards) })
+	for _, s := range ordered {
+		if len(s.lines) > 0 {
+			pieces = append(pieces, fmt.Sprintf("%s only: %s", shardList(s.shards), strings.Join(s.lines, ", ")))
+		}
+		if len(s.pkg) > 0 {
+			verb := "has"
+			if len(s.shards) > 1 {
+				verb = "have"
+			}
+			pieces = append(pieces, fmt.Sprintf("%s %s %s the others don't: %s", shardList(s.shards), verb, plural(len(s.pkg), "package"), listOf(s.pkg)))
+		}
+	}
+
+	for _, k := range slices.Sorted(maps.Keys(d.Values)) {
+		byValue := d.Values[k]
+		vals := slices.SortedFunc(maps.Keys(byValue), func(a, b string) int { return byValue[a][0] - byValue[b][0] })
+		var alts []string
+		for _, v := range vals {
+			alts = append(alts, fmt.Sprintf("%s: %s %s", shardList(byValue[v]), k, v))
+		}
+		pieces = append(pieces, strings.Join(alts, " / "))
+	}
+	return pieces
+}
+
+// describeWeights groups shards by where their weights came from, instead of listing weight lines.
+func describeWeights(present []*Receipt) string {
+	var order []string
+	groups := map[string][]int{}
+	for _, rc := range present {
+		w := rc.Inputs[GroupWeights]
+		desc := w.Source
+		switch {
+		case rc.Metrics.Ignored != "":
+			desc += " (" + rc.Metrics.Ignored + ")"
+		case w.Source == SourceMetrics:
+			desc = fmt.Sprintf("%s %s (%d measured, %d estimated)", desc, shortDigest(rc.Metrics.File), w.Measured, w.Estimated)
+		}
+		if groups[desc] == nil {
+			order = append(order, desc)
+		}
+		groups[desc] = append(groups[desc], rc.Index)
+	}
+	var alts []string
+	for _, desc := range order {
+		alts = append(alts, fmt.Sprintf("%s: %s", shardList(groups[desc]), desc))
+	}
+	return strings.Join(alts, " / ")
+}
+
+func unionUnits(present []*Receipt) []string {
+	var units []string
+	for _, rc := range present {
+		units = append(units, Packages(rc.Units)...)
+	}
+	slices.Sort(units)
+	return slices.Compact(units)
+}
+
+// shardList renders "shard 3" or "shards 1,2,4".
+func shardList(idx []int) string {
+	s := make([]string, len(idx))
+	for i, v := range idx {
+		s[i] = strconv.Itoa(v)
+	}
+	if len(idx) == 1 {
+		return "shard " + s[0]
+	}
+	return "shards " + strings.Join(s, ",")
+}
+
+// listOf shows the first few items and how many more there are.
+func listOf(items []string) string {
+	const show = 3
+	if len(items) <= show {
+		return strings.Join(items, ", ")
+	}
+	return fmt.Sprintf("%s, ... (+%d)", strings.Join(items[:show], ", "), len(items)-show)
+}
+
+func plural(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("1 %s", noun)
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+func pct(v float64) string {
+	return strconv.FormatFloat(v, 'f', -1, 64) + "%"
+}
+
+func shortDigest(d string) string {
+	if len(d) > len("sha256:")+8 {
+		return d[:len("sha256:")+8]
+	}
+	return d
+}
+
+func nonNil[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
+}
+
+// isBareFileName reports whether name is a plain file name with no directory parts.
+func isBareFileName(name string) bool {
+	return name == filepath.Base(name) && name != "." && name != ".." && !strings.ContainsAny(name, `/\`)
+}
+
+// coverPaths lists the coverprofiles to merge, and the non-empty shards that didn't collect any.
+func (r *Report) coverPaths(outDir string, present []*Receipt) (paths []string, without []int) {
+	for _, rc := range present {
+		switch {
+		case rc.Coverprofile != "" && !isBareFileName(rc.Coverprofile):
+			// receipts come from CI artifacts, so never follow a path out of the out dir
+			r.problem(Problem{Kind: KindCoverageMissing, Shards: []int{rc.Index}, Message: fmt.Sprintf("shard %d coverprofile %q is not a file name in the receipts dir", rc.Index, rc.Coverprofile)})
+		case rc.Coverprofile != "":
+			paths = append(paths, filepath.Join(outDir, rc.Coverprofile))
+		case len(rc.Planned) > 0:
+			without = append(without, rc.Index)
+		}
+	}
+	return paths, without
+}

@@ -1,0 +1,22 @@
+canopy shard join   3 shards · 6 packages · exit 3
+
+✗ NOT VERIFIED   tests passed (33), but the shards don't add up to one run
+
+  ✗ shards computed different plans
+      shards 1,2  weights from metrics (sha256:451171ec)       inputs sha256:a62ace69
+      shard 3     weights from test counts (no metrics file)   inputs sha256:05307152
+      → a cache race, or a partial rerun after main saved new metrics; rerun all jobs
+
+  ✗ 2 packages never ran
+      e  f
+
+  ✗ 1 package ran twice, in shards 1,3
+      a
+
+  shard   pkgs   est.   time   tests
+  1/3        2     0s     2s   10 passed
+  2/3        2     0s     2s   11 passed / 1 skipped
+  3/3        2      -     2s   12 passed / 2 skipped   ← slowest
+
+  – metrics not saved           shards failed verification
+  – no shard count suggestion   shards failed verification

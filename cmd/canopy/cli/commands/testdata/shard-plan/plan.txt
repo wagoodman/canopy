@@ -1,0 +1,9 @@
+canopy shard plan   3 shards · 5 packages · inputs sha256:80e279d1
+
+  shard   pkgs   load   heaviest
+  1/3        1    18s   slow 18s
+  2/3        2     4s   a 3s · d 1s
+  3/3        2     3s   b ~2s · c 1s
+
+  – weights from metrics (4 measured, 1 estimated)
+  → 1 shard would be as fast on fewer runners   slow alone takes 18s
