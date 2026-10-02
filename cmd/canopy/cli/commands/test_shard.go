@@ -446,14 +446,14 @@ func copyFile(from, to string) error {
 func announceShard(cfg *testConfig, sh *shardRuntime) {
 	cfg.ShardTrailer = shardTrailer(sh)
 	if !writesJSONToStdout(cfg.Writers) {
-		printShardHeader(os.Stdout, sh, cfg.Color != "off")
+		printShardHeader(os.Stdout, sh, cfg.ColorEnabled())
 	}
 }
 
 // finishEmptyShard reports a shard that got no packages and still writes its receipt.
 func finishEmptyShard(cfg *testConfig, sh *shardRuntime, canopyVersion string) error {
 	if !writesJSONToStdout(cfg.Writers) {
-		printEmptyShard(os.Stdout, sh, cfg.Color != "off")
+		printEmptyShard(os.Stdout, sh, cfg.ColorEnabled())
 	}
 	return writeShardReceipt(sh, canopyVersion, nil, true)
 }

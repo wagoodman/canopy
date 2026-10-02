@@ -439,7 +439,7 @@ func writePlanTable(b *strings.Builder, st style.Go, r *shardPlanReport, p shard
 		}
 		return countOf(int(v), "test")
 	}
-	rows := [][]string{{"shard", colPkgs, "load", "heaviest"}}
+	rows := [][]string{{colShard, colPkgs, "load", "heaviest"}}
 	for _, s := range p.Shards {
 		units := slices.Clone(s.Packages)
 		slices.SortStableFunc(units, func(a, b shard.Unit) int { return cmp.Compare(b.Weight, a.Weight) })

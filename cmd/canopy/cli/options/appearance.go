@@ -78,6 +78,11 @@ func (o *Appearance) AddFlags(flags fangs.FlagSet) {
 	)
 }
 
+// ColorEnabled is false only when color was resolved to "off" ("auto" leaves it to the terminal).
+func (o Appearance) ColorEnabled() bool {
+	return o.Color != offColor
+}
+
 // PostLoad applies environment variable overrides and CI detection for color configuration.
 func (o *Appearance) PostLoad() error {
 	o.Color = resolveColor(o.Color)

@@ -14,6 +14,7 @@ import (
 
 // labels the text and markdown tables and summaries share
 const (
+	colShard      = "shard"
 	colPkgs       = "pkgs"
 	verdictFailed = "failed"
 )
@@ -184,7 +185,7 @@ func verifiedProblem(r shard.Report, p shard.Problem) (title string, details []s
 // writeJoinTable writes one row per shard, with the slowest one marked.
 func writeJoinTable(b *strings.Builder, st style.Go, r shard.Report) {
 	withEst := joinHasEstimates(r)
-	head := []string{"shard", colPkgs}
+	head := []string{colShard, colPkgs}
 	if withEst {
 		head = append(head, "est.")
 	}
