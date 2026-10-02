@@ -185,7 +185,7 @@ jobs:
 
           expect_exit 0 canopy shard join -o text -o json=report.json -o github-summary=summary.md
           jq -e '.exit_code == 0 and .result == "pass" and .problems == [] and .checks.verified.ok' report.json
-          grep -E '^PASS' text.out
+          grep -F '✓ PASSED' text.out
 
           # github-summary file has the shard table
           test -s summary.md
@@ -256,7 +256,7 @@ jobs:
           mkcase covermin-flag
           expect_exit 4 canopy shard join --shard-dir cases/covermin-flag --covermin 100 -o text -o json=report.json
           jq -e '.exit_code == 4 and any(.problems[]; .kind == "coverage_below") and .checks.coverage.threshold_source == "join"' report.json
-          grep -E '^FAIL +coverage' text.out
+          grep -F '✗ GATE FAILED' text.out && grep -F 'coverage below threshold' text.out
           echo "::endgroup::"
 
           echo "::group::covermin from .canopy.yaml"
@@ -267,7 +267,7 @@ jobs:
             cd cfg
             expect_exit 4 canopy shard join --shard-dir ../cases/covermin-config -o text -o json=report.json
             jq -e '.exit_code == 4 and any(.problems[]; .kind == "coverage_below") and .checks.coverage.threshold_source == "join"' report.json
-            grep -E '^FAIL +coverage' text.out
+            grep -F '✗ GATE FAILED' text.out && grep -F 'coverage below threshold' text.out
           )
           echo "::endgroup::"
 
@@ -412,4 +412,4 @@ jobs:
 
           jq -e '.exit_code == 1 and any(.problems[]; .kind == "shard_failed")' report.json
           jq -e '[.shards[].failures[] | select((.package | endswith("/tagged")) and (.test | contains("TestShardFail")))] | length == 1' report.json
-          grep -E '^FAIL +tests' text.out
+          grep -F '✗ TESTS FAILED' text.out
