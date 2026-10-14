@@ -37,7 +37,7 @@ jobs:
       - name: Build
         run: go build -o bin/canopy ./cmd/canopy
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: canopy-bin
           path: bin/canopy
@@ -92,7 +92,7 @@ jobs:
           # the shard that owns wide (heaviest by test count) owns nothing else
           jq -e '(.planned | any(endswith("/wide")) | not) or (.planned | length == 1)' "$r"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: receipts-${{ matrix.shard }}
           path: .canopy/shard/out/
@@ -133,7 +133,7 @@ jobs:
           mkdir -p .canopy/shard/out
           canopy test "$FIXTURE" --no-cache --cover --shard 2/3 -o go
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: receipts-rogue
           path: .canopy/shard/out/
@@ -271,7 +271,7 @@ jobs:
           )
           echo "::endgroup::"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: metrics
           path: .canopy/shard/metrics/
@@ -323,7 +323,7 @@ jobs:
             -o go -o json=".canopy/shard/out/shard-$SHARD.jsonl"
           jq -e '.inputs.weights.source == "metrics"' ".canopy/shard/out/shard-$SHARD.json"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: receipts-metrics-${{ matrix.shard }}
           path: .canopy/shard/out/
